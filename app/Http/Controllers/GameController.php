@@ -7,6 +7,7 @@ use App\Models\GameEvent;
 use App\Models\GameResult;
 use App\Models\User;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
@@ -18,8 +19,12 @@ class GameController extends Controller
     /** Events the client is allowed to log for the funnel. */
     private const CLIENT_EVENTS = ['open', 'start', 'choice', 'finish', 'open_fund', 'restart'];
 
-    public function show(): View
+    public function show(): View|RedirectResponse
     {
+        if (! Auth::check()) {
+            return redirect()->route('game.register');
+        }
+
         $content = GameContent::current();
         abort_if($content === null, 503, 'Игра ещё не настроена.');
 
@@ -29,6 +34,34 @@ class GameController extends Controller
             'promo' => config('game.promo_code'),
             'shopUrl' => config('game.shop_url'),
         ]);
+    }
+
+    /**
+     * Branded registration gate for the game (RU). Sends the user back to /game after Fortify registers them.
+     */
+    public function showRegister(): View|RedirectResponse
+    {
+        if (Auth::check()) {
+            return redirect()->route('game');
+        }
+
+        session(['url.intended' => url('/game')]);
+
+        return view('auth.game-register');
+    }
+
+    /**
+     * Branded login gate for the game (RU).
+     */
+    public function showLogin(): View|RedirectResponse
+    {
+        if (Auth::check()) {
+            return redirect()->route('game');
+        }
+
+        session(['url.intended' => url('/game')]);
+
+        return view('auth.game-login');
     }
 
     public function store(Request $request): JsonResponse

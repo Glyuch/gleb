@@ -10,9 +10,9 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
 *,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
 :root{--red:#FF0032;--red-light:#FF00320D;--dark:#1A1A1A;--g50:#F7F7F8;--g100:#F0F0F2;--g200:#E4E4E8;--g400:#9A9AA2;--g600:#62626A;--white:#fff;--green:#1A8049;--green-bg:#E8F6EE;--amber:#C8860B;--amber-bg:#FFF4DE;--blue:#2B5BD7;--blue-bg:#EAF0FF;--radius:18px;--radius-sm:13px;--shadow:0 4px 24px rgba(0,0,0,.08)}
-html,body{min-height:100%;font-family:'Inter',-apple-system,sans-serif;background:var(--g50);color:var(--dark);-webkit-font-smoothing:antialiased}
+html,body{min-height:100%;font-family:'Inter',-apple-system,sans-serif;background:#fff;color:var(--dark);-webkit-font-smoothing:antialiased}
 body{display:flex;justify-content:center}
-.app{width:100%;max-width:480px;min-height:100vh;background:var(--g50);display:flex;flex-direction:column;padding:14px 14px 24px;position:relative}
+.app{width:100%;max-width:480px;min-height:100vh;background:#fff;display:flex;flex-direction:column;padding:14px 14px 24px;position:relative}
 .screen{display:none;flex-direction:column;flex:1}
 .screen.active{display:flex;animation:fade .35s ease}
 .screen{align-items:stretch}
@@ -142,7 +142,9 @@ html,body{overflow-y:auto;-webkit-overflow-scrolling:touch}
 .outcome-sheet .delta .dv.pos{color:#4ADE80}.outcome-sheet .delta .dv.neg{color:#FF8FA6}
 .outcome-sheet .sheet-btn{width:100%;padding:15px;border:none;border-radius:13px;background:var(--red);color:#fff;font-family:inherit;font-size:16px;font-weight:700;cursor:pointer;margin-top:6px}
 /* topbar */
-.topbar{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;font-size:12px;color:var(--g600)}
+.topbar{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;font-size:13px;color:var(--g600);padding-bottom:11px;border-bottom:1px solid var(--g100)}
+.topbar .brand{font-weight:800;color:var(--red);text-decoration:none;font-size:15px;letter-spacing:-.2px}
+.topbar-right{display:flex;align-items:center;gap:14px}
 .topbar a{color:var(--g600);text-decoration:none}
 .topbar .who{font-weight:700;color:var(--dark)}
 /* survey */
@@ -173,8 +175,11 @@ html,body{overflow-y:auto;-webkit-overflow-scrolling:touch}
 <div class="app">
 
   <div class="topbar">
-    <span class="who">{{ $user['name'] }}</span>
-    <a href="{{ url('/logout') }}" onclick="event.preventDefault();document.getElementById('logout-form').submit();">Выйти</a>
+    <a class="brand" href="{{ url('/') }}">gleb.finance</a>
+    <div class="topbar-right">
+      <span class="who">{{ $user['name'] }}</span>
+      <a href="{{ url('/logout') }}" onclick="event.preventDefault();document.getElementById('logout-form').submit();">Выйти</a>
+    </div>
   </div>
   <form id="logout-form" method="POST" action="{{ url('/logout') }}" style="display:none">@csrf</form>
 
@@ -290,7 +295,7 @@ html,body{overflow-y:auto;-webkit-overflow-scrolling:touch}
         <div id="lb-body"></div>
         <div class="lb-note" id="lb-note"></div>
       </div>
-      <button class="btn click_open_fund" onclick="toFunds()">Использовать промокод на витрине</button>
+      <button class="btn click_open_fund" onclick="toFunds()">Перейти на финансологию и начать инвестировать</button>
       <button class="btn btn-ghost click_game_restart" onclick="restart()">Прожить заново — побить максимум</button>
     </div>
   </section>

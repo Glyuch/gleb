@@ -12,8 +12,12 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::inertia('dashboard', 'dashboard')->name('dashboard');
 });
 
+// Game landing handles its own guest gate (branded RU register/login) inside the controller.
+Route::get('/game', [GameController::class, 'show'])->name('game');
+Route::get('/game/register', [GameController::class, 'showRegister'])->name('game.register');
+Route::get('/game/login', [GameController::class, 'showLogin'])->name('game.login');
+
 Route::middleware(['auth'])->group(function () {
-    Route::get('/game', [GameController::class, 'show'])->name('game');
     Route::post('/game/result', [GameController::class, 'store'])->name('game.result');
     Route::get('/game/leaderboard', [GameController::class, 'leaderboard'])->name('game.leaderboard');
     Route::post('/game/event', [GameController::class, 'event'])->name('game.event');
