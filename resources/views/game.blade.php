@@ -3,7 +3,9 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="csrf-token" content="{{ csrf_token() }}">
 <title>3 года за 3 минуты — ФондыКвест</title>
+@verbatim
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
 *,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
@@ -34,7 +36,6 @@ h2{font-size:20px;font-weight:800;line-height:1.3}
 .bar{display:flex;gap:5px;margin-bottom:20px}
 .bar span{flex:1;height:5px;border-radius:99px;background:var(--g200)}
 .bar span.on{background:var(--red)}
-/* интро */
 .cmp-cards{display:flex;flex-direction:column;gap:9px;margin-bottom:10px}
 .cmp-card{background:#fff;border:1.5px solid var(--g200);border-radius:var(--radius-sm);padding:12px 15px}
 .cmp-card.you{border-color:var(--red);background:var(--red-light)}
@@ -58,7 +59,6 @@ h2{font-size:20px;font-weight:800;line-height:1.3}
 .how-list{margin-bottom:16px}
 .how-item{display:flex;gap:12px;align-items:flex-start;margin-bottom:12px;font-size:14px;line-height:1.45}
 .how-n{width:26px;height:26px;border-radius:50%;background:var(--red);color:#fff;font-weight:800;font-size:13px;display:grid;place-items:center;flex:none}
-/* HUD */
 .hud{background:#fff;border-radius:14px;box-shadow:var(--shadow);padding:10px 13px;margin-bottom:9px}
 .hud-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:7px;gap:8px}
 .hud-year{font-size:12px;font-weight:800;color:var(--red);white-space:nowrap}
@@ -70,7 +70,6 @@ h2{font-size:20px;font-weight:800;line-height:1.3}
 .money.you .mv{color:var(--red)}.money.bank .mv{color:var(--g600)}
 .progress{height:4px;background:var(--g100);border-radius:99px;overflow:hidden;margin-top:9px}
 .progress-fill{height:100%;background:var(--red);border-radius:99px;transition:width .5s ease;width:0}
-/* событие */
 .event{background:#fff;border-radius:14px;box-shadow:var(--shadow);padding:12px 14px;margin-bottom:9px;animation:pop .35s}
 .event-head{display:flex;align-items:center;gap:10px;margin-bottom:7px}
 .event-ic{width:38px;height:38px;border-radius:10px;display:grid;place-items:center;flex:none}
@@ -80,7 +79,6 @@ h2{font-size:20px;font-weight:800;line-height:1.3}
 .event-text{font-size:12.5px;color:var(--g600);line-height:1.35;margin-bottom:5px}
 .context{background:var(--blue-bg);border-radius:9px;padding:8px 11px;font-size:11.5px;line-height:1.35;color:#1c3d8f;margin-top:5px}
 .context b{color:#0e2a6b}
-/* выбор */
 .choices{display:flex;flex-direction:column;gap:8px;margin-bottom:8px}
 .choice{background:#fff;border:1.5px solid var(--g200);border-radius:var(--radius-sm);padding:11px 13px;cursor:pointer;transition:all .15s;text-align:left}
 .choice:active{transform:scale(.99)}
@@ -95,7 +93,6 @@ h2{font-size:20px;font-weight:800;line-height:1.3}
 .choice .hint{font-size:12px;color:var(--g600);line-height:1.4;margin-top:9px;padding-top:9px;border-top:1px solid var(--g100);display:flex;gap:7px;align-items:flex-start}
 .htag{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.2px;padding:3px 8px;border-radius:6px;white-space:nowrap;flex:none;align-self:flex-start}
 .htag.low{background:var(--green-bg);color:var(--green)}.htag.mid{background:var(--blue-bg);color:var(--blue)}.htag.high{background:var(--red-light);color:var(--red)}
-/* итог года */
 .outcome{background:var(--dark);color:#fff;border-radius:var(--radius);padding:18px;margin-bottom:12px;animation:pop .3s}
 .outcome-h{font-size:13px;font-weight:800;color:#FF8FA6;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px;display:flex;align-items:center;gap:8px}
 .outcome-text{font-size:14px;line-height:1.55;color:#ECECEC}
@@ -104,7 +101,6 @@ h2{font-size:20px;font-weight:800;line-height:1.3}
 .delta .dl{font-size:10px;color:#999;text-transform:uppercase;letter-spacing:.3px}
 .delta .dv{font-size:15px;font-weight:800;margin-top:2px}
 .delta .dv.pos{color:#4ADE80}.delta .dv.neg{color:#FF8FA6}
-/* финал */
 .result-emoji{margin-bottom:14px}
 .bars{display:flex;align-items:flex-end;gap:12px;height:160px;margin:16px 0 8px;padding:0 6px}
 .barwrap{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%}
@@ -124,9 +120,7 @@ h2{font-size:20px;font-weight:800;line-height:1.3}
 .promo{background:linear-gradient(135deg,#1A1A1A,#33000d);color:#fff;border-radius:var(--radius);padding:18px;margin:12px 0;text-align:center}
 .promo .pk{font-size:11px;font-weight:800;color:#FF8FA6;text-transform:uppercase;letter-spacing:.6px;margin-bottom:8px}
 .promo .pcode{font-size:26px;font-weight:800;letter-spacing:1px;background:rgba(255,255,255,.1);border:1px dashed #FF8FA6;border-radius:10px;padding:12px;margin:8px 0;font-family:monospace}
-.promo .pv{font-size:15px;font-weight:700;margin-top:6px}
 .promo .pd{font-size:12px;color:#cfcfcf;line-height:1.45;margin-top:8px}
-.promo .pmult{display:inline-block;font-size:12px;font-weight:800;background:#1A8049;color:#fff;padding:3px 9px;border-radius:99px;margin-top:6px}
 .learned{background:#fff;border-radius:var(--radius-sm);box-shadow:var(--shadow);padding:16px;margin-bottom:8px}
 .learned h3{font-size:13px;font-weight:800;text-transform:uppercase;letter-spacing:.4px;color:var(--red);margin-bottom:10px}
 .learned li{list-style:none;font-size:13.5px;line-height:1.5;padding-left:22px;position:relative;margin-bottom:8px}
@@ -134,7 +128,6 @@ h2{font-size:20px;font-weight:800;line-height:1.3}
 html,body{overflow-y:auto;-webkit-overflow-scrolling:touch}
 .app{padding-bottom:40px}
 #nextbtn{margin-bottom:8px}
-
 .outcome-overlay{position:fixed;inset:0;background:rgba(0,0,0,.45);display:none;align-items:flex-end;justify-content:center;z-index:50;animation:fadeo .25s}
 .outcome-overlay.show{display:flex}
 @keyframes fadeo{from{opacity:0}to{opacity:1}}
@@ -148,29 +141,61 @@ html,body{overflow-y:auto;-webkit-overflow-scrolling:touch}
 .outcome-sheet .delta .dv{font-size:15px;font-weight:800;margin-top:2px}
 .outcome-sheet .delta .dv.pos{color:#4ADE80}.outcome-sheet .delta .dv.neg{color:#FF8FA6}
 .outcome-sheet .sheet-btn{width:100%;padding:15px;border:none;border-radius:13px;background:var(--red);color:#fff;font-family:inherit;font-size:16px;font-weight:700;cursor:pointer;margin-top:6px}
+/* topbar */
+.topbar{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;font-size:12px;color:var(--g600)}
+.topbar a{color:var(--g600);text-decoration:none}
+.topbar .who{font-weight:700;color:var(--dark)}
+/* survey */
+.survey-card{background:#fff;border-radius:var(--radius-sm);box-shadow:var(--shadow);padding:16px;margin:12px 0}
+.survey-h{font-size:14px;font-weight:800;margin-bottom:12px}
+.survey-q{margin-bottom:14px}
+.survey-qt{font-size:13.5px;font-weight:700;line-height:1.35;margin-bottom:8px}
+.survey-opts{display:flex;flex-direction:column;gap:6px}
+.survey-opt{display:flex;align-items:center;gap:9px;font-size:13.5px;padding:9px 11px;border:1.5px solid var(--g200);border-radius:10px;cursor:pointer}
+.survey-opt input{accent-color:var(--red);width:16px;height:16px}
+.survey-opt:has(input:checked){border-color:var(--red);background:var(--red-light)}
+.survey-error{display:none;color:var(--red);font-size:12.5px;font-weight:700;margin-bottom:8px}
+/* leaderboard */
+.lb{background:#fff;border-radius:var(--radius-sm);box-shadow:var(--shadow);padding:16px;margin:12px 0}
+.lb-h{font-size:13px;font-weight:800;text-transform:uppercase;letter-spacing:.4px;color:var(--red);margin-bottom:10px}
+.lb-head,.lb-row{display:flex;align-items:center;gap:10px;font-size:13px;padding:7px 9px;border-radius:9px}
+.lb-head{font-size:10px;text-transform:uppercase;letter-spacing:.3px;color:var(--g400);font-weight:700}
+.lb-row:nth-child(odd){background:var(--g50)}
+.lb-row.lb-me{background:var(--red-light);font-weight:800}
+.lb-rank{width:28px;flex:none;font-weight:800;color:var(--g600)}
+.lb-name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.lb-score{flex:none;font-weight:800}
+.lb-note{font-size:12.5px;color:var(--g600);margin-top:10px;font-weight:700}
 </style>
+@endverbatim
 </head>
 <body>
 <div class="app">
+
+  <div class="topbar">
+    <span class="who">{{ $user['name'] }}</span>
+    <a href="{{ url('/logout') }}" onclick="event.preventDefault();document.getElementById('logout-form').submit();">Выйти</a>
+  </div>
+  <form id="logout-form" method="POST" action="{{ url('/logout') }}" style="display:none">@csrf</form>
 
   <!-- СТАРТ -->
   <section class="screen active" id="s_start">
     <div class="center">
       <div class="icon-badge"><svg width="42" height="42" viewBox="0 0 42 42" fill="none"><path d="M5 32 L15 22 L23 28 L37 12" stroke="#FF0032" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M30 12 H37 V19" stroke="#FF0032" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/><line x1="5" y1="37" x2="37" y2="37" stroke="#FF0032" stroke-width="3.5" stroke-linecap="round"/></svg></div>
-      <div class="kicker">Симулятор · 3 года за 3 минуты</div>
-      <h1>Вклад или <span class="r">фонды?</span><br>Проживите 3 года</h1>
-      <div class="lead">У вас 300 000 ₽ — как у вкладчика. Каждый квартал — событие и решение, куда вложить. В конце увидите, сколько заработали против тех, кто держал всё на вкладе. А за хороший результат дадим реальный промокод на витрину.</div>
-      <button class="btn click_game_start" onclick="go('s_intro1')">Разобраться и сыграть</button>
-      <div class="disc">Доходности — учебные, упрощены для наглядности.<br>Не является инвестиционной рекомендацией. Финуслуги · Московская Биржа</div>
+      <div class="kicker">{{ $content['start']['kicker'] }}</div>
+      <h1>{!! $content['start']['titleHtml'] !!}</h1>
+      <div class="lead">{{ $content['start']['lead'] }}</div>
+      <button class="btn click_game_start" onclick="go('s_intro1')">{{ $content['start']['btn'] }}</button>
+      <div class="disc">{!! $content['start']['disc'] !!}</div>
     </div>
   </section>
 
   <!-- ИНТРО 1 -->
   <section class="screen" id="s_intro1">
     <div class="bar"><span class="on"></span><span></span><span></span></div>
-    <div class="kicker">Сначала коротко · 1 из 3</div>
-    <h2>Чем фонд отличается от вклада</h2>
-    <div class="lead" style="margin-bottom:10px;font-size:14px">Вы знаете вклад: положили под процент, через срок забрали. Фонд устроен иначе.</div>
+    <div class="kicker">{{ $content['intros'][0]['kicker'] }}</div>
+    <h2>{{ $content['intros'][0]['h2'] }}</h2>
+    <div class="lead" style="margin-bottom:10px;font-size:14px">{{ $content['intros'][0]['lead'] }}</div>
     <div class="cmp-cards">
       <div class="cmp-card"><div class="cc-h"><div class="cc-ic bank"><svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M3 9l9-5 9 5" stroke="#2B5BD7" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/><path d="M5 9v9M9 9v9M15 9v9M19 9v9" stroke="#2B5BD7" stroke-width="2.2" stroke-linecap="round"/><path d="M3 20h18" stroke="#2B5BD7" stroke-width="2.2" stroke-linecap="round"/></svg></div><div class="cc-t">Вклад</div></div>
         <ul><li>Банк сам распоряжается деньгами</li><li>Процент фиксированный, известен заранее</li><li>Застрахован государством</li><li>Забрать — в конце срока</li></ul></div>
@@ -184,9 +209,9 @@ html,body{overflow-y:auto;-webkit-overflow-scrolling:touch}
   <!-- ИНТРО 2 -->
   <section class="screen" id="s_intro2">
     <div class="bar"><span class="on"></span><span class="on"></span><span></span></div>
-    <div class="kicker">Сначала коротко · 2 из 3</div>
-    <h2>Какие бывают фонды</h2>
-    <div class="lead" style="margin-bottom:16px">Их несколько видов — от самого спокойного к самому рискованному. Разница в том, что внутри.</div>
+    <div class="kicker">{{ $content['intros'][1]['kicker'] }}</div>
+    <h2>{{ $content['intros'][1]['h2'] }}</h2>
+    <div class="lead" style="margin-bottom:16px">{{ $content['intros'][1]['lead'] }}</div>
     <div class="fund-mini money"><div class="fm-ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none"><rect x="3" y="6" width="18" height="12" rx="2" stroke="#1A8049" stroke-width="2.2"/><circle cx="12" cy="12" r="2.5" stroke="#1A8049" stroke-width="2.2"/></svg></div>
       <div><div class="fm-t">Денежный рынок <span class="fm-r low">низкий риск</span></div><div class="fm-d">Почти как вклад: доход около ставки ЦБ, забрать в любой день. Напр. ВИМ Денежный рынок.</div></div></div>
     <div class="fund-mini bond"><div class="fm-ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none"><rect x="4" y="4" width="16" height="16" rx="2" stroke="#2B5BD7" stroke-width="2.2"/><path d="M8 9h8M8 13h8M8 17h5" stroke="#2B5BD7" stroke-width="2.2" stroke-linecap="round"/></svg></div>
@@ -201,16 +226,16 @@ html,body{overflow-y:auto;-webkit-overflow-scrolling:touch}
   <!-- ИНТРО 3 -->
   <section class="screen" id="s_intro3">
     <div class="bar"><span class="on"></span><span class="on"></span><span class="on"></span></div>
-    <div class="kicker">Сначала коротко · 3 из 3</div>
-    <h2>Как играем</h2>
-    <div class="lead" style="margin-bottom:16px">Вы пройдёте 3 года по кварталам — 12 ходов — со своими 300 000 ₽. Каждый квартал — событие и выбор: оставить на вкладе или вложить в один из фондов.</div>
+    <div class="kicker">{{ $content['intros'][2]['kicker'] }}</div>
+    <h2>{{ $content['intros'][2]['h2'] }}</h2>
+    <div class="lead" style="margin-bottom:16px">{{ $content['intros'][2]['lead'] }}</div>
     <div class="how-list">
       <div class="how-item"><div class="how-n">1</div><div>Каждый квартал — событие и подсказку, что сейчас выгоднее и насколько рискованно</div></div>
       <div class="how-item"><div class="how-n">2</div><div>Выбираете, куда вложить. Сверху всегда виден ваш портфель против вклада</div></div>
-      <div class="how-item"><div class="how-n">3</div><div>В конце — сколько заработали против вклада, плюс промокод на витрину за результат</div></div>
+      <div class="how-item"><div class="how-n">3</div><div>В конце — сколько заработали против вклада, плюс промокод на витрину</div></div>
     </div>
-    <div class="intro-note">Чем ближе ваш результат к максимально возможному — тем выгоднее промокод. 1 000 ₽ в игре = 1 ₽ промокода, у самого верха коэффициент растёт.</div>
-    <button class="btn click_game_start" onclick="startGame()">Начать 3 года →</button>
+    <div class="intro-note">{{ $content['intros'][2]['note'] }}</div>
+    <button class="btn click_game_start" onclick="startGame()">{{ $content['intros'][2]['btn'] }}</button>
   </section>
 
   <!-- ИГРА -->
@@ -242,16 +267,32 @@ html,body{overflow-y:auto;-webkit-overflow-scrolling:touch}
     </div>
     <div class="result-line"><div class="rt" id="rl-tag">Разница</div><div class="rx" id="rl-text"></div></div>
     <div class="maxbox"><div class="mt">Можно было ещё лучше</div><div class="mx" id="max-text"></div></div>
-    <div class="promo">
-      <div class="pk">Ваш промокод на витрину</div>
-      <div class="pcode" id="promo-code">FONDY-····</div>
-      <div class="pv" id="promo-value"></div>
-      <div class="pmult" id="promo-mult"></div>
-      <div class="pd" id="promo-desc"></div>
-    </div>
     <div class="learned"><h3>Что вы теперь понимаете про фонды</h3><ul id="learned-list"></ul></div>
-    <button class="btn click_open_fund" onclick="toFunds()">Использовать промокод на витрине</button>
-    <button class="btn btn-ghost click_game_restart" onclick="startGame()">Прожить заново — побить максимум</button>
+
+    <!-- ОПРОС -->
+    <div class="survey-card" id="survey-card">
+      <h3 class="survey-h">Пара вопросов — и заберёте промокод</h3>
+      <div id="survey-questions"></div>
+      <div class="survey-error" id="survey-error">Пожалуйста, ответьте на все вопросы.</div>
+      <button class="btn" id="survey-submit" onclick="submitResult()">Получить промокод →</button>
+    </div>
+
+    <!-- НАГРАДА (после опроса) -->
+    <div id="reward" style="display:none">
+      <div class="promo">
+        <div class="pk">Ваш промокод на витрину</div>
+        <div class="pcode" id="promo-code">{{ $promo }}</div>
+        <div class="pd">Введите этот промокод в поле «Промокод» при покупке фонда на витрине Финуслуг.</div>
+      </div>
+      <div class="lb">
+        <div class="lb-h">Лидерборд</div>
+        <div class="lb-head"><span class="lb-rank">#</span><span class="lb-name">Игрок</span><span class="lb-score">Портфель</span></div>
+        <div id="lb-body"></div>
+        <div class="lb-note" id="lb-note"></div>
+      </div>
+      <button class="btn click_open_fund" onclick="toFunds()">Использовать промокод на витрине</button>
+      <button class="btn btn-ghost click_game_restart" onclick="restart()">Прожить заново — побить максимум</button>
+    </div>
   </section>
 
 </div>
@@ -269,7 +310,32 @@ html,body{overflow-y:auto;-webkit-overflow-scrolling:touch}
     </div>
   </div>
 
+@php
+$gameConfig = [
+  'content' => $content,
+  'user' => $user,
+  'promo' => $promo,
+  'shopUrl' => $shopUrl,
+  'startAmount' => (int) config('game.start_amount', 300000),
+  'routes' => [
+    'result' => route('game.result'),
+    'leaderboard' => route('game.leaderboard'),
+    'event' => route('game.event'),
+  ],
+];
+@endphp
 <script>
+window.GAME = {!! json_encode($gameConfig, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP) !!};
+</script>
+@verbatim
+<script>
+const CSRF = document.querySelector('meta[name=csrf-token]').content;
+const CONTENT = window.GAME.content;
+const YEARS = CONTENT.years;
+const CHOICES = CONTENT.choices;
+const START = window.GAME.startAmount;
+const TOTAL = YEARS.length;
+
 const IC={
  down:'<svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M4 8l6 6 4-4 6 6" stroke="#FF0032" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/><path d="M20 16v-4h-4" stroke="#FF0032" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>',
  up:'<svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M4 16l6-6 4 4 6-6" stroke="#1A8049" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/><path d="M20 8v4h-4" stroke="#1A8049" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>',
@@ -281,72 +347,11 @@ const IC={
  check:'<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="7" fill="#FF0032"/><path d="M5 8l2 2 4-4" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>'
 };
 const fmt=n=>Math.round(n).toLocaleString('ru-RU')+' ₽';
+const esc=s=>String(s).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
 
-// Модель: ставка, инфляция, доходности по инструментам. Для каждого года known заранее (учебные).
-const YEARS=[
- {rate:16,infl:9,ev:{type:'neutral',ic:'bank',title:'Год 1 · Q1. Вы привыкли к вкладу',text:'Ставка высокая — 16% годовых. У вас 300 000 ₽.'},
-  ctx:'Высокая ставка — вклад и денежный рынок дают хорошо. Акциям тяжело: дорогие деньги тормозят рынок.',
-  ret:{bank:.038,cash:.037,bond:.033,stock:.012},
-  note:{bank:'Вклад за квартал ~3,8% (16% годовых).',cash:'Денежный рынок почти как вклад, деньги доступны в любой день.',bond:'Облигации отстали — ставка высокая.',stock:'Акции почти не выросли — рынок ждёт снижения ставки.'}},
- {rate:16,infl:9,ev:{type:'neutral',ic:'bank',title:'Год 1 · Q2. Ставка держится',text:'ЦБ держит 16%. Рынок в ожидании.'},
-  ctx:'Пока ставка высокая, спокойные инструменты впереди. Но рынок акций уже присматривается к развороту.',
-  ret:{bank:.038,cash:.036,bond:.04,stock:.03},
-  note:{bank:'Вклад снова ~3,8%.',cash:'Денежный рынок стабилен.',bond:'Облигации чуть ожили — рынок ждёт снижения ставки.',stock:'Акции понемногу растут.'}},
- {rate:15,infl:8,ev:{type:'down',ic:'down',title:'Год 1 · Q3. ЦБ снизил ставку',text:'Ставка упала до 15%. Вклады стали менее выгодными.'},
-  ctx:'Ставка падает — облигации дорожают (их старый процент ценится), акции растут на ожидании дешёвых денег.',
-  ret:{bank:.036,cash:.035,bond:.05,stock:.06},
-  note:{bank:'Вклад ~3,6%.',cash:'Денежный рынок чуть просел за ставкой.',bond:'Облигации выросли: ставка падает → цена облигаций растёт.',stock:'Акции пошли вверх.'}},
- {rate:15,infl:8,ev:{type:'up',ic:'up',title:'Год 1 · Q4. Рынок воодушевлён',text:'Снижение ставки разогревает рынок акций.'},
-  ctx:'Дешевеющие деньги обычно толкают акции вверх. Облигации тоже в плюсе.',
-  ret:{bank:.036,cash:.034,bond:.045,stock:.08},
-  note:{bank:'Вклад ~3,6%.',cash:'Денежный рынок стабилен.',bond:'Облигации продолжают расти.',stock:'Акции заметно прибавили.'}},
- {rate:13,infl:7,ev:{type:'down',ic:'down',title:'Год 2 · Q1. Ставка падает дальше',text:'13%. Реальный доход вклада тает на фоне инфляции.'},
-  ctx:'Чем ниже ставка, тем слабее вклад. Фонды пока выигрывают.',
-  ret:{bank:.032,cash:.031,bond:.045,stock:.07},
-  note:{bank:'Вклад ~3,2% — после инфляции почти ноль.',cash:'Денежный рынок идёт за ставкой вниз.',bond:'Облигации в плюсе.',stock:'Акции растут.'}},
- {rate:12,infl:7,ev:{type:'down',ic:'down',title:'Год 2 · Q2. Коррекция на рынке',text:'Акции резко просели — рынок напуган.'},
-  ctx:'Вот он, риск акций. Кто в панике продаст — зафиксирует убыток. Кто переждёт — обычно отыгрывает.',
-  ret:{bank:.030,cash:.029,bond:.02,stock:-.09},
-  note:{bank:'Вклад спокойно дал ~3% — его не трясёт.',cash:'Денежный рынок — тихая гавань, без просадки.',bond:'Облигации почти не пострадали.',stock:'Акции упали. Это нормальная часть пути, если не паниковать.'}},
- {rate:11,infl:6,ev:{type:'up',ic:'up',title:'Год 2 · Q3. Рынок отрастает',text:'После падения акции восстанавливаются.'},
-  ctx:'Кто не продал акции в прошлый квартал — сейчас в плюсе. Терпение на дистанции окупается.',
-  ret:{bank:.028,cash:.027,bond:.035,stock:.11},
-  note:{bank:'Вклад ~2,8%.',cash:'Денежный рынок стабилен.',bond:'Облигации в плюсе.',stock:'Акции сильно отскочили — терпение окупилось.'}},
- {rate:11,infl:6,ev:{type:'up',ic:'up',title:'Год 2 · Q4. Спокойный рост',text:'Экономика растёт ровно.'},
-  ctx:'Стабильный квартал. Смешанный фонд тут комфортен — баланс работает.',
-  ret:{bank:.028,cash:.027,bond:.03,stock:.05},
-  note:{bank:'Вклад ~2,8%.',cash:'Денежный рынок стабилен.',bond:'Облигации стабильны.',stock:'Акции растут умеренно.'}},
- {rate:10,infl:5,ev:{type:'neutral',ic:'cash',title:'Год 3 · Q1. Пришла премия',text:'У вас появились свободные деньги. Ставка 10%.'},
-  ctx:'Ставка средняя. Облигации стабильно чуть выше вклада, акции растут умеренно.',
-  ret:{bank:.025,cash:.024,bond:.032,stock:.045},
-  note:{bank:'Вклад ~2,5%.',cash:'Денежный рынок ~2,4%.',bond:'Облигации чуть выше вклада.',stock:'Акции в плюсе.'}},
- {rate:9,infl:5,ev:{type:'down',ic:'down',title:'Год 3 · Q2. Лёгкая просадка',text:'Акции снова качнуло вниз, мягче прошлого раза.'},
-  ctx:'Вторая просадка переносится спокойнее — вы уже видели, что рынок восстанавливается.',
-  ret:{bank:.023,cash:.023,bond:.028,stock:-.03},
-  note:{bank:'Вклад ~2,3%.',cash:'Денежный рынок без просадки.',bond:'Облигации в небольшом плюсе.',stock:'Акции слегка просели — уже не так страшно.'}},
- {rate:9,infl:4,ev:{type:'up',ic:'up',title:'Год 3 · Q3. Восстановление',text:'Рынок снова растёт.'},
-  ctx:'Снова рост. На дистанции акции дают больше всех — но только если пережить просадки.',
-  ret:{bank:.023,cash:.022,bond:.032,stock:.08},
-  note:{bank:'Вклад ~2,3%.',cash:'Денежный рынок стабилен.',bond:'Облигации в плюсе.',stock:'Акции отрастают.'}},
- {rate:8,infl:4,ev:{type:'up',ic:'up',title:'Год 3 · Q4. Подводим итоги',text:'Последний квартал. Ставка 8% — вклады стали скромными.'},
-  ctx:'Финал. При низкой ставке вклад проигрывает фондам сильнее всего.',
-  ret:{bank:.020,cash:.020,bond:.03,stock:.06},
-  note:{bank:'Вклад дал всего ~2%.',cash:'Денежный рынок ~2%.',bond:'Облигации выше вклада.',stock:'Акции в хорошем плюсе.'}}
-];
-
-const CHOICES=[
- {k:'bank', ic:IC.bank, t:'Оставить на вкладе', d:'надёжно, фиксированный процент', risk:'low', hintBase:'Доход известен заранее, без сюрпризов. Но при низкой ставке проигрывает инфляции.'},
- {k:'cash', ic:IC.cash, t:'Фонд денежного рынка', d:'как вклад, но забрать в любой день', risk:'low', hintBase:'Самый спокойный фонд. Доход около ставки, почти без колебаний.'},
- {k:'bond', ic:IC.bond, t:'Фонд облигаций', d:'доход обычно выше вклада', risk:'mid', hintBase:'Растёт сильнее, когда ставка падает. Колеблется умеренно.'},
- {k:'stock',ic:IC.stock,t:'Фонд акций', d:'риск выше, потенциал больше', risk:'high', hintBase:'Может дать много на росте, но в кризис проседает. Для длинного горизонта.'},
- {k:'split',ic:IC.split,t:'Разделить: облигации + акции', d:'баланс надёжности и роста', risk:'mid', hintBase:'Половина спокойнее, половина на рост. Усредняет результат и риск.'}
-];
-
-let year=0, you=300000, bank=300000, chosen=null;
+let year=0, you=START, bank=START, chosen=null, choicesLog=[];
 const learnedSet=new Set();
-const START=300000;
 
-// максимально возможный результат: каждый год берём лучший инструмент
 function computeMax(){
  let m=START;
  for(const Y of YEARS){
@@ -357,32 +362,38 @@ function computeMax(){
 }
 const MAXV=computeMax();
 
-function startGame(){year=0;you=START;bank=START;learnedSet.clear();go('s_game');renderYear();}
+function logEvent(event,payload){
+ try{
+  fetch(window.GAME.routes.event,{method:'POST',keepalive:true,headers:{'Content-Type':'application/json','X-CSRF-TOKEN':CSRF,'Accept':'application/json'},body:JSON.stringify({event:event,payload:payload||null})}).catch(()=>{});
+ }catch(e){}
+}
+
+function startGame(){year=0;you=START;bank=START;chosen=null;choicesLog=[];learnedSet.clear();logEvent('start');go('s_game');renderYear();}
 function show(id){document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));document.getElementById(id).classList.add('active');window.scrollTo(0,0);}
 function go(id){show(id);}
 
 function renderYear(){
  chosen=null;
  const Y=YEARS[year];
- document.getElementById('hud-year').textContent='Квартал '+(year+1)+' из 12';
+ document.getElementById('hud-year').textContent='Квартал '+(year+1)+' из '+TOTAL;
  document.getElementById('hud-rate').textContent=Y.rate+'%';
  document.getElementById('hud-infl').textContent=Y.infl+'%';
  document.getElementById('m-you').textContent=fmt(you);
  document.getElementById('m-bank').textContent=fmt(bank);
- document.getElementById('pfill').style.width=(year/12*100)+'%';
+ document.getElementById('pfill').style.width=(year/TOTAL*100)+'%';
  document.getElementById('event-zone').innerHTML=
-   '<div class="event"><div class="event-head"><div class="event-ic '+Y.ev.type+'">'+IC[Y.ev.ic]+'</div>'+
-   '<div><div class="event-year">Событие · квартал '+(year+1)+'</div><div class="event-title">'+Y.ev.title+'</div></div></div>'+
-   '<div class="event-text">'+Y.ev.text+'</div>'+
-   '<div class="context"><b>Что это значит:</b> '+Y.ctx+'</div></div>';
+   '<div class="event"><div class="event-head"><div class="event-ic '+Y.ev.type+'">'+(IC[Y.ev.ic]||'')+'</div>'+
+   '<div><div class="event-year">Событие · квартал '+(year+1)+'</div><div class="event-title">'+esc(Y.ev.title)+'</div></div></div>'+
+   '<div class="event-text">'+esc(Y.ev.text)+'</div>'+
+   '<div class="context"><b>Что это значит:</b> '+esc(Y.ctx)+'</div></div>';
  const cz=document.getElementById('choices');cz.innerHTML='';
  const bg={bank:'var(--blue-bg)',cash:'var(--green-bg)',bond:'var(--blue-bg)',stock:'var(--red-light)',split:'var(--amber-bg)'};
  const rlab={low:'низкий',mid:'умеренный',high:'высокий'};
  CHOICES.forEach(c=>{
    const d=document.createElement('div');d.className='choice click_year_choice';
-   d.innerHTML='<div class="choice-top"><div class="ci" style="background:'+bg[c.k]+'">'+c.ic+'</div>'+
-     '<div class="cmain"><div class="ctrow"><span class="ct">'+c.t+'</span><span class="htag '+c.risk+'">'+rlab[c.risk]+'</span></div>'+
-     '<div class="cd">'+c.hintBase+'</div></div></div>';
+   d.innerHTML='<div class="choice-top"><div class="ci" style="background:'+(bg[c.k]||'var(--g50)')+'">'+(IC[c.ic]||'')+'</div>'+
+     '<div class="cmain"><div class="ctrow"><span class="ct">'+esc(c.t)+'</span><span class="htag '+c.risk+'">'+(rlab[c.risk]||'')+'</span></div>'+
+     '<div class="cd">'+esc(c.hintBase)+'</div></div></div>';
    d.onclick=()=>choose(c.k);cz.appendChild(d);
  });
  document.getElementById('outcome-overlay').classList.remove('show');
@@ -392,21 +403,20 @@ function choose(k){
  if(chosen)return;chosen=k;
  const Y=YEARS[year];
  let r = k==='split' ? (Y.ret.bond+Y.ret.stock)/2 : Y.ret[k];
- const youBefore=you;
  you=you*(1+r); bank=bank*(1+Y.ret.bank);
+ choicesLog.push({quarter:year+1,k:k,ret:r});
+ logEvent('choice',{quarter:year+1,k:k});
  if(k==='stock'&&Y.ret.stock<0) learnedSet.add('Акции могут просесть — но на дистанции отрастают, если не паниковать');
  if(k==='cash') learnedSet.add('Фонд денежного рынка — почти как вклад, но деньги доступны в любой день');
  if(k==='bond') learnedSet.add('Облигации обычно дают больше вклада, особенно когда ставка падает');
  if(k==='stock'&&Y.ret.stock>0) learnedSet.add('Фонд акций приносит больше всех на росте рынка');
  if(k==='split') learnedSet.add('Разделить деньги между облигациями и акциями — это баланс риска');
  if(k==='bank') learnedSet.add('Вклад надёжен, но при низкой ставке проигрывает инфляции и фондам');
- const noteYou=Y.note[k]|| 'Половина в облигациях, половина в акциях — усреднили риск.';
+ const noteYou=(Y.note&&Y.note[k])|| 'Половина в облигациях, половина в акциях — усреднили риск.';
  const youPct=(r*100).toFixed(1), bankPct=(Y.ret.bank*100).toFixed(1);
- // обновляем портфели и прогресс сразу
  document.getElementById('m-you').textContent=fmt(you);
  document.getElementById('m-bank').textContent=fmt(bank);
- document.getElementById('pfill').style.width=((year+1)/12*100)+'%';
- // наполняем всплывающий итог
+ document.getElementById('pfill').style.width=((year+1)/TOTAL*100)+'%';
  document.getElementById('ov-title').textContent='Итог квартала '+(year+1);
  document.getElementById('ov-text').textContent=noteYou;
  const ovYou=document.getElementById('ov-you');
@@ -421,19 +431,11 @@ function nextYear(){
  if(year>=YEARS.length)finish();else renderYear();
 }
 
-// промокод: 1000₽ портфеля = 1₽ промо. Множитель растёт до 1.2 при приближении к максимуму.
-function computePromo(){
- const ratio=Math.min(you/MAXV,1); // 0..1
- // коэффициент 1.0 → 1.2 линейно от 80% до 100% максимума
- let mult=1.0;
- if(ratio>=0.8) mult=1.0+(ratio-0.8)/0.2*0.2; // 0.8→1.0, 1.0→1.2
- const base=you/1000;
- const value=Math.round(base*mult);
- return {value, mult, ratio};
-}
-
 function finish(){
  go('s_final');
+ logEvent('finish');
+ document.getElementById('survey-card').style.display='';
+ document.getElementById('reward').style.display='none';
  const diff=you-bank;
  const maxv=Math.max(you,bank,MAXV);
  setTimeout(()=>{
@@ -450,25 +452,68 @@ function finish(){
  else if(diff<0){document.getElementById('rl-tag').textContent='В этот раз вклад впереди';
    rl.innerHTML='Портфель отстал от вклада на <b>'+fmt(-diff)+'</b>. Так бывает при слишком большом риске или выходе на просадке.';}
  else rl.textContent='Вышло вровень с вкладом.';
- // максимум без пути
  document.getElementById('max-text').innerHTML='Максимально на этом сценарии можно было получить <b>'+fmt(MAXV)+'</b>. Вы набрали '+Math.round(you/MAXV*100)+'% от идеала. Как именно — не покажем: попробуйте угадать, перепройдя игру.';
- // промокод
- const promo=computePromo();
- const code='FONDY-'+Math.random().toString(36).slice(2,6).toUpperCase();
- document.getElementById('promo-code').textContent=code;
- document.getElementById('promo-value').textContent='Промокод на '+promo.value.toLocaleString('ru-RU')+' ₽';
- if(promo.mult>1.001){
-   document.getElementById('promo-mult').textContent='× '+promo.mult.toFixed(2)+' бонус за близость к максимуму';
-   document.getElementById('promo-mult').style.display='inline-block';
- } else { document.getElementById('promo-mult').style.display='none'; }
- document.getElementById('promo-desc').textContent='1 000 ₽ в тренажёре = 1 ₽ промокода. Чем ближе к максимуму — тем выше коэффициент (до ×1.2). Действует на покупку фонда на витрине.';
- // выводы
  const ul=document.getElementById('learned-list');ul.innerHTML='';
  if(learnedSet.size===0) learnedSet.add('Фонды бывают разные: денежный рынок, облигации, акции — под разный риск');
  learnedSet.add('Разные фонды работают по-разному в разные годы — поэтому их сочетают');
- [...learnedSet].slice(0,5).forEach(t=>{const li=document.createElement('li');li.innerHTML=IC.check+t;ul.appendChild(li);});
+ [...learnedSet].slice(0,5).forEach(t=>{const li=document.createElement('li');li.innerHTML=IC.check+esc(t);ul.appendChild(li);});
+ renderSurvey();
 }
-function toFunds(){alert('Переход на витрину фондов Финуслуг с применённым промокодом (заглушка прототипа). Событие: click_open_fund');}
+
+function renderSurvey(){
+ const wrap=document.getElementById('survey-questions');wrap.innerHTML='';
+ (CONTENT.survey||[]).forEach((q,qi)=>{
+   const block=document.createElement('div');block.className='survey-q';
+   block.innerHTML='<div class="survey-qt">'+(qi+1)+'. '+esc(q.question)+'</div>';
+   const opts=document.createElement('div');opts.className='survey-opts';
+   (q.options||[]).forEach(o=>{
+     const lbl=document.createElement('label');lbl.className='survey-opt';
+     lbl.innerHTML='<input type="radio" name="sv_'+esc(q.id)+'" value="'+esc(o)+'"><span>'+esc(o)+'</span>';
+     opts.appendChild(lbl);
+   });
+   block.appendChild(opts);wrap.appendChild(block);
+ });
+}
+
+function submitResult(){
+ const survey={};let allAnswered=true;
+ (CONTENT.survey||[]).forEach(q=>{
+   const sel=document.querySelector('input[name="sv_'+(window.CSS&&CSS.escape?CSS.escape(q.id):q.id)+'"]:checked');
+   if(sel)survey[q.id]=sel.value;else allAnswered=false;
+ });
+ if(!allAnswered){document.getElementById('survey-error').style.display='block';return;}
+ document.getElementById('survey-error').style.display='none';
+ const btn=document.getElementById('survey-submit');btn.disabled=true;btn.textContent='Отправляем…';
+ fetch(window.GAME.routes.result,{method:'POST',headers:{'Content-Type':'application/json','X-CSRF-TOKEN':CSRF,'Accept':'application/json'},body:JSON.stringify({score_you:Math.round(you),choices:choicesLog,survey:survey})})
+  .then(r=>{if(!r.ok)throw new Error('bad');return r.json();})
+  .then(data=>{showReward(data);})
+  .catch(()=>{btn.disabled=false;btn.textContent='Получить промокод →';alert('Не удалось сохранить результат. Попробуйте ещё раз.');});
+}
+
+function showReward(data){
+ document.getElementById('survey-card').style.display='none';
+ document.getElementById('promo-code').textContent=(data&&data.promo)||window.GAME.promo;
+ renderLeaderboard((data&&data.leaderboard)||[],data&&data.rank);
+ document.getElementById('reward').style.display='';
+ window.scrollTo(0,document.body.scrollHeight);
+}
+
+function renderLeaderboard(rows,myRank){
+ const body=document.getElementById('lb-body');body.innerHTML='';
+ rows.forEach(r=>{
+   const row=document.createElement('div');row.className='lb-row'+(myRank&&r.rank===myRank?' lb-me':'');
+   row.innerHTML='<span class="lb-rank">'+r.rank+'</span><span class="lb-name">'+esc(r.name)+'</span><span class="lb-score">'+fmt(r.score)+'</span>';
+   body.appendChild(row);
+ });
+ const note=document.getElementById('lb-note');
+ note.textContent = myRank ? ('Вы на '+myRank+'-м месте из '+( rows.length>=myRank? rows.length : myRank )+'+ игроков') : '';
+}
+
+function toFunds(){logEvent('open_fund');window.open(window.GAME.shopUrl,'_blank');}
+function restart(){logEvent('restart');startGame();}
+
+logEvent('open');
 </script>
+@endverbatim
 </body>
 </html>
