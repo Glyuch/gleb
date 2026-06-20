@@ -37,13 +37,10 @@ class AppServiceProvider extends ServiceProvider
             app()->isProduction(),
         );
 
+        // Relaxed per product feedback (users found the old 12-char + mixed-case + symbol
+        // rule too hard). Production now only requires 8 characters; non-prod stays unconstrained.
         Password::defaults(fn (): ?Password => app()->isProduction()
-            ? Password::min(12)
-                ->mixedCase()
-                ->letters()
-                ->numbers()
-                ->symbols()
-                ->uncompromised()
+            ? Password::min(8)
             : null,
         );
     }

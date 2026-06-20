@@ -25,7 +25,7 @@
     <div class="field">
       <label for="password">Пароль</label>
       <input id="password" type="password" name="password" required autocomplete="new-password" placeholder="Придумайте пароль">
-      <div class="hint">Минимум 12 символов: буквы, цифры и хотя бы один символ.</div>
+      <div class="hint">Минимум 8 символов.</div>
       @error('password')<div class="err">{{ $message }}</div>@enderror
     </div>
     <div class="field">

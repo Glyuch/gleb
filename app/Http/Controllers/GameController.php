@@ -219,17 +219,12 @@ class GameController extends Controller
 
         for ($q = 0; $q < $n; $q++) {
             $k = $pick[$q + 1];
-            if ($k === 'bank') {
-                // Deposit (model B): locks this quarter's rate, compounds for the remaining quarters.
-                $bal['bank'] += $c * pow(1 + (float) ($years[$q]['ret']['bank'] ?? 0), ($n - 1) - $q);
-            } else {
-                // NAV fund floats: grows by each subsequent quarter's return (q+1..n-1).
-                $f = 1.0;
-                for ($t = $q + 1; $t < $n; $t++) {
-                    $f *= 1 + (float) ($years[$t]['ret'][$k] ?? 0);
-                }
-                $bal[$k] += $c * $f;
+            // Every instrument (incl. the rolling deposit) floats: contribution grows over q+1..n-1.
+            $f = 1.0;
+            for ($t = $q + 1; $t < $n; $t++) {
+                $f *= 1 + (float) ($years[$t]['ret'][$k] ?? 0);
             }
+            $bal[$k] += $c * $f;
         }
 
         $you = array_sum($bal);
@@ -262,19 +257,18 @@ class GameController extends Controller
         $max = 0.0;
 
         for ($q = 0; $q < $n; $q++) {
-            // Deposit (model B): this contribution opens a deposit at ret[q].bank, locked to the end.
-            // Read ret.bank directly so it stays correct even if a content version drops 'bank'.
-            $bankFactor = pow(1 + (float) ($years[$q]['ret']['bank'] ?? 0), ($n - 1) - $q);
+            // Deposit benchmark rolls (floats by ret.bank); read ret.bank directly so it stays
+            // correct even if a content version drops 'bank' from the choices.
+            $bankFactor = 1.0;
+            for ($t = $q + 1; $t < $n; $t++) {
+                $bankFactor *= 1 + (float) ($years[$t]['ret']['bank'] ?? 0);
+            }
 
             $bestFactor = $bankFactor;
             foreach ($instruments as $i) {
-                if ($i === 'bank') {
-                    $f = $bankFactor;
-                } else {
-                    $f = 1.0;
-                    for ($t = $q + 1; $t < $n; $t++) {
-                        $f *= 1 + (float) ($years[$t]['ret'][$i] ?? 0);
-                    }
+                $f = 1.0;
+                for ($t = $q + 1; $t < $n; $t++) {
+                    $f *= 1 + (float) ($years[$t]['ret'][$i] ?? 0);
                 }
                 if ($f > $bestFactor) {
                     $bestFactor = $f;

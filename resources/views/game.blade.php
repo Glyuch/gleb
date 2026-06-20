@@ -198,6 +198,17 @@ html,body{overflow-y:auto;-webkit-overflow-scrolling:touch}
 .choice.chosen{opacity:.5;pointer-events:none}
 .confirm{display:flex;gap:8px;align-items:flex-start;font-size:12.5px;color:var(--g600);line-height:1.4;background:var(--g50);border-radius:11px;padding:11px 13px;margin-bottom:9px}
 .confirm svg{flex:none;margin-top:1px}
+/* details screen */
+#s_details{justify-content:flex-start}
+.dt-chart{background:#fff;border:1px solid var(--g200);border-radius:var(--radius-sm);padding:8px 6px;margin-bottom:10px}
+.dt-legend{display:flex;flex-wrap:wrap;gap:6px 12px;margin-bottom:14px}
+.dt-li{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--g600);font-weight:700}
+.dt-dot{width:12px;height:3px;border-radius:2px;flex:none}
+.dt-compound{border-radius:var(--radius-sm);padding:14px 16px;margin-bottom:14px;background:var(--amber-bg);border:1.5px solid #F0D9A8}
+.dt-compound.pos{background:var(--green-bg);border-color:#B6E6C8}
+.dt-c-h{font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px;color:#9a6a0b}
+.dt-compound.pos .dt-c-h{color:var(--green)}
+.dt-c-t{font-size:14px;line-height:1.55}
 </style>
 @endverbatim
 </head>
@@ -292,7 +303,7 @@ html,body{overflow-y:auto;-webkit-overflow-scrolling:touch}
       <div class="progress"><div class="progress-fill" id="pfill"></div></div>
     </div>
     <div id="event-zone"></div>
-    <div class="choices-head"><span>Что делаем · риск</span><span>Доходность · пр. квартал</span></div>
+    <div class="choices-head"><span>Что делаем · риск</span><span>Доходность · за 3 месяца</span></div>
     <div class="choices" id="choices"></div>
     <div id="advance-zone"></div>
   </section>
@@ -310,6 +321,7 @@ html,body{overflow-y:auto;-webkit-overflow-scrolling:touch}
     <div class="bars-note">Высоты столбцов увеличены для наглядности — точные суммы на столбцах, а «годовых» под ними считается как среднегодовая доходность вложений.</div>
     <div class="result-line"><div class="rt" id="rl-tag">Разница</div><div class="rx" id="rl-text"></div></div>
     <div class="maxbox"><div class="mt">Можно было ещё лучше</div><div class="mx" id="max-text"></div></div>
+    <button class="btn btn-ghost" onclick="showDetails()">Смотреть детали →</button>
     <div class="learned"><h3>Что вы теперь понимаете про фонды</h3><ul id="learned-list"></ul></div>
 
     <!-- ОПРОС -->
@@ -336,6 +348,17 @@ html,body{overflow-y:auto;-webkit-overflow-scrolling:touch}
       <button class="btn click_open_fund" onclick="toFunds()">Перейти на Финуслуги и начать инвестировать</button>
       <button class="btn btn-ghost click_game_restart" onclick="restart()">Прожить заново — побить максимум</button>
     </div>
+  </section>
+
+  <!-- ЭКРАН ДЕТАЛЕЙ -->
+  <section class="screen" id="s_details">
+    <div class="kicker">Детали</div>
+    <h2>Как росли вложения по ходам</h2>
+    <div class="lead" style="margin-bottom:10px;font-size:14px">Если бы все взносы шли в один инструмент — и как сложился ваш портфель (₽ по кварталам).</div>
+    <div class="dt-chart" id="details-chart"></div>
+    <div class="dt-legend" id="details-legend"></div>
+    <div class="dt-compound" id="details-compound"></div>
+    <button class="btn btn-ghost" onclick="go('s_final')">← Назад к результату</button>
   </section>
 
 </div>
@@ -392,31 +415,31 @@ const fmt=n=>Math.round(n).toLocaleString('ru-RU')+' ₽';
 const pct=n=>(n>=0?'+':'')+(n*100).toFixed(1)+'%';
 const esc=s=>String(s).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
 
-// Deposit = model B (fixed rate): bank money is tracked as tranches, each locking the
-// quarter-of-deposit rate for the rest of the game. NAV funds (cash/bond/stock/mix) float.
-let q=0, nav=zeroNav(), bankTr=[], benchTr=[], lastChoice=null, lastDelta=null, chosen=null, choicesLog=[];
+// Deposit = 3-month roll (lock_quarters=1): the whole deposit balance earns the current quarter's
+// rate and «re-opens» each quarter — nothing locked. Every instrument floats on its quarterly return.
+let q=0, nav=zeroNav(), bankBench=0, lastChoice=null, lastDelta=null, chosen=null, choicesLog=[];
 const learnedSet=new Set();
 
-function zeroNav(){return {cash:0,bond:0,stock:0,mix:0};}
-function trSum(tr){let s=0;for(const t of tr)s+=t.p;return s;}
-function navSum(){return nav.cash+nav.bond+nav.stock+nav.mix;}
-function youSum(){return navSum()+trSum(bankTr);}
+function zeroNav(){return {bank:0,cash:0,bond:0,stock:0,mix:0};}
+function navSum(){return nav.bank+nav.cash+nav.bond+nav.stock+nav.mix;}
+function youSum(){return navSum();}
 function vecTotal(b){return b.bank+b.cash+b.bond+b.stock+b.mix;}
-function balVec(){return {bank:trSum(bankTr),cash:nav.cash,bond:nav.bond,stock:nav.stock,mix:nav.mix};}
+function balVec(){return {bank:nav.bank,cash:nav.cash,bond:nav.bond,stock:nav.stock,mix:nav.mix};}
 
-// A bank deposit opened at quarter qi locks ret[qi].bank, then compounds for the remaining quarters.
-function bankLockedFactor(qi){ return Math.pow(1+(YEARS[qi].ret.bank||0), (TOTAL-1)-qi); }
-// A NAV-fund contribution at qi floats: it grows by each subsequent quarter's return.
+// Every instrument (incl. the rolling deposit) floats: a contribution at qi grows by each later quarter.
 function navFactor(qi,inst){ let f=1; for(let t=qi+1;t<TOTAL;t++){ f*=1+(YEARS[t].ret[inst]||0); } return f; }
 
-// DCA benchmarks (spec §4) under model B: deposit locked, funds floating, per-contribution max.
+// DCA benchmarks (spec §4): deposit rolls (floats by ret.bank), funds float; per-contribution max.
 function computeBenchmarks(){
  let bankSum=0, maxSum=0;
  for(let i=0;i<TOTAL;i++){
-   const bf=bankLockedFactor(i);
-   let best=bf;
-   for(const inst of ['cash','bond','stock','mix']){ const f=navFactor(i,inst); if(f>best) best=f; }
-   bankSum+=C*bf; maxSum+=C*best;
+   let best=0;
+   for(const inst of ['bank','cash','bond','stock','mix']){
+     const f=navFactor(i,inst);
+     if(inst==='bank') bankSum+=C*f;
+     if(f>best) best=f;
+   }
+   maxSum+=C*best;
  }
  return {bank:bankSum, max:maxSum};
 }
@@ -437,7 +460,7 @@ function logEvent(event,payload){
  }catch(e){}
 }
 
-function startGame(){q=0;nav=zeroNav();bankTr=[];benchTr=[];lastChoice=null;lastDelta=null;chosen=null;choicesLog=[];learnedSet.clear();hideOutcome();logEvent('start');go('s_game');renderQuarter();}
+function startGame(){q=0;nav=zeroNav();bankBench=0;lastChoice=null;lastDelta=null;chosen=null;choicesLog=[];learnedSet.clear();hideOutcome();logEvent('start');go('s_game');renderQuarter();}
 function show(id){document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));document.getElementById(id).classList.add('active');window.scrollTo(0,0);}
 function go(id){show(id);}
 
@@ -476,7 +499,7 @@ function renderQuarter(){
  chosen=null;
  const Y=YEARS[q];
  // Decision screen: show the portfolio as it stands BEFORE this quarter's contribution.
- const you=youSum(), bankBench=trSum(benchTr);
+ const you=youSum();
  document.getElementById('hud-year').textContent='Квартал '+(q+1)+' из '+TOTAL;
  document.getElementById('hud-rate').textContent=Y.rate+'%';
  document.getElementById('hud-infl').textContent=Y.infl+'%';
@@ -503,7 +526,7 @@ function renderQuarter(){
    d.innerHTML='<div class="choice-top"><div class="ci" style="background:'+(bg[c.k]||'var(--g50)')+'">'+(IC[c.ic]||'')+'</div>'+
      '<div class="cmain"><div class="ctrow"><span class="ct">'+esc(c.t)+'</span><span class="htag '+c.risk+'">'+(rlab[c.risk]||'')+'</span></div>'+
      '<div class="cd">'+esc(c.hintBase)+'</div></div>'+
-     '<div class="cdyn"><div class="cdyn-v '+(r>=0?'pos':'neg')+'">'+pct(r)+'</div>'+sparkline(hist,sc)+'<div class="cdyn-l">пр. квартал</div></div></div>';
+     '<div class="cdyn"><div class="cdyn-v '+(r>=0?'pos':'neg')+'">'+pct(r)+'</div>'+sparkline(hist,sc)+'<div class="cdyn-l">за 3 месяца</div></div></div>';
    d.onclick=()=>choose(c.k);cz.appendChild(d);
  });
  document.getElementById('advance-zone').innerHTML='';
@@ -513,21 +536,20 @@ function choose(k){
  if(chosen)return;chosen=k;lastChoice=k;
  const Yq=YEARS[q];
  // Add this quarter's contribution (now it counts toward the portfolio).
- if(k==='bank') bankTr.push({p:C,r:(Yq.ret.bank||0)}); else nav[k]+=C;
- benchTr.push({p:C,r:(Yq.ret.bank||0)}); // the «всё на вкладе» benchmark banks every contribution
+ nav[k]+=C;
+ bankBench+=C; // the «всё на вкладе» benchmark banks every contribution
  choicesLog.push({quarter:q+1,k:k});
  logEvent('choice',{quarter:q+1,k:k});
  const last=(q+1>=TOTAL);
  let pDelta=0, choiceRet=null, bankRet=0;
  if(!last){
-   const nq=q+1, before=youSum(), benchBefore=trSum(benchTr);
-   for(const inst of ['cash','bond','stock','mix']){ nav[inst]*=1+(YEARS[nq].ret[inst]||0); }
-   for(const t of bankTr){ t.p*=1+t.r; }
-   for(const t of benchTr){ t.p*=1+t.r; }
-   const after=youSum(), benchAfter=trSum(benchTr);
+   const nq=q+1, before=youSum();
+   for(const inst of ['bank','cash','bond','stock','mix']){ nav[inst]*=1+(YEARS[nq].ret[inst]||0); }
+   bankBench*=1+(YEARS[nq].ret.bank||0);
+   const after=youSum();
    pDelta=before>0?(after-before)/before:0; lastDelta=pDelta;
-   choiceRet=(k==='bank')?(Yq.ret.bank||0):(YEARS[nq].ret[k]||0);
-   bankRet=benchBefore>0?(benchAfter-benchBefore)/benchBefore:0;
+   choiceRet=(YEARS[nq].ret[k]||0);
+   bankRet=(YEARS[nq].ret.bank||0);
  } else { lastDelta=null; }
  const rr=choiceRet!==null?choiceRet:(Yq.ret[k]||0);
  if(k==='stock'&&rr<0) learnedSet.add('Акции могут просесть — но на дистанции отрастают, если не паниковать');
@@ -535,7 +557,7 @@ function choose(k){
  if(k==='bond') learnedSet.add('Облигации обычно дают больше вклада, особенно когда ставка падает');
  if(k==='stock'&&rr>=0) learnedSet.add('Фонд акций приносит больше всех на росте рынка');
  if(k==='mix') learnedSet.add('Смешанный фонд — готовый баланс акций и облигаций в одном пае');
- if(k==='bank') learnedSet.add('Вклад фиксирует ставку: доход известен заранее, но при низкой ставке проигрывает фондам');
+ if(k==='bank') learnedSet.add('Вклад идёт по рыночной ставке: надёжно, но фонды на дистанции часто обгоняют');
  document.querySelectorAll('#choices .choice').forEach(el=>el.classList.add('chosen'));
  showOutcome(k,last,pDelta,choiceRet,bankRet);
 }
@@ -653,6 +675,60 @@ function renderLeaderboard(rows,myRank){
 
 function toFunds(){logEvent('open_fund');window.open(window.GAME.shopUrl,'_blank');}
 function restart(){logEvent('restart');startGame();}
+
+// --- Details screen: per-quarter dynamics + compound-interest projection ---
+// Value at end of each quarter t for a given allocation (string = same instrument; array = per-quarter pick).
+function detailSeries(instOrPick){
+ const vals=[];
+ for(let t=0;t<TOTAL;t++){
+   let v=0;
+   for(let qq=0;qq<=t;qq++){
+     const k=(typeof instOrPick==='string')?instOrPick:instOrPick[qq];
+     let f=1; for(let s=qq+1;s<=t;s++){ f*=1+(YEARS[s].ret[k]||0); }
+     v+=C*f;
+   }
+   vals.push(v);
+ }
+ return vals;
+}
+// FV of C per quarter for 10 years (40 кварталов) at a constant annual return.
+function fvAnnuity(rAnnual){
+ const rq=Math.pow(1+rAnnual,0.25)-1;
+ if(Math.abs(rq)<1e-9) return C*40;
+ return C*(Math.pow(1+rq,40)-1)/rq;
+}
+function buildLineChart(series,maxV){
+ const W=340,H=190,L=44,Rm=10,Tm=10,Bm=22, plotW=W-L-Rm, plotH=H-Tm-Bm;
+ const xs=i=>L+plotW*(TOTAL>1?i/(TOTAL-1):0);
+ const ys=v=>Tm+plotH*(1-(maxV>0?v/maxV:0));
+ let g='';
+ for(let j=0;j<=2;j++){ const v=maxV*j/2, y=ys(v);
+   g+='<line x1="'+L+'" y1="'+y.toFixed(1)+'" x2="'+(W-Rm)+'" y2="'+y.toFixed(1)+'" stroke="#E4E4E8" stroke-width="0.5"/>';
+   g+='<text x="'+(L-5)+'" y="'+(y+3).toFixed(1)+'" text-anchor="end" font-size="9" fill="#9A9AA2">'+Math.round(v/1000)+'k</text>'; }
+ [0,5,11].forEach(i=>{ g+='<text x="'+xs(i).toFixed(1)+'" y="'+(H-7)+'" text-anchor="middle" font-size="9" fill="#9A9AA2">кв.'+(i+1)+'</text>'; });
+ series.forEach(s=>{ const pts=s.vals.map((v,i)=>xs(i).toFixed(1)+','+ys(v).toFixed(1)).join(' ');
+   g+='<polyline points="'+pts+'" fill="none" stroke="'+s.color+'" stroke-width="'+(s.bold?2.6:1.3)+'" stroke-linecap="round" stroke-linejoin="round"'+(s.bold?'':' opacity="0.7"')+'/>'; });
+ return '<svg width="100%" viewBox="0 0 '+W+' '+H+'" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Динамика вложений по кварталам">'+g+'</svg>';
+}
+function showDetails(){ go('s_details'); renderDetails(); }
+function renderDetails(){
+ const pick=choicesLog.map(c=>c.k);
+ const series=COMP.map(o=>({name:o.t,color:o.c,vals:detailSeries(o.k),bold:false}));
+ series.push({name:'Ваш портфель',color:'#1A1A1A',vals:detailSeries(pick),bold:true});
+ let maxV=0; series.forEach(s=>s.vals.forEach(v=>{ if(v>maxV) maxV=v; }));
+ document.getElementById('details-chart').innerHTML=buildLineChart(series,maxV);
+ document.getElementById('details-legend').innerHTML=series.map(s=>'<span class="dt-li"><span class="dt-dot" style="background:'+s.color+(s.bold?';height:4px':'')+'"></span>'+esc(s.name)+'</span>').join('');
+ const you=youSum(), bankV=BM.bank, diff=you-bankV;
+ const box=document.getElementById('details-compound');
+ if(diff>0){
+   const proj=fvAnnuity(annualRate(you))-fvAnnuity(annualRate(bankV));
+   box.className='dt-compound pos';
+   box.innerHTML='<div class="dt-c-h">Сила сложного процента</div><div class="dt-c-t">Ваш портфель принёс на <b>'+fmt(diff)+'</b> больше вклада. Кажется немного — но вспомните про сложный процент: если так же вкладывать 10 лет, разница вырастает до <b>'+fmt(proj)+'</b>.</div>';
+ } else {
+   box.className='dt-compound';
+   box.innerHTML='<div class="dt-c-h">Сила сложного процента</div><div class="dt-c-t">В этот раз вклад впереди на <b>'+fmt(-diff)+'</b>. На длинном горизонте сложный процент и диверсификация обычно играют за фонды — попробуйте другую стратегию.</div>';
+ }
+}
 
 logEvent('open');
 </script>
