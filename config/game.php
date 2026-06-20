@@ -13,7 +13,14 @@ return [
     'shop_url' => env('GAME_SHOP_URL', 'https://finuslugi.ru/invest/funds'),
 
     /*
-    | Starting portfolio for every player (₽).
+    | Quarterly contribution (₽) the player allocates each move (DCA model).
+    | 12 equal contributions, no starting capital.
     */
-    'start_amount' => 300000,
+    'contribution' => (int) env('GAME_CONTRIBUTION', 30000),
+
+    /*
+    | Legacy single starting capital — no longer used under the DCA model.
+    | Kept at 0 so any stale reference cannot reintroduce a lump sum.
+    */
+    'start_amount' => 0,
 ];

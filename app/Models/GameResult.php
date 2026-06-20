@@ -14,6 +14,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * @property int $ratio
  * @property array|null $choices
  * @property array|null $survey_answers
+ * @property array|null $composition
  * @property string $promo_code
  */
 class GameResult extends Model
@@ -27,6 +28,7 @@ class GameResult extends Model
         'ratio',
         'choices',
         'survey_answers',
+        'composition',
         'promo_code',
     ];
 
@@ -35,6 +37,7 @@ class GameResult extends Model
         return [
             'choices' => 'array',
             'survey_answers' => 'array',
+            'composition' => 'array',
         ];
     }
 
