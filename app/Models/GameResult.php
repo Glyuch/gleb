@@ -20,6 +20,7 @@ class GameResult extends Model
 {
     protected $fillable = [
         'user_id',
+        'game_content_id',
         'score_you',
         'score_bank',
         'score_max',

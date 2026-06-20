@@ -48,6 +48,8 @@ class GameStatsController extends Controller
             'choiceLabels' => $choiceLabels,
             'choiceFromResults' => $choiceFromResults,
             'choiceFromEvents' => $choiceFromEvents,
+            'years' => $content['years'] ?? [],
+            'perQuarter' => $this->choicesByQuarter(),
             'surveyStats' => $surveyStats,
             'playsTotal' => GameResult::count(),
             'avgScore' => (int) round(GameResult::avg('score_you') ?? 0),
@@ -93,5 +95,25 @@ class GameStatsController extends Controller
         }
 
         return $counts;
+    }
+
+    /**
+     * Per-quarter choice distribution across ALL moves (every `choice` event, incl. abandoned games):
+     * quarter number => [instrument key => count].
+     *
+     * @return array<int, array<string, int>>
+     */
+    private function choicesByQuarter(): array
+    {
+        $byQuarter = [];
+        foreach (GameEvent::query()->where('event', 'choice')->pluck('payload') as $payload) {
+            $quarter = $payload['quarter'] ?? null;
+            $k = $payload['k'] ?? null;
+            if ($quarter && $k) {
+                $byQuarter[$quarter][$k] = ($byQuarter[$quarter][$k] ?? 0) + 1;
+            }
+        }
+
+        return $byQuarter;
     }
 }

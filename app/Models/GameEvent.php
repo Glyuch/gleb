@@ -15,7 +15,7 @@ class GameEvent extends Model
 {
     public const UPDATED_AT = null;
 
-    protected $fillable = ['user_id', 'event', 'payload'];
+    protected $fillable = ['user_id', 'game_content_id', 'event', 'payload'];
 
     protected function casts(): array
     {

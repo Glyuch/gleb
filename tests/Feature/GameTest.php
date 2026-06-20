@@ -38,6 +38,7 @@ it('stores a game result with sanitized survey answers', function () {
 
     $result = GameResult::first();
     expect($result->user_id)->toBe($user->id);
+    expect($result->game_content_id)->toBe(\App\Models\GameContent::current()->id);
     expect($result->score_you)->toBe(350000);
     expect($result->promo_code)->toBe('GAME1');
     expect($result->score_bank)->toBeGreaterThan(300000);

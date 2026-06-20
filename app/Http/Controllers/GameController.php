@@ -82,6 +82,7 @@ class GameController extends Controller
 
         $result = GameResult::create([
             'user_id' => Auth::id(),
+            'game_content_id' => $content->id,
             'score_you' => $scoreYou,
             'score_bank' => $bank,
             'score_max' => $max,
@@ -122,6 +123,7 @@ class GameController extends Controller
 
         GameEvent::create([
             'user_id' => Auth::id(),
+            'game_content_id' => GameContent::query()->active()->value('id'),
             'event' => $validated['event'],
             'payload' => $validated['payload'] ?? null,
         ]);

@@ -32,6 +32,8 @@ it('renders funnel, choice and survey statistics', function () {
         ->assertOk()
         ->assertSee('Воронка')
         ->assertSee('Перешли на Финуслуги')
+        ->assertSee('Решения по ходам (по кварталам)')
+        ->assertSee('Квартал 1 —')
         ->assertSee('Ответы на опрос')
         ->assertSee('Фонд акций');
 });

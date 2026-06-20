@@ -295,7 +295,7 @@ html,body{overflow-y:auto;-webkit-overflow-scrolling:touch}
         <div id="lb-body"></div>
         <div class="lb-note" id="lb-note"></div>
       </div>
-      <button class="btn click_open_fund" onclick="toFunds()">Перейти на финансологию и начать инвестировать</button>
+      <button class="btn click_open_fund" onclick="toFunds()">Перейти на Финуслуги и начать инвестировать</button>
       <button class="btn btn-ghost click_game_restart" onclick="restart()">Прожить заново — побить максимум</button>
     </div>
   </section>

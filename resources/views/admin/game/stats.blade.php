@@ -28,6 +28,27 @@
     @endforeach
   </table>
 
+  <h2>Решения по ходам (по кварталам)</h2>
+  <p class="hint">Что игроки выбирали в каждом квартале при его условиях — по всем ходам, включая незавершённые партии.</p>
+  @foreach ($years as $qi => $y)
+    @php($qn = $qi + 1)
+    @php($qCounts = $perQuarter[$qn] ?? [])
+    @php($qSum = array_sum($qCounts))
+    @php($qTotal = max(1, $qSum))
+    <div class="survey-block">
+      <div class="sq">Квартал {{ $qn }} — {{ $y['ev']['title'] ?? '' }}
+        <small>ставка {{ $y['rate'] }}%, инфляция {{ $y['infl'] }}% · {{ $qSum }} ходов</small>
+      </div>
+      @foreach ($choiceLabels as $k => $label)
+        <div class="srow">
+          <div class="sopt">{{ $label }}</div>
+          <div class="sbarwrap"><div class="sbar" style="width: {{ round(($qCounts[$k] ?? 0) / $qTotal * 100) }}%"></div></div>
+          <div class="scnt">{{ $qCounts[$k] ?? 0 }}</div>
+        </div>
+      @endforeach
+    </div>
+  @endforeach
+
   <h2>Ответы на опрос</h2>
   @forelse ($surveyStats as $q)
     <div class="survey-block">
