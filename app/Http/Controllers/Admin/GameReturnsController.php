@@ -44,13 +44,18 @@ class GameReturnsController extends Controller
         $rules['years.*.infl'] = ['required', 'numeric', 'between:-100,1000'];
         $request->validate($rules);
 
-        // Overwrite only ret.* / rate / infl; keep every other quarter field (ev, ctx, note, …).
+        // Laravel's wildcard rules don't fire for a quarter index missing entirely from the POST,
+        // so fail loudly if any quarter is absent rather than silently keeping stale returns.
         $input = $request->input('years');
-        foreach ($data['years'] as $idx => $year) {
-            $row = $input[$idx] ?? null;
-            if (! is_array($row)) {
-                continue;
+        for ($idx = 0; $idx < $count; $idx++) {
+            if (! isset($input[$idx]) || ! is_array($input[$idx])) {
+                return back()->withInput()->withErrors(['years' => 'Переданы не все кварталы — изменения не сохранены.']);
             }
+        }
+
+        // Overwrite only ret.* / rate / infl; keep every other quarter field (ev, ctx, note, …).
+        foreach ($data['years'] as $idx => $year) {
+            $row = $input[$idx];
             foreach (self::INSTR as $i) {
                 $data['years'][$idx]['ret'][$i] = round(((float) $row[$i]) / 100, 6);
             }

@@ -32,9 +32,33 @@ function closedForm(string $k): int
     for ($q = 0; $q < $n; $q++) {
         $f = 1.0;
         for ($t = $q + 1; $t < $n; $t++) {
-            $f *= 1 + $years[$t]['ret'][$k];
+            $f *= 1 + ($years[$t]['ret'][$k] ?? 0);
         }
         $sum += $c * $f;
+    }
+
+    return (int) round($sum);
+}
+
+/** Perfect-foresight max: each contribution takes the best instrument for its own remaining path. */
+function maxClosed(): int
+{
+    $years = GameContent::current()->data['years'];
+    $n = count($years);
+    $c = (int) config('game.contribution');
+    $sum = 0.0;
+    for ($q = 0; $q < $n; $q++) {
+        $best = 0.0;
+        foreach (['bank', 'cash', 'bond', 'stock', 'mix'] as $k) {
+            $f = 1.0;
+            for ($t = $q + 1; $t < $n; $t++) {
+                $f *= 1 + ($years[$t]['ret'][$k] ?? 0);
+            }
+            if ($f > $best) {
+                $best = $f;
+            }
+        }
+        $sum += $c * $best;
     }
 
     return (int) round($sum);
@@ -72,12 +96,27 @@ it('recomputes the portfolio server-side from choices and stores the composition
     expect($result->game_content_id)->toBe(GameContent::current()->id);
     expect($result->score_you)->toBe($expected);                 // server value, not the client 999
     expect($result->score_you)->toBeLessThanOrEqual($result->score_max);
+    expect($result->score_bank)->toBe(closedForm('bank'));        // deposit benchmark pinned independently
+    expect($result->score_max)->toBe(maxClosed());                // per-contribution perfect foresight
     expect($result->promo_code)->toBe('GAME1');
     expect($result->choices)->toHaveCount(count(GameContent::current()->data['years']));
     expect($result->composition)->toHaveKeys(['bank', 'cash', 'bond', 'stock', 'mix']);
-    expect($result->composition['stock']['share'])->toBe(1.0);   // all-stock → 100% stock
+    expect($result->composition['stock']['share'])->toEqual(1.0); // all-stock → 100% stock (loose: JSON cast may store 1)
     expect($result->survey_answers)->toMatchArray(['helped' => 'Да', 'priority' => 'Надёжность']);
     expect($result->survey_answers)->not->toHaveKey('unknown_question');
+});
+
+it('keeps the last contribution intact under q+1 timing (off-by-one guard)', function () {
+    $user = User::factory()->create();
+    $c = (int) config('game.contribution');
+
+    $this->actingAs($user)->postJson('/game/result', ['choices' => allChoices('bank')])->assertOk();
+
+    $result = GameResult::first();
+    // All-in-bank equals the deposit benchmark; and every all-in run keeps at least the
+    // final (never-grown) contribution, so you >= one contribution.
+    expect($result->score_you)->toBe(closedForm('bank'));
+    expect($result->score_you)->toBeGreaterThanOrEqual($c);
 });
 
 it('rejects an incomplete choices payload', function () {

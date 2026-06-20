@@ -334,7 +334,6 @@ $gameConfig = [
   'user' => $user,
   'promo' => $promo,
   'shopUrl' => $shopUrl,
-  'startAmount' => 0,
   'contribution' => (int) config('game.contribution', 30000),
   'routes' => [
     'result' => route('game.result'),

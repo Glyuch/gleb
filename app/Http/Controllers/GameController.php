@@ -101,7 +101,7 @@ class GameController extends Controller
         $scoreYou = (int) round($you);
         $ratio = $max > 0 ? (int) round(min($you / $max, 1) * 100) : 0;
 
-        if (isset($validated['score_you']) && abs((int) $validated['score_you'] - $scoreYou) > 1) {
+        if (isset($validated['score_you']) && (int) $validated['score_you'] > 0 && abs((int) $validated['score_you'] - $scoreYou) > 1) {
             Log::warning('game: client/server score mismatch', [
                 'user_id' => Auth::id(),
                 'game_content_id' => $content->id,
@@ -218,7 +218,7 @@ class GameController extends Controller
         $n = count($years);
 
         for ($q = 0; $q < $n; $q++) {
-            $r = $years[$q]['ret'];
+            $r = $years[$q]['ret'] ?? [];
             foreach ($instruments as $i) {
                 $bal[$i] *= 1 + (float) ($r[$i] ?? 0);
             }
@@ -231,7 +231,7 @@ class GameController extends Controller
         foreach ($instruments as $i) {
             $composition[$i] = [
                 'amount' => (int) round($bal[$i]),
-                'share' => $you > 0 ? round($bal[$i] / $you, 4) : 0,
+                'share' => $you > 0 ? round($bal[$i] / $you, 4) : 0.0,
             ];
         }
 
@@ -256,20 +256,24 @@ class GameController extends Controller
         $max = 0.0;
 
         for ($q = 0; $q < $n; $q++) {
+            // Deposit benchmark always reads ret.bank directly — never derived from the
+            // player-instrument set, so it stays correct even if a content version drops 'bank'.
             $bankFactor = 1.0;
+            for ($t = $q + 1; $t < $n; $t++) {
+                $bankFactor *= 1 + (float) ($years[$t]['ret']['bank'] ?? 0);
+            }
+
             $bestFactor = 0.0;
             foreach ($instruments as $i) {
                 $f = 1.0;
                 for ($t = $q + 1; $t < $n; $t++) {
                     $f *= 1 + (float) ($years[$t]['ret'][$i] ?? 0);
                 }
-                if ($i === 'bank') {
-                    $bankFactor = $f;
-                }
                 if ($f > $bestFactor) {
                     $bestFactor = $f;
                 }
             }
+
             $bank += $c * $bankFactor;
             $max += $c * $bestFactor;
         }

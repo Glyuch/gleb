@@ -92,6 +92,9 @@ class GameContentController extends Controller
                         $problems[] = 'Вариант '.($i + 1).": отсутствует «{$f}».";
                     }
                 }
+                if (isset($c['k']) && ! in_array($c['k'], ['bank', 'cash', 'bond', 'stock', 'mix'], true)) {
+                    $problems[] = 'Вариант '.($i + 1).": неизвестный инструмент «{$c['k']}» (допустимы bank/cash/bond/stock/mix).";
+                }
             }
         }
 

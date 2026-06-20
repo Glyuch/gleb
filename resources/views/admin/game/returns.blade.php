@@ -37,9 +37,9 @@ $labels = [
         <tbody>
           @foreach ($years as $i => $y)
             <tr>
-              <td class="rowhead">Квартал {{ $i + 1 }}</td>
+              <td class="rowhead">Квартал {{ $loop->iteration }}</td>
               @foreach ($instr as $k)
-                <td class="cell-in"><input class="ret-in" type="number" step="0.1" name="years[{{ $i }}][{{ $k }}]" value="{{ round((($y['ret'][$k] ?? 0)) * 100, 4) }}"></td>
+                <td class="cell-in"><input class="ret-in" type="number" step="any" name="years[{{ $i }}][{{ $k }}]" value="{{ round((($y['ret'][$k] ?? 0)) * 100, 4) }}"></td>
               @endforeach
               <td class="cell-in"><input class="ret-in" type="number" step="1" name="years[{{ $i }}][rate]" value="{{ (int) ($y['rate'] ?? 0) }}"></td>
               <td class="cell-in"><input class="ret-in" type="number" step="1" name="years[{{ $i }}][infl]" value="{{ (int) ($y['infl'] ?? 0) }}"></td>
