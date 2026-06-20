@@ -1,0 +1,501 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Глеб Юченков — Финтех-энтузиаст | gleb.finance</title>
+    <meta name="description" content="Глеб Юченков — руководитель инвестиционных продуктов на Московской бирже, триатлет, финишировавший Ironman, победитель Forbes 30 до 30">
+
+    <style>
+        :root {
+            --primary-color: #3B82F6;
+            --secondary-color: #60A5FA;
+            --dark-bg: #F0F9FF;
+            --card-bg: #FFFFFF;
+            --text-primary: #1E293B;
+            --text-secondary: #64748B;
+            --accent-gradient: linear-gradient(135deg, #3B82F6 0%, #60A5FA 100%);
+            --border-color: rgba(59, 130, 246, 0.15);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: var(--dark-bg);
+            color: var(--text-primary);
+            line-height: 1.6;
+            overflow-x: hidden;
+        }
+
+        /* Hero Section */
+        .hero {
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+            overflow: hidden;
+            background: linear-gradient(135deg, #EFF6FF 0%, #DBEAFE 50%, #EFF6FF 100%);
+        }
+
+        .hero::before {
+            content: '';
+            position: absolute;
+            width: 500px;
+            height: 500px;
+            background: radial-gradient(circle, rgba(59, 130, 246, 0.2) 0%, transparent 70%);
+            top: -250px;
+            right: -250px;
+            animation: pulse 4s ease-in-out infinite;
+        }
+
+        .hero::after {
+            content: '';
+            position: absolute;
+            width: 400px;
+            height: 400px;
+            background: radial-gradient(circle, rgba(96, 165, 250, 0.15) 0%, transparent 70%);
+            bottom: -200px;
+            left: -200px;
+            animation: pulse 6s ease-in-out infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); opacity: 0.5; }
+            50% { transform: scale(1.2); opacity: 0.8; }
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 2rem;
+            position: relative;
+            z-index: 1;
+        }
+
+        .hero-content {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 4rem;
+            align-items: center;
+        }
+
+        .hero-text h1 {
+            font-size: 3.5rem;
+            font-weight: 700;
+            margin-bottom: 1rem;
+            background: var(--accent-gradient);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .hero-text .subtitle {
+            font-size: 1.5rem;
+            color: var(--text-secondary);
+            margin-bottom: 2rem;
+            font-weight: 300;
+        }
+
+        .hero-text .tagline {
+            font-size: 1.1rem;
+            color: var(--text-primary);
+            margin-bottom: 2rem;
+            line-height: 1.8;
+        }
+
+        .achievements {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 1rem;
+            margin-top: 2rem;
+        }
+
+        .badge {
+            background: #FFFFFF;
+            border: 1px solid var(--border-color);
+            padding: 0.75rem 1.5rem;
+            border-radius: 2rem;
+            font-size: 0.9rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            transition: all 0.3s ease;
+            box-shadow: 0 2px 8px rgba(59, 130, 246, 0.1);
+        }
+
+        .badge:hover {
+            border-color: var(--secondary-color);
+            transform: translateY(-2px);
+            box-shadow: 0 4px 20px rgba(59, 130, 246, 0.2);
+        }
+
+        .hero-image {
+            position: relative;
+        }
+
+        .hero-image img {
+            width: 100%;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(59, 130, 246, 0.2);
+            border: 2px solid var(--border-color);
+        }
+
+        /* About Section */
+        .about {
+            padding: 6rem 0;
+            background: #FFFFFF;
+        }
+
+        .section-title {
+            font-size: 2.5rem;
+            margin-bottom: 3rem;
+            text-align: center;
+            background: var(--accent-gradient);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .about-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 2rem;
+        }
+
+        .about-card {
+            background: #F8FAFC;
+            padding: 2rem;
+            border-radius: 15px;
+            border: 1px solid var(--border-color);
+            transition: all 0.3s ease;
+        }
+
+        .about-card:hover {
+            transform: translateY(-5px);
+            border-color: var(--secondary-color);
+            box-shadow: 0 10px 30px rgba(59, 130, 246, 0.15);
+            background: #FFFFFF;
+        }
+
+        .about-card h3 {
+            font-size: 1.5rem;
+            margin-bottom: 1rem;
+            color: var(--secondary-color);
+        }
+
+        .about-card p {
+            color: #334155;
+            line-height: 1.8;
+        }
+
+        /* Projects Section */
+        .projects {
+            padding: 6rem 0;
+            background: var(--dark-bg);
+        }
+
+        .project-card {
+            background: var(--card-bg);
+            border-radius: 20px;
+            overflow: hidden;
+            border: 1px solid var(--border-color);
+            transition: all 0.3s ease;
+            margin-bottom: 2rem;
+        }
+
+        .project-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 20px 40px rgba(0, 82, 255, 0.3);
+        }
+
+        .project-content {
+            padding: 2.5rem;
+        }
+
+        .project-content h3 {
+            font-size: 2rem;
+            margin-bottom: 1rem;
+            color: var(--primary-color);
+        }
+
+        .project-content p {
+            color: #334155;
+            margin-bottom: 1.5rem;
+            font-size: 1.1rem;
+        }
+
+        .btn {
+            display: inline-block;
+            padding: 1rem 2.5rem;
+            background: var(--accent-gradient);
+            color: white;
+            text-decoration: none;
+            border-radius: 50px;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            border: none;
+            cursor: pointer;
+            font-size: 1rem;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 30px rgba(0, 82, 255, 0.4);
+        }
+
+        /* Media Section */
+        .media {
+            padding: 6rem 0;
+            background: var(--card-bg);
+        }
+
+        .media-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+            gap: 2rem;
+        }
+
+        .media-item {
+            border-radius: 15px;
+            overflow: hidden;
+            border: 1px solid var(--border-color);
+            transition: all 0.3s ease;
+        }
+
+        .media-item:hover {
+            transform: scale(1.02);
+            border-color: var(--secondary-color);
+        }
+
+        .media-item img,
+        .media-item video {
+            width: 100%;
+            display: block;
+        }
+
+        /* Contact Section */
+        .contact {
+            padding: 6rem 0;
+            background: var(--dark-bg);
+            text-align: center;
+        }
+
+        .social-links {
+            display: flex;
+            justify-content: center;
+            gap: 2rem;
+            margin-top: 2rem;
+        }
+
+        .social-link {
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            background: var(--card-bg);
+            border: 1px solid var(--border-color);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.5rem;
+            text-decoration: none;
+            color: var(--text-primary);
+            transition: all 0.3s ease;
+        }
+
+        .social-link:hover {
+            background: var(--accent-gradient);
+            border-color: transparent;
+            transform: translateY(-5px);
+            box-shadow: 0 10px 30px rgba(0, 82, 255, 0.4);
+        }
+
+        /* Footer */
+        footer {
+            padding: 2rem 0;
+            text-align: center;
+            background: var(--card-bg);
+            color: var(--text-secondary);
+            border-top: 1px solid var(--border-color);
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .hero-content {
+                grid-template-columns: 1fr;
+                gap: 2rem;
+            }
+
+            .hero-text h1 {
+                font-size: 2.5rem;
+            }
+
+            .hero-text .subtitle {
+                font-size: 1.2rem;
+            }
+
+            .section-title {
+                font-size: 2rem;
+            }
+
+            .about-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .media-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .container {
+                padding: 0 1rem;
+            }
+        }
+
+        /* Smooth scroll */
+        html {
+            scroll-behavior: smooth;
+        }
+    </style>
+</head>
+<body>
+    <!-- Hero Section -->
+    <section class="hero">
+        <div class="container">
+            <div class="hero-content">
+                <div class="hero-text">
+                    <h1>Глеб Юченков</h1>
+                    <p class="subtitle">Финтех-энтузиаст. Триатлет. Инвестор.</p>
+                    <p class="tagline">
+                        Руководитель инвестиционных продуктов на маркетплейсе «Финуслуги» Московской биржи.
+                        Победитель Forbes 30 до 30 в номинации «Финансы и инвестиции» (2025).
+                        Выпускник МГИМО — Факультета МЭО и Европейского учебного института.
+                    </p>
+                    <div class="achievements">
+                        <span class="badge">🏆 Forbes 30 до 30</span>
+                        <span class="badge">🏊 Ironman Finisher</span>
+                        <span class="badge">🎓 МГИМО</span>
+                        <span class="badge">📚 Автор</span>
+                        <span class="badge">💼 Директор по продукту</span>
+                    </div>
+                </div>
+                <div class="hero-image">
+                    <img src="media/gleb-photo-1.jpg" alt="Глеб Юченков">
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- About Section -->
+    <section class="about">
+        <div class="container">
+            <h2 class="section-title">Обо мне</h2>
+            <div class="about-grid">
+                <div class="about-card">
+                    <h3>💼 Финтех-карьера</h3>
+                    <p>
+                        Эксперт в запуске и развитии финтех-продуктов: от народных облигаций до авторских фондов
+                        и маркетплейса ПИФов. Развиваю направление цифровых инвестиций на «Финуслугах»,
+                        где объединяю опыт продуктовой команды и фокус на реальных потребностях инвесторов.
+                    </p>
+                </div>
+                <div class="about-card">
+                    <h3>🏃 Спорт и дисциплина</h3>
+                    <p>
+                        Триатлет, финишировавший Ironman. Сравниваю инвестиции со спортом — показываю,
+                        как дисциплина и регулярность работают и на длинной дистанции в финансах, и в жизни.
+                        Баланс между профессиональными достижениями и личным развитием.
+                    </p>
+                </div>
+                <div class="about-card">
+                    <h3>✍️ Образование и блог</h3>
+                    <p>
+                        Выпускник МГИМО — Факультета МЭО и Европейского учебного института.
+                        Активный участник Экономического Клуба МГИМО - Oeconomicus им. А.В. Макаренко.
+                    </p>
+                    <p style="margin-top: 1rem;">
+                        Автор образовательного Telegram-канала и блога «Дело в деньгах», где объясняю инвестиции
+                        простым языком, показываю реальные кейсы и закулисье создания финтех-продуктов.
+                        Моя цель — сделать управление деньгами понятным и доступным.
+                    </p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Projects Section -->
+    <section class="projects">
+        <div class="container">
+            <h2 class="section-title">Проекты</h2>
+
+            <div class="project-card">
+                <div class="project-content">
+                    <h3>📱 Telegram-канал «Дело в Деньгах»</h3>
+                    <p>
+                        Здесь инвестиции становятся простыми, понятными и даже немного веселыми.
+                        Я показываю реальные кейсы — как инвестирую сам, разбираю инструменты и объясняю,
+                        зачем нужны фонды, облигации и новые финтех-продукты. Без заумных терминов и скучных лекций —
+                        только живые истории, наглядные примеры и немного самоиронии.
+                    </p>
+                    <p style="margin-top: 1rem;">
+                        <strong>О чем канал:</strong>
+                    </p>
+                    <ul style="color: var(--text-secondary); margin: 1rem 0 1rem 2rem; line-height: 1.8;">
+                        <li>Разбираю инвестиционные инструменты и стратегии простыми словами</li>
+                        <li>Показываю закулисье финтеха: как создаются продукты на «Финуслугах»</li>
+                        <li>Экспериментирую с публичным портфелем и делюсь результатами</li>
+                        <li>Добавляю юмор, спорт и лайфстайл — потому что деньги это не только цифры, но и часть нашей жизни</li>
+                    </ul>
+                    <p style="margin-top: 1rem; color: var(--text-secondary);">
+                        📲 Подписывайтесь на «Дело в Деньгах», если хотите научиться инвестировать без лишнего стресса и сложностей.
+                    </p>
+                    <a href="https://t.me/glyuch_dengi" target="_blank" class="btn">Подписаться на канал →</a>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Media Section -->
+    <section class="media">
+        <div class="container">
+            <h2 class="section-title">Медиа</h2>
+            <div class="media-grid">
+                <div class="media-item">
+                    <iframe src="https://www.instagram.com/reel/DPRdD3hCNB8/embed" frameborder="0" scrolling="no" allowtransparency="true" style="width: 100%; min-height: 600px;"></iframe>
+                </div>
+                <div class="media-item">
+                    <iframe src="https://www.instagram.com/reel/DPEqtYAiFbv/embed" frameborder="0" scrolling="no" allowtransparency="true" style="width: 100%; min-height: 600px;"></iframe>
+                </div>
+                <div class="media-item">
+                    <iframe src="https://www.instagram.com/reel/DPYpU7BiM90/embed" frameborder="0" scrolling="no" allowtransparency="true" style="width: 100%; min-height: 600px;"></iframe>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Contact Section -->
+    <section class="contact">
+        <div class="container">
+            <h2 class="section-title">Связаться со мной</h2>
+            <p style="color: var(--text-secondary); font-size: 1.2rem; margin-bottom: 2rem;">
+                Хотите сотрудничать? Буду рад! (Работу не ищу)
+            </p>
+            <div class="social-links">
+                <a href="https://www.linkedin.com/in/gleb-yuchenkov-01b85a105" target="_blank" class="social-link" title="LinkedIn">💼</a>
+                <a href="mailto:gleb@yuchenkov.ru" class="social-link" title="Email">✉️</a>
+            </div>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer>
+        <div class="container">
+            <p>&copy; 2025 Глеб Юченков. Все права защищены.</p>
+        </div>
+    </footer>
+</body>
+</html>
