@@ -54,6 +54,20 @@ th{font-size:11px;text-transform:uppercase;letter-spacing:.3px;color:#9a9aa2}
 .opt-row input{flex:1;margin-bottom:6px}
 .x{background:#fff;border:1.5px solid #e2e2e8;border-radius:8px;padding:6px 10px;cursor:pointer;color:#62626a;font-size:13px}
 .addopt{background:none;border:none;color:#2B5BD7;cursor:pointer;font-size:13px;font-weight:600;padding:2px 0}
+.matrix-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch;border:1px solid #e2e2e8;border-radius:12px;background:#fff;box-shadow:0 2px 12px rgba(0,0,0,.05)}
+.matrix{border-collapse:separate;border-spacing:0;font-size:13px}
+.matrix th,.matrix td{padding:9px 12px;text-align:center;border-bottom:1px solid #f0f0f2;white-space:nowrap}
+.matrix thead th{font-weight:700;background:#fafafb;vertical-align:bottom}
+.matrix .qnum{font-weight:800;color:#1a1a1a;font-size:13px}
+.matrix .qparams{font-weight:600;color:#9a9aa2;font-size:10.5px;margin-top:3px;line-height:1.35}
+.matrix th.corner,.matrix td.rowhead{position:sticky;left:0;text-align:left;font-weight:700;background:#fff;box-shadow:1px 0 0 #ececed}
+.matrix th.corner{background:#fafafb;z-index:2;color:#62626a;font-size:11px;text-transform:uppercase;letter-spacing:.3px}
+.matrix td.rowhead{min-width:150px;max-width:190px;white-space:normal;color:#1a1a1a;z-index:1}
+.matrix td.cell{font-variant-numeric:tabular-nums;font-weight:700;color:#1a1a1a}
+.matrix td.cell .pct{display:block;font-size:10px;color:#9a9aa2;font-weight:600;margin-top:1px}
+.matrix td.cell.zero{color:#cbcbd2}
+.matrix tbody tr:nth-child(even) td{background:#fcfcfd}
+.matrix tbody tr:nth-child(even) td.rowhead{background:#fcfcfd}
 </style>
 </head>
 <body>
