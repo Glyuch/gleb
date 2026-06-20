@@ -1,5 +1,6 @@
 <?php
 
+use App\Models\GameContent;
 use App\Models\GameEvent;
 use App\Models\GameResult;
 use App\Models\User;
@@ -9,8 +10,38 @@ beforeEach(function () {
     $this->seed(GameContentSeeder::class);
 });
 
-it('redirects guests from the game to login', function () {
-    $this->get('/game')->assertRedirect('/login');
+/** Build a full, valid choices payload: one instrument for every quarter. */
+function allChoices(string $k = 'stock'): array
+{
+    $n = count(GameContent::current()->data['years']);
+    $out = [];
+    for ($q = 1; $q <= $n; $q++) {
+        $out[] = ['quarter' => $q, 'k' => $k];
+    }
+
+    return $out;
+}
+
+/** Independent closed-form portfolio for "all contributions into one instrument". */
+function closedForm(string $k): int
+{
+    $years = GameContent::current()->data['years'];
+    $n = count($years);
+    $c = (int) config('game.contribution');
+    $sum = 0.0;
+    for ($q = 0; $q < $n; $q++) {
+        $f = 1.0;
+        for ($t = $q + 1; $t < $n; $t++) {
+            $f *= 1 + $years[$t]['ret'][$k];
+        }
+        $sum += $c * $f;
+    }
+
+    return (int) round($sum);
+}
+
+it('redirects guests from the game to the branded register page', function () {
+    $this->get('/game')->assertRedirect(route('game.register'));
 });
 
 it('shows the game to an authenticated user', function () {
@@ -22,36 +53,51 @@ it('shows the game to an authenticated user', function () {
         ->assertSee($user->name);
 });
 
-it('stores a game result with sanitized survey answers', function () {
+it('recomputes the portfolio server-side from choices and stores the composition', function () {
     $user = User::factory()->create();
+    $expected = closedForm('stock');
 
     $this->actingAs($user)->postJson('/game/result', [
-        'score_you' => 350000,
-        'choices' => [['quarter' => 1, 'k' => 'stock', 'ret' => 0.012]],
+        'score_you' => 999, // client value is only a sanity check; server recomputes
+        'choices' => allChoices('stock'),
         'survey' => [
             'helped' => 'Да',
             'priority' => 'Надёжность',
             'unknown_question' => 'whatever',
-            'helped' => 'Да',
         ],
     ])->assertOk()->assertJson(['promo' => 'GAME1']);
 
     $result = GameResult::first();
     expect($result->user_id)->toBe($user->id);
-    expect($result->game_content_id)->toBe(\App\Models\GameContent::current()->id);
-    expect($result->score_you)->toBe(350000);
+    expect($result->game_content_id)->toBe(GameContent::current()->id);
+    expect($result->score_you)->toBe($expected);                 // server value, not the client 999
+    expect($result->score_you)->toBeLessThanOrEqual($result->score_max);
     expect($result->promo_code)->toBe('GAME1');
-    expect($result->score_bank)->toBeGreaterThan(300000);
+    expect($result->choices)->toHaveCount(count(GameContent::current()->data['years']));
+    expect($result->composition)->toHaveKeys(['bank', 'cash', 'bond', 'stock', 'mix']);
+    expect($result->composition['stock']['share'])->toBe(1.0);   // all-stock → 100% stock
     expect($result->survey_answers)->toMatchArray(['helped' => 'Да', 'priority' => 'Надёжность']);
     expect($result->survey_answers)->not->toHaveKey('unknown_question');
-    expect($result->choices)->toHaveCount(1);
 });
 
-it('rejects an impossible score', function () {
+it('rejects an incomplete choices payload', function () {
     $user = User::factory()->create();
 
-    $this->actingAs($user)->postJson('/game/result', ['score_you' => 99999999])
-        ->assertStatus(422);
+    $this->actingAs($user)->postJson('/game/result', [
+        'choices' => [['quarter' => 1, 'k' => 'stock']],
+    ])->assertStatus(422);
+
+    expect(GameResult::count())->toBe(0);
+});
+
+it('rejects choices with an unknown instrument', function () {
+    $user = User::factory()->create();
+
+    $this->actingAs($user)->postJson('/game/result', [
+        'choices' => allChoices('gold'),
+    ])->assertStatus(422);
+
+    expect(GameResult::count())->toBe(0);
 });
 
 it('ranks the leaderboard by best score per user', function () {
@@ -76,7 +122,7 @@ it('logs valid funnel events and rejects unknown ones', function () {
     $user = User::factory()->create();
 
     $this->actingAs($user)->postJson('/game/event', ['event' => 'open'])->assertOk();
-    $this->actingAs($user)->postJson('/game/event', ['event' => 'choice', 'payload' => ['quarter' => 1, 'k' => 'bond']])->assertOk();
+    $this->actingAs($user)->postJson('/game/event', ['event' => 'choice', 'payload' => ['quarter' => 1, 'k' => 'mix']])->assertOk();
     $this->actingAs($user)->postJson('/game/event', ['event' => 'bogus'])->assertStatus(422);
 
     expect(GameEvent::where('event', 'open')->count())->toBe(1);
