@@ -11,7 +11,9 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
 
 class GameController extends Controller
@@ -69,16 +71,44 @@ class GameController extends Controller
         $content = GameContent::current();
         abort_if($content === null, 503);
 
-        [$bank, $max] = $this->benchmarks($content->data);
+        $instruments = $this->instruments($content->data);
+        $n = count($content->data['years']);
 
         $validated = $request->validate([
-            'score_you' => ['required', 'integer', 'min:0', 'max:'.($max + 1)],
-            'choices' => ['nullable', 'array'],
+            'choices' => ['required', 'array', 'size:'.$n],
+            'choices.*.quarter' => ['required', 'integer', 'min:1', 'max:'.$n],
+            'choices.*.k' => ['required', 'string', Rule::in($instruments)],
             'survey' => ['nullable', 'array'],
+            // Client-computed portfolio — accepted only as a sanity check, never persisted.
+            'score_you' => ['nullable', 'integer', 'min:0'],
         ]);
 
-        $scoreYou = (int) $validated['score_you'];
-        $ratio = $max > 0 ? (int) round(min($scoreYou / $max, 1) * 100) : 0;
+        // Each quarter 1..n must appear exactly once.
+        $pick = [];
+        foreach ($validated['choices'] as $c) {
+            $pick[(int) $c['quarter']] = $c['k'];
+        }
+        if (array_keys($pick) === [] || ! $this->coversAllQuarters($pick, $n)) {
+            throw ValidationException::withMessages([
+                'choices' => "Каждый квартал 1..{$n} должен встречаться ровно один раз.",
+            ]);
+        }
+
+        // Server is the source of truth: recompute everything deterministically from choices.
+        [$you, $composition] = $this->simulate($content->data, $pick, $instruments);
+        [$bank, $max] = $this->benchmarks($content->data);
+
+        $scoreYou = (int) round($you);
+        $ratio = $max > 0 ? (int) round(min($you / $max, 1) * 100) : 0;
+
+        if (isset($validated['score_you']) && abs((int) $validated['score_you'] - $scoreYou) > 1) {
+            Log::warning('game: client/server score mismatch', [
+                'user_id' => Auth::id(),
+                'game_content_id' => $content->id,
+                'client' => (int) $validated['score_you'],
+                'server' => $scoreYou,
+            ]);
+        }
 
         $result = GameResult::create([
             'user_id' => Auth::id(),
@@ -87,13 +117,15 @@ class GameController extends Controller
             'score_bank' => $bank,
             'score_max' => $max,
             'ratio' => $ratio,
-            'choices' => $validated['choices'] ?? null,
+            'choices' => $validated['choices'],
             'survey_answers' => $this->sanitizeSurvey($content->data, $validated['survey'] ?? []) ?: null,
+            'composition' => $composition,
             'promo_code' => config('game.promo_code'),
         ]);
 
         GameEvent::create([
             'user_id' => Auth::id(),
+            'game_content_id' => $content->id,
             'event' => 'result',
             'payload' => ['score' => $scoreYou, 'ratio' => $ratio],
         ]);
@@ -132,22 +164,114 @@ class GameController extends Controller
     }
 
     /**
-     * Deterministic benchmarks (independent of player choices), computed server-side.
+     * Instruments available this scenario, derived from the content's choices (fallback to the canonical five).
+     *
+     * @param  array<string, mixed>  $content
+     * @return array<int, string>
+     */
+    private function instruments(array $content): array
+    {
+        $keys = collect($content['choices'] ?? [])
+            ->pluck('k')
+            ->filter()
+            ->unique()
+            ->values()
+            ->all();
+
+        return $keys ?: ['bank', 'cash', 'bond', 'stock', 'mix'];
+    }
+
+    /**
+     * True when $pick has exactly one choice for every quarter 1..n.
+     *
+     * @param  array<int, string>  $pick
+     */
+    private function coversAllQuarters(array $pick, int $n): bool
+    {
+        if (count($pick) !== $n) {
+            return false;
+        }
+        for ($q = 1; $q <= $n; $q++) {
+            if (! isset($pick[$q])) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /**
+     * Canonical DCA simulation (matches the client engine and the spec §3.2):
+     * each quarter, grow existing balances, then add the contribution to the chosen
+     * instrument (so a contribution first grows in the NEXT quarter).
+     *
+     * @param  array<string, mixed>  $content
+     * @param  array<int, string>  $pick  quarter (1-based) => instrument key
+     * @param  array<int, string>  $instruments
+     * @return array{0:float,1:array<string,array{amount:int,share:float}>}
+     */
+    private function simulate(array $content, array $pick, array $instruments): array
+    {
+        $c = (int) config('game.contribution', 30000);
+        $bal = array_fill_keys($instruments, 0.0);
+        $years = $content['years'];
+        $n = count($years);
+
+        for ($q = 0; $q < $n; $q++) {
+            $r = $years[$q]['ret'];
+            foreach ($instruments as $i) {
+                $bal[$i] *= 1 + (float) ($r[$i] ?? 0);
+            }
+            $k = $pick[$q + 1];
+            $bal[$k] += $c;
+        }
+
+        $you = array_sum($bal);
+        $composition = [];
+        foreach ($instruments as $i) {
+            $composition[$i] = [
+                'amount' => (int) round($bal[$i]),
+                'share' => $you > 0 ? round($bal[$i] / $you, 4) : 0,
+            ];
+        }
+
+        return [$you, $composition];
+    }
+
+    /**
+     * Deterministic DCA benchmarks (independent of player choices), computed server-side.
+     * Same contributions/timing as the player: a contribution in quarter q grows over t=q+1..n-1.
      *
      * @param  array<string, mixed>  $content
      * @return array{0:int,1:int} [bank, max]
      */
     private function benchmarks(array $content): array
     {
-        $start = (int) config('game.start_amount', 300000);
-        $bank = $start;
-        $max = $start;
+        $c = (int) config('game.contribution', 30000);
+        $instruments = $this->instruments($content);
+        $years = $content['years'];
+        $n = count($years);
 
-        foreach ($content['years'] as $y) {
-            $r = $y['ret'];
-            $bank *= 1 + $r['bank'];
-            $best = max($r['bank'], $r['cash'], $r['bond'], $r['stock'], ($r['bond'] + $r['stock']) / 2);
-            $max *= 1 + $best;
+        $bank = 0.0;
+        $max = 0.0;
+
+        for ($q = 0; $q < $n; $q++) {
+            $bankFactor = 1.0;
+            $bestFactor = 0.0;
+            foreach ($instruments as $i) {
+                $f = 1.0;
+                for ($t = $q + 1; $t < $n; $t++) {
+                    $f *= 1 + (float) ($years[$t]['ret'][$i] ?? 0);
+                }
+                if ($i === 'bank') {
+                    $bankFactor = $f;
+                }
+                if ($f > $bestFactor) {
+                    $bestFactor = $f;
+                }
+            }
+            $bank += $c * $bankFactor;
+            $max += $c * $bestFactor;
         }
 
         return [(int) round($bank), (int) round($max)];
