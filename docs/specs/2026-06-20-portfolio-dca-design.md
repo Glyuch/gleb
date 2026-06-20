@@ -203,6 +203,17 @@ share[i] = you>0 ? bal[i]/you : 0
 - `restart()`: сброс вектора балансов и состояния.
 - Отправка результата: `choices` теперь `{quarter,k}` (без `ret`); `score_you` — сверка; в столбиках финала показываем локальный `you`.
 
+### 9.6 Админка: структурный редактор доходностей по ходам
+
+Новая вкладка в `/admin/game` (рядом с «Контент»/«Опрос»/«Статистика») — структурное редактирование `years[q].ret` + `rate`/`infl`, без правки сырого JSON.
+
+- Паттерн — как у редактора опроса (`GameSurveyController` + `admin.game.survey`): Blade-форма → валидация → `GameContent::publish()` (новая активная версия).
+- Новый `app/Http/Controllers/Admin/GameReturnsController` (`edit`/`update`), маршруты `GET/PUT /admin/game/returns`, вью `admin.game.returns`, ссылка во вкладках `admin.game.layout`.
+- **Матрица**: строки = 12 кварталов, столбцы = 5 инструментов (`bank/cash/bond/stock/mix`) + `rate` + `infl`. Доходности вводятся в **процентах** (напр. `3.8`), хранятся десятичной дробью (`0.038`) — конвертация в обе стороны; `rate`/`infl` — целые годовые %.
+- **Сохранение не затирает прочие поля квартала** (`ev`, `ctx`, `note`, и т.д.): берём текущий `data`, по индексу квартала перезаписываем только `ret.*`, `rate`, `infl`, остальное сохраняем, затем `publish()`.
+- Валидация: каждый квартал, каждый инструмент (включая `mix`) — число; число кварталов фиксировано (12). На неполноту/нечисла — `back()->withErrors`.
+- Доп. правка: `GameContentController::structureProblems()` — добавить требование `ret.mix` числом (сейчас проверяет только bank/cash/bond/stock), чтобы JSON-редактор тоже знал про 5-й инструмент.
+
 ## 10. Конфиг
 
 - `config/game.php`: добавить `'contribution' => 30000`; `'start_amount' => 0`.
@@ -234,6 +245,7 @@ share[i] = you>0 ? bal[i]/you : 0
 - `app/Models/GameResult.php` — `composition` в `$fillable` и `casts()` (`array`).
 - Разовая операция — `DELETE` `game_results` + `game_events` в транзакции.
 - `app/Http/Controllers/GameController.php` — `store()` (строгая валидация `choices`, серверный пересчёт + `composition`, без доверия клиентскому `score_you`, удалить `max:max+1`), `benchmarks()` (переписать), лидерборд без изменений.
+- Админка-редактор доходностей: `app/Http/Controllers/Admin/GameReturnsController.php` (новый), маршруты в `routes/web.php` (`returns`/`returns.update`), вью `resources/views/admin/game/returns.blade.php` (новая), ссылка во вкладках `resources/views/admin/game/layout.blade.php`; `GameContentController::structureProblems()` — добавить `ret.mix`.
 - `config/game.php` — `contribution`, `start_amount=0` (+ убрать 300000-дефолты во всех точках).
 - Новая активная версия `game_contents` (копи + `ret.mix` + `choices.mix`); опционально `GameContentSeeder`.
 - `tests/Feature/GameTest.php` — переписать под новую модель.
@@ -243,10 +255,11 @@ share[i] = you>0 ? bal[i]/you : 0
 1. Миграция `composition` + модель `GameResult` (cast/fillable) + `config.contribution`/`start_amount=0` (с вычисткой дефолтов).
 2. Движок на клиенте: вектор балансов, цикл §3.2 (`q+1`), bank-DCA-аккумулятор, полоса состава (HUD+финал), рекап вместо модала + кнопка перехода, карточки с прошлой динамикой, `computeBenchmarks`, обработка `q=0`.
 3. Сервер: `store()` (строгая валидация `choices`, серверный пересчёт + `composition`, сверка `score_you` с логом аномалии), `benchmarks()` по §4.
-4. Новая версия контента (черновик копи + `ret.mix` + `choices.mix`) — на ревью пользователю; правка захардкоженных blade-копи.
-5. Очистка `game_results` + `game_events` (`DELETE` в транзакции, релизная операция).
-6. Тесты + tinker/curl-проверка инвариантов (равенство клиент==сервер; `q=11`).
-7. Деплой/коммит на `master` (push в origin — по отдельной команде).
+4. Админка: редактор доходностей по ходам (`GameReturnsController` + вью + маршруты + вкладка) и `ret.mix` в валидации JSON-редактора (§9.6).
+5. Новая версия контента (черновик копи + `ret.mix` + `choices.mix`) — на ревью пользователю; правка захардкоженных blade-копи.
+6. Очистка `game_results` + `game_events` (`DELETE` в транзакции, релизная операция).
+7. Тесты + tinker/curl-проверка инвариантов (равенство клиент==сервер; `q=11`).
+8. Деплой/коммит на `master` (push в origin — по отдельной команде).
 
 ## 15. Риски / на что смотреть
 
