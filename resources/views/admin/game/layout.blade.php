@@ -76,6 +76,7 @@ th{font-size:11px;text-transform:uppercase;letter-spacing:.3px;color:#9a9aa2}
   <nav class="tabs">
     <a href="{{ route('admin.game.content') }}" class="{{ request()->routeIs('admin.game.content') ? 'active' : '' }}">Контент</a>
     <a href="{{ route('admin.game.survey') }}" class="{{ request()->routeIs('admin.game.survey') ? 'active' : '' }}">Опрос</a>
+    <a href="{{ route('admin.game.returns') }}" class="{{ request()->routeIs('admin.game.returns') ? 'active' : '' }}">Доходности</a>
     <a href="{{ route('admin.game.stats') }}" class="{{ request()->routeIs('admin.game.stats') ? 'active' : '' }}">Статистика</a>
     <a href="{{ url('/game') }}" class="right" target="_blank">Открыть игру →</a>
   </nav>

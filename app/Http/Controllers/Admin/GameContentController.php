@@ -75,7 +75,7 @@ class GameContentController extends Controller
                         $problems[] = "Квартал {$n}: отсутствует «{$f}».";
                     }
                 }
-                foreach (['bank', 'cash', 'bond', 'stock'] as $inst) {
+                foreach (['bank', 'cash', 'bond', 'stock', 'mix'] as $inst) {
                     if (! isset($y['ret'][$inst]) || ! is_numeric($y['ret'][$inst])) {
                         $problems[] = "Квартал {$n}: ret.{$inst} должно быть числом.";
                     }

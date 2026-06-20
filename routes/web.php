@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Admin\GameContentController;
+use App\Http\Controllers\Admin\GameReturnsController;
 use App\Http\Controllers\Admin\GameStatsController;
 use App\Http\Controllers\Admin\GameSurveyController;
 use App\Http\Controllers\GameController;
@@ -28,6 +29,8 @@ Route::middleware(['auth', 'admin'])->prefix('admin/game')->name('admin.game.')-
     Route::put('/', [GameContentController::class, 'update'])->name('content.update');
     Route::get('/survey', [GameSurveyController::class, 'edit'])->name('survey');
     Route::put('/survey', [GameSurveyController::class, 'update'])->name('survey.update');
+    Route::get('/returns', [GameReturnsController::class, 'edit'])->name('returns');
+    Route::put('/returns', [GameReturnsController::class, 'update'])->name('returns.update');
     Route::get('/stats', [GameStatsController::class, 'index'])->name('stats');
 });
 
