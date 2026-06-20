@@ -213,17 +213,23 @@ class GameController extends Controller
     private function simulate(array $content, array $pick, array $instruments): array
     {
         $c = (int) config('game.contribution', 30000);
-        $bal = array_fill_keys($instruments, 0.0);
         $years = $content['years'];
         $n = count($years);
+        $bal = array_fill_keys($instruments, 0.0);
 
         for ($q = 0; $q < $n; $q++) {
-            $r = $years[$q]['ret'] ?? [];
-            foreach ($instruments as $i) {
-                $bal[$i] *= 1 + (float) ($r[$i] ?? 0);
-            }
             $k = $pick[$q + 1];
-            $bal[$k] += $c;
+            if ($k === 'bank') {
+                // Deposit (model B): locks this quarter's rate, compounds for the remaining quarters.
+                $bal['bank'] += $c * pow(1 + (float) ($years[$q]['ret']['bank'] ?? 0), ($n - 1) - $q);
+            } else {
+                // NAV fund floats: grows by each subsequent quarter's return (q+1..n-1).
+                $f = 1.0;
+                for ($t = $q + 1; $t < $n; $t++) {
+                    $f *= 1 + (float) ($years[$t]['ret'][$k] ?? 0);
+                }
+                $bal[$k] += $c * $f;
+            }
         }
 
         $you = array_sum($bal);
@@ -256,18 +262,19 @@ class GameController extends Controller
         $max = 0.0;
 
         for ($q = 0; $q < $n; $q++) {
-            // Deposit benchmark always reads ret.bank directly — never derived from the
-            // player-instrument set, so it stays correct even if a content version drops 'bank'.
-            $bankFactor = 1.0;
-            for ($t = $q + 1; $t < $n; $t++) {
-                $bankFactor *= 1 + (float) ($years[$t]['ret']['bank'] ?? 0);
-            }
+            // Deposit (model B): this contribution opens a deposit at ret[q].bank, locked to the end.
+            // Read ret.bank directly so it stays correct even if a content version drops 'bank'.
+            $bankFactor = pow(1 + (float) ($years[$q]['ret']['bank'] ?? 0), ($n - 1) - $q);
 
-            $bestFactor = 0.0;
+            $bestFactor = $bankFactor;
             foreach ($instruments as $i) {
-                $f = 1.0;
-                for ($t = $q + 1; $t < $n; $t++) {
-                    $f *= 1 + (float) ($years[$t]['ret'][$i] ?? 0);
+                if ($i === 'bank') {
+                    $f = $bankFactor;
+                } else {
+                    $f = 1.0;
+                    for ($t = $q + 1; $t < $n; $t++) {
+                        $f *= 1 + (float) ($years[$t]['ret'][$i] ?? 0);
+                    }
                 }
                 if ($f > $bestFactor) {
                     $bestFactor = $f;

@@ -30,9 +30,14 @@ function closedForm(string $k): int
     $c = (int) config('game.contribution');
     $sum = 0.0;
     for ($q = 0; $q < $n; $q++) {
-        $f = 1.0;
-        for ($t = $q + 1; $t < $n; $t++) {
-            $f *= 1 + ($years[$t]['ret'][$k] ?? 0);
+        if ($k === 'bank') {
+            // Model B: deposit locks ret[q].bank and compounds for the remaining quarters.
+            $f = pow(1 + ($years[$q]['ret']['bank'] ?? 0), ($n - 1) - $q);
+        } else {
+            $f = 1.0;
+            for ($t = $q + 1; $t < $n; $t++) {
+                $f *= 1 + ($years[$t]['ret'][$k] ?? 0);
+            }
         }
         $sum += $c * $f;
     }
@@ -48,8 +53,8 @@ function maxClosed(): int
     $c = (int) config('game.contribution');
     $sum = 0.0;
     for ($q = 0; $q < $n; $q++) {
-        $best = 0.0;
-        foreach (['bank', 'cash', 'bond', 'stock', 'mix'] as $k) {
+        $best = pow(1 + ($years[$q]['ret']['bank'] ?? 0), ($n - 1) - $q); // bank locked
+        foreach (['cash', 'bond', 'stock', 'mix'] as $k) {
             $f = 1.0;
             for ($t = $q + 1; $t < $n; $t++) {
                 $f *= 1 + ($years[$t]['ret'][$k] ?? 0);
