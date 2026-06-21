@@ -41,8 +41,8 @@ $labels = [
               @foreach ($instr as $k)
                 <td class="cell-in"><input class="ret-in" type="number" step="any" name="years[{{ $i }}][{{ $k }}]" value="{{ round((($y['ret'][$k] ?? 0)) * 100, 4) }}"></td>
               @endforeach
-              <td class="cell-in"><input class="ret-in" type="number" step="1" name="years[{{ $i }}][rate]" value="{{ (int) ($y['rate'] ?? 0) }}"></td>
-              <td class="cell-in"><input class="ret-in" type="number" step="1" name="years[{{ $i }}][infl]" value="{{ (int) ($y['infl'] ?? 0) }}"></td>
+              <td class="cell-in"><input class="ret-in" type="number" step="any" name="years[{{ $i }}][rate]" value="{{ $y['rate'] ?? 0 }}"></td>
+              <td class="cell-in"><input class="ret-in" type="number" step="any" name="years[{{ $i }}][infl]" value="{{ $y['infl'] ?? 0 }}"></td>
             </tr>
           @endforeach
         </tbody>

@@ -59,8 +59,8 @@ class GameReturnsController extends Controller
             foreach (self::INSTR as $i) {
                 $data['years'][$idx]['ret'][$i] = round(((float) $row[$i]) / 100, 6);
             }
-            $data['years'][$idx]['rate'] = (int) round((float) $row['rate']);
-            $data['years'][$idx]['infl'] = (int) round((float) $row['infl']);
+            $data['years'][$idx]['rate'] = round((float) $row['rate'], 2);
+            $data['years'][$idx]['infl'] = round((float) $row['infl'], 2);
         }
 
         GameContent::publish($data);
