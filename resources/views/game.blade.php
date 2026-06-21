@@ -200,12 +200,7 @@ html,body{overflow-y:auto;-webkit-overflow-scrolling:touch}
 .confirm svg{flex:none;margin-top:1px}
 /* details screen */
 #s_details{justify-content:flex-start}
-.dt-chart{background:#fff;border:1px solid var(--g200);border-radius:var(--radius-sm);padding:8px 4px 4px;margin-bottom:4px}
-.dt-chart-row{display:flex;align-items:flex-start}
-.dt-yaxis{flex:none}
-.dt-plot-scroll{flex:1;min-width:0;overflow-x:auto;-webkit-overflow-scrolling:touch}
-.dt-plot-scroll svg{display:block}
-.dt-scrollhint{font-size:11px;color:var(--g400);text-align:center;margin-bottom:12px}
+.dt-chart{background:#fff;border:1px solid var(--g200);border-radius:var(--radius-sm);padding:8px 4px 4px;margin-bottom:10px}
 .dt-legend{display:flex;flex-wrap:wrap;gap:6px 12px;margin-bottom:14px}
 .dt-li{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--g600);font-weight:700}
 .dt-dot{width:12px;height:3px;border-radius:2px;flex:none}
@@ -214,6 +209,17 @@ html,body{overflow-y:auto;-webkit-overflow-scrolling:touch}
 .dt-c-h{font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px;color:#9a6a0b}
 .dt-compound.pos .dt-c-h{color:var(--green)}
 .dt-c-t{font-size:14px;line-height:1.55}
+.dt-compound2{background:#fff;border:1px solid var(--g200);border-radius:var(--radius-sm);padding:14px 14px 10px;margin-bottom:14px}
+.yb-block{margin-bottom:14px}
+.yb-title{font-size:12.5px;font-weight:700;color:var(--g600);margin-bottom:6px}
+.yb-title b{color:var(--dark)}
+.yb-row{display:flex;align-items:flex-end;gap:3px;height:166px;padding:0 2px}
+.yb-col{flex:1;display:flex;flex-direction:column;justify-content:flex-end;align-items:center}
+.yb-inc,.yb-con{width:64%;max-width:22px}
+.yb-inc{border-radius:3px 3px 0 0}
+.yb-con{background:#D3D1C7}
+.yb-x{font-size:9px;color:var(--g400);margin-top:4px}
+.yb-legend{display:flex;gap:16px;margin-top:2px}
 </style>
 @endverbatim
 </head>
@@ -358,10 +364,9 @@ html,body{overflow-y:auto;-webkit-overflow-scrolling:touch}
   <!-- ЭКРАН ДЕТАЛЕЙ -->
   <section class="screen" id="s_details">
     <div class="kicker">Детали</div>
-    <h2>Как росли вложения по ходам</h2>
-    <div class="lead" style="margin-bottom:10px;font-size:14px">Если бы все взносы шли в один инструмент — и как сложился ваш портфель (₽ по кварталам).</div>
+    <h2>Доходность по ходам</h2>
+    <div class="lead" style="margin-bottom:10px;font-size:14px">Сколько % вы заработали бы на вложенных деньгах в каждом фонде — и в вашем портфеле.</div>
     <div class="dt-chart" id="details-chart"></div>
-    <div class="dt-scrollhint">↔ листайте график, чтобы пройти все 12 кварталов</div>
     <div class="dt-legend" id="details-legend"></div>
     <div class="dt-compound" id="details-compound"></div>
     <button class="btn btn-ghost" onclick="go('s_final')">← Назад к результату</button>
@@ -697,51 +702,56 @@ function detailSeries(instOrPick){
  }
  return vals;
 }
-// FV of C per quarter for 10 years (40 кварталов) at a constant annual return.
-function fvAnnuity(rAnnual){
- const rq=Math.pow(1+rAnnual,0.25)-1;
- if(Math.abs(rq)<1e-9) return C*40;
- return C*(Math.pow(1+rq,40)-1)/rq;
-}
-function buildChart(series,maxV){
- const perStep=70, H=200, L=8, R=16, T=12, B=30, plotH=H-T-B;
- const W=L+R+perStep*(TOTAL-1);
- const xs=i=>L+perStep*i;
- const ys=v=>T+plotH*(1-(maxV>0?v/maxV:0));
- // fixed Y axis (does not scroll)
- let ya='<svg class="dt-yaxis" width="40" height="'+H+'" viewBox="0 0 40 '+H+'" aria-hidden="true">';
- for(let j=0;j<=3;j++){ const v=maxV*j/3, y=ys(v); ya+='<text x="36" y="'+(y+3).toFixed(1)+'" text-anchor="end" font-size="9" fill="#9A9AA2">'+Math.round(v/1000)+'k</text>'; }
- ya+='</svg>';
- // scrolling plot
+// Top chart: cumulative % return ON INVESTED money per instrument (DCA-consistent with the final bars).
+function returnSeries(io){ return detailSeries(io).map((v,t)=>v/((t+1)*C)-1); }
+function buildReturnChart(series){
+ let lo=0, hi=0;
+ series.forEach(s=>s.vals.forEach(v=>{ if(v<lo)lo=v; if(v>hi)hi=v; }));
+ hi=hi*1.08; if(hi-lo<0.02) hi=lo+0.02;
+ const W=340,H=196,L=42,R=12,T=12,B=30,pw=W-L-R,ph=H-T-B;
+ const xs=i=>L+pw*i/(TOTAL-1);
+ const ys=v=>T+ph*(1-(v-lo)/(hi-lo));
  let g='';
- for(let j=0;j<=3;j++){ const y=ys(maxV*j/3); g+='<line x1="0" y1="'+y.toFixed(1)+'" x2="'+W+'" y2="'+y.toFixed(1)+'" stroke="#E4E4E8" stroke-width="0.5"/>'; }
- for(let i=0;i<TOTAL;i++){ g+='<line x1="'+xs(i).toFixed(1)+'" y1="'+T+'" x2="'+xs(i).toFixed(1)+'" y2="'+(T+plotH)+'" stroke="#F0F0F2" stroke-width="0.5"/>'; g+='<text x="'+xs(i).toFixed(1)+'" y="'+(H-10)+'" text-anchor="middle" font-size="9.5" fill="#9A9AA2">'+(i+1)+'</text>'; }
- g+='<text x="'+(L+perStep*(TOTAL-1)/2).toFixed(1)+'" y="'+(H-1)+'" text-anchor="middle" font-size="8.5" fill="#cbcbd2">квартал</text>';
+ for(let j=0;j<=3;j++){ const v=lo+(hi-lo)*j/3, y=ys(v);
+   g+='<line x1="'+L+'" y1="'+y.toFixed(1)+'" x2="'+(W-R)+'" y2="'+y.toFixed(1)+'" stroke="#E4E4E8" stroke-width="0.5"/>';
+   g+='<text x="'+(L-5)+'" y="'+(y+3).toFixed(1)+'" text-anchor="end" font-size="9" fill="#9A9AA2">'+Math.round(v*100)+'%</text>'; }
+ const step=TOTAL>8?2:1;
+ for(let i=0;i<TOTAL;i+=step){ g+='<text x="'+xs(i).toFixed(1)+'" y="'+(H-12)+'" text-anchor="middle" font-size="9" fill="#9A9AA2">'+(i+1)+'</text>'; }
+ g+='<text x="'+(L+pw/2).toFixed(1)+'" y="'+(H-1)+'" text-anchor="middle" font-size="8.5" fill="#cbcbd2">квартал</text>';
  series.forEach(s=>{ const pts=s.vals.map((v,i)=>xs(i).toFixed(1)+','+ys(v).toFixed(1)).join(' ');
-   g+='<polyline points="'+pts+'" fill="none" stroke="'+s.color+'" stroke-width="'+(s.bold?3:1.6)+'" stroke-linecap="round" stroke-linejoin="round"'+(s.bold?'':' opacity="0.75"')+'/>';
-   if(s.bold){ s.vals.forEach((v,i)=>{ g+='<circle cx="'+xs(i).toFixed(1)+'" cy="'+ys(v).toFixed(1)+'" r="2.6" fill="'+s.color+'"/>'; }); }
- });
- const plot='<div class="dt-plot-scroll"><svg width="'+W+'" height="'+H+'" viewBox="0 0 '+W+' '+H+'" role="img" aria-label="Динамика вложений по кварталам">'+g+'</svg></div>';
- return '<div class="dt-chart-row">'+ya+plot+'</div>';
+   g+='<polyline points="'+pts+'" fill="none" stroke="'+s.color+'" stroke-width="'+(s.bold?3:1.6)+'" stroke-linecap="round" stroke-linejoin="round"'+(s.bold?'':' opacity="0.8"')+'/>'; });
+ return '<svg width="100%" viewBox="0 0 '+W+' '+H+'" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Доходность на вложенное по кварталам">'+g+'</svg>';
+}
+// 10-year forward projection, ANNUAL capitalization, 120 000 ₽/year.
+function fvY(r,y){ return Math.abs(r)<1e-9 ? 120000*y : 120000*((Math.pow(1+r,y)-1)/r); }
+function buildYearBars(r,incomeColor,maxVal){
+ const Hpx=140; let bars='';
+ for(let y=1;y<=10;y++){
+   const contrib=120000*y, val=fvY(r,y), income=Math.max(0,val-contrib);
+   bars+='<div class="yb-col"><div class="yb-inc" style="height:'+(income/maxVal*Hpx).toFixed(1)+'px;background:'+incomeColor+'"></div><div class="yb-con" style="height:'+(contrib/maxVal*Hpx).toFixed(1)+'px"></div><div class="yb-x">'+y+'</div></div>';
+ }
+ return '<div class="yb-row">'+bars+'</div>';
 }
 function showDetails(){ go('s_details'); renderDetails(); }
 function renderDetails(){
  const pick=choicesLog.map(c=>c.k);
- const series=COMP.map(o=>({name:o.t,color:o.c,vals:detailSeries(o.k),bold:false}));
- series.push({name:'Ваш портфель',color:'#1A1A1A',vals:detailSeries(pick),bold:true});
- let maxV=0; series.forEach(s=>s.vals.forEach(v=>{ if(v>maxV) maxV=v; }));
- document.getElementById('details-chart').innerHTML=buildChart(series,maxV);
- document.getElementById('details-legend').innerHTML=series.map(s=>'<span class="dt-li"><span class="dt-dot" style="background:'+s.color+(s.bold?';height:4px':'')+'"></span>'+esc(s.name)+'</span>').join('');
- const you=youSum(), bankV=BM.bank, diff=you-bankV;
+ const rser=COMP.map(o=>({name:o.t,color:o.c,vals:returnSeries(o.k),bold:false}));
+ rser.push({name:'Ваш портфель',color:'#1A1A1A',vals:returnSeries(pick),bold:true});
+ document.getElementById('details-chart').innerHTML=buildReturnChart(rser);
+ document.getElementById('details-legend').innerHTML=rser.map(s=>{ const f=s.vals[s.vals.length-1]; return '<span class="dt-li"><span class="dt-dot" style="background:'+s.color+(s.bold?';height:4px':'')+'"></span>'+esc(s.name)+' '+(f>=0?'+':'')+Math.round(f*100)+'%</span>'; }).join('');
+ const you=youSum(), bankV=BM.bank;
+ const rYou=annualRate(you), rBank=annualRate(bankV);
+ const maxVal=Math.max(fvY(rYou,10),fvY(rBank,10),1);
+ const incColor=(you>=bankV)?'#1A8049':'#C8860B';
+ const fmtM=v=>(v/1e6).toFixed(2).replace('.',',')+' млн ₽';
  const box=document.getElementById('details-compound');
- if(diff>0){
-   const proj=fvAnnuity(annualRate(you))-fvAnnuity(annualRate(bankV));
-   box.className='dt-compound pos';
-   box.innerHTML='<div class="dt-c-h">Сила сложного процента</div><div class="dt-c-t">Ваш портфель принёс на <b>'+fmt(diff)+'</b> больше вклада. Кажется немного — но вспомните про сложный процент: если так же вкладывать 10 лет, разница вырастает до <b>'+fmt(proj)+'</b>.</div>';
- } else {
-   box.className='dt-compound';
-   box.innerHTML='<div class="dt-c-h">Сила сложного процента</div><div class="dt-c-t">В этот раз вклад впереди на <b>'+fmt(-diff)+'</b>. На длинном горизонте сложный процент и диверсификация обычно играют за фонды — попробуйте другую стратегию.</div>';
- }
+ box.className='dt-compound2';
+ box.innerHTML=
+   '<div class="dt-c-h">Сложный процент за 10 лет вперёд</div>'+
+   '<div class="dt-c-t" style="margin-bottom:12px">Если продолжать вкладывать 120 000 ₽ в год ещё 10 лет (годовая капитализация). Каждый столбик — год: серое снизу — ваши взносы, цветное сверху — доход.</div>'+
+   '<div class="yb-block"><div class="yb-title">Всё на вкладе · '+(rBank*100).toFixed(1)+'%/год → <b>'+fmtM(fvY(rBank,10))+'</b></div>'+buildYearBars(rBank,'#9A9AA2',maxVal)+'</div>'+
+   '<div class="yb-block"><div class="yb-title">Ваш портфель · '+(rYou*100).toFixed(1)+'%/год → <b>'+fmtM(fvY(rYou,10))+'</b></div>'+buildYearBars(rYou,incColor,maxVal)+'</div>'+
+   '<div class="yb-legend"><span class="dt-li"><span class="dt-dot" style="width:11px;height:11px;border-radius:3px;background:#D3D1C7"></span>Ваши взносы</span><span class="dt-li"><span class="dt-dot" style="width:11px;height:11px;border-radius:3px;background:'+incColor+'"></span>Доход</span></div>';
 }
 
 logEvent('open');
