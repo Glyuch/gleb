@@ -68,6 +68,11 @@ th{font-size:11px;text-transform:uppercase;letter-spacing:.3px;color:#9a9aa2}
 .matrix td.cell.zero{color:#cbcbd2}
 .matrix tbody tr:nth-child(even) td{background:#fcfcfd}
 .matrix tbody tr:nth-child(even) td.rowhead{background:#fcfcfd}
+.yes{color:#1A8049;font-weight:700}
+.no{color:#9a9aa2}
+.matrix td.cell.lb-ans{white-space:normal;min-width:96px;font-weight:600;color:#62626a;font-size:12.5px}
+.matrix th.lb-user,.matrix td.rowhead.lb-user{min-width:170px;max-width:230px}
+.lb-email{display:block;font-size:11px;color:#9a9aa2;font-weight:600;margin-top:2px;word-break:break-all}
 </style>
 </head>
 <body>
