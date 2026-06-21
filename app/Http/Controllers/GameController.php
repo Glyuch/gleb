@@ -24,7 +24,7 @@ class GameController extends Controller
     public function show(): View|RedirectResponse
     {
         if (! Auth::check()) {
-            return redirect()->route('game.register');
+            return view('auth.game-landing');
         }
 
         $content = GameContent::current();
