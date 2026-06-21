@@ -200,7 +200,12 @@ html,body{overflow-y:auto;-webkit-overflow-scrolling:touch}
 .confirm svg{flex:none;margin-top:1px}
 /* details screen */
 #s_details{justify-content:flex-start}
-.dt-chart{background:#fff;border:1px solid var(--g200);border-radius:var(--radius-sm);padding:8px 6px;margin-bottom:10px}
+.dt-chart{background:#fff;border:1px solid var(--g200);border-radius:var(--radius-sm);padding:8px 4px 4px;margin-bottom:4px}
+.dt-chart-row{display:flex;align-items:flex-start}
+.dt-yaxis{flex:none}
+.dt-plot-scroll{flex:1;min-width:0;overflow-x:auto;-webkit-overflow-scrolling:touch}
+.dt-plot-scroll svg{display:block}
+.dt-scrollhint{font-size:11px;color:var(--g400);text-align:center;margin-bottom:12px}
 .dt-legend{display:flex;flex-wrap:wrap;gap:6px 12px;margin-bottom:14px}
 .dt-li{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--g600);font-weight:700}
 .dt-dot{width:12px;height:3px;border-radius:2px;flex:none}
@@ -356,6 +361,7 @@ html,body{overflow-y:auto;-webkit-overflow-scrolling:touch}
     <h2>Как росли вложения по ходам</h2>
     <div class="lead" style="margin-bottom:10px;font-size:14px">Если бы все взносы шли в один инструмент — и как сложился ваш портфель (₽ по кварталам).</div>
     <div class="dt-chart" id="details-chart"></div>
+    <div class="dt-scrollhint">↔ листайте график, чтобы пройти все 12 кварталов</div>
     <div class="dt-legend" id="details-legend"></div>
     <div class="dt-compound" id="details-compound"></div>
     <button class="btn btn-ghost" onclick="go('s_final')">← Назад к результату</button>
@@ -697,18 +703,26 @@ function fvAnnuity(rAnnual){
  if(Math.abs(rq)<1e-9) return C*40;
  return C*(Math.pow(1+rq,40)-1)/rq;
 }
-function buildLineChart(series,maxV){
- const W=340,H=190,L=44,Rm=10,Tm=10,Bm=22, plotW=W-L-Rm, plotH=H-Tm-Bm;
- const xs=i=>L+plotW*(TOTAL>1?i/(TOTAL-1):0);
- const ys=v=>Tm+plotH*(1-(maxV>0?v/maxV:0));
+function buildChart(series,maxV){
+ const perStep=70, H=200, L=8, R=16, T=12, B=30, plotH=H-T-B;
+ const W=L+R+perStep*(TOTAL-1);
+ const xs=i=>L+perStep*i;
+ const ys=v=>T+plotH*(1-(maxV>0?v/maxV:0));
+ // fixed Y axis (does not scroll)
+ let ya='<svg class="dt-yaxis" width="40" height="'+H+'" viewBox="0 0 40 '+H+'" aria-hidden="true">';
+ for(let j=0;j<=3;j++){ const v=maxV*j/3, y=ys(v); ya+='<text x="36" y="'+(y+3).toFixed(1)+'" text-anchor="end" font-size="9" fill="#9A9AA2">'+Math.round(v/1000)+'k</text>'; }
+ ya+='</svg>';
+ // scrolling plot
  let g='';
- for(let j=0;j<=2;j++){ const v=maxV*j/2, y=ys(v);
-   g+='<line x1="'+L+'" y1="'+y.toFixed(1)+'" x2="'+(W-Rm)+'" y2="'+y.toFixed(1)+'" stroke="#E4E4E8" stroke-width="0.5"/>';
-   g+='<text x="'+(L-5)+'" y="'+(y+3).toFixed(1)+'" text-anchor="end" font-size="9" fill="#9A9AA2">'+Math.round(v/1000)+'k</text>'; }
- [0,5,11].forEach(i=>{ g+='<text x="'+xs(i).toFixed(1)+'" y="'+(H-7)+'" text-anchor="middle" font-size="9" fill="#9A9AA2">кв.'+(i+1)+'</text>'; });
+ for(let j=0;j<=3;j++){ const y=ys(maxV*j/3); g+='<line x1="0" y1="'+y.toFixed(1)+'" x2="'+W+'" y2="'+y.toFixed(1)+'" stroke="#E4E4E8" stroke-width="0.5"/>'; }
+ for(let i=0;i<TOTAL;i++){ g+='<line x1="'+xs(i).toFixed(1)+'" y1="'+T+'" x2="'+xs(i).toFixed(1)+'" y2="'+(T+plotH)+'" stroke="#F0F0F2" stroke-width="0.5"/>'; g+='<text x="'+xs(i).toFixed(1)+'" y="'+(H-10)+'" text-anchor="middle" font-size="9.5" fill="#9A9AA2">'+(i+1)+'</text>'; }
+ g+='<text x="'+(L+perStep*(TOTAL-1)/2).toFixed(1)+'" y="'+(H-1)+'" text-anchor="middle" font-size="8.5" fill="#cbcbd2">квартал</text>';
  series.forEach(s=>{ const pts=s.vals.map((v,i)=>xs(i).toFixed(1)+','+ys(v).toFixed(1)).join(' ');
-   g+='<polyline points="'+pts+'" fill="none" stroke="'+s.color+'" stroke-width="'+(s.bold?2.6:1.3)+'" stroke-linecap="round" stroke-linejoin="round"'+(s.bold?'':' opacity="0.7"')+'/>'; });
- return '<svg width="100%" viewBox="0 0 '+W+' '+H+'" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Динамика вложений по кварталам">'+g+'</svg>';
+   g+='<polyline points="'+pts+'" fill="none" stroke="'+s.color+'" stroke-width="'+(s.bold?3:1.6)+'" stroke-linecap="round" stroke-linejoin="round"'+(s.bold?'':' opacity="0.75"')+'/>';
+   if(s.bold){ s.vals.forEach((v,i)=>{ g+='<circle cx="'+xs(i).toFixed(1)+'" cy="'+ys(v).toFixed(1)+'" r="2.6" fill="'+s.color+'"/>'; }); }
+ });
+ const plot='<div class="dt-plot-scroll"><svg width="'+W+'" height="'+H+'" viewBox="0 0 '+W+' '+H+'" role="img" aria-label="Динамика вложений по кварталам">'+g+'</svg></div>';
+ return '<div class="dt-chart-row">'+ya+plot+'</div>';
 }
 function showDetails(){ go('s_details'); renderDetails(); }
 function renderDetails(){
@@ -716,7 +730,7 @@ function renderDetails(){
  const series=COMP.map(o=>({name:o.t,color:o.c,vals:detailSeries(o.k),bold:false}));
  series.push({name:'Ваш портфель',color:'#1A1A1A',vals:detailSeries(pick),bold:true});
  let maxV=0; series.forEach(s=>s.vals.forEach(v=>{ if(v>maxV) maxV=v; }));
- document.getElementById('details-chart').innerHTML=buildLineChart(series,maxV);
+ document.getElementById('details-chart').innerHTML=buildChart(series,maxV);
  document.getElementById('details-legend').innerHTML=series.map(s=>'<span class="dt-li"><span class="dt-dot" style="background:'+s.color+(s.bold?';height:4px':'')+'"></span>'+esc(s.name)+'</span>').join('');
  const you=youSum(), bankV=BM.bank, diff=you-bankV;
  const box=document.getElementById('details-compound');
