@@ -23,7 +23,24 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        $this->guardTestDatabase();
         $this->configureDefaults();
+    }
+
+    /**
+     * Fail fast if a test run is pointed at a non-sqlite database. On the server config is
+     * cached for production (MySQL), so a bare `php artisan test` would otherwise boot with
+     * the cached prod connection and RefreshDatabase would wipe production data. This runs at
+     * boot — before any test's RefreshDatabase — and is inert outside the testing environment.
+     */
+    protected function guardTestDatabase(): void
+    {
+        if ($this->app->environment('testing') && config('database.default') !== 'sqlite') {
+            throw new \RuntimeException(
+                'Tests are pointed at the ['.config('database.default').'] connection, not sqlite — '
+                .'this usually means a cached production config. Run `php artisan config:clear` before testing.'
+            );
+        }
     }
 
     /**

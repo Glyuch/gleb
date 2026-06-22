@@ -116,3 +116,39 @@ it('reports zero activity for today when there are no games', function () {
     expect($d['daily']['today_started'])->toBe(0);
     expect(array_sum($d['daily']['completed']))->toBe(0);
 });
+
+it('exposes the active scenario id and total moves', function () {
+    seedScenario();
+    $active = GameContent::current();
+    $u = User::factory()->create();
+    GameResult::create(['user_id' => $u->id, 'game_content_id' => $active->id, 'score_you' => 460000, 'score_bank' => 443521, 'score_max' => 487970, 'ratio' => 94, 'choices' => bondChoices(), 'survey_answers' => []]);
+
+    $d = app(BuildGameResultsReport::class)();
+    expect($d['scenario_id'])->toBe($active->id);
+    expect($d['total_moves'])->toBe(12);                  // one player, 12 bond choices
+    expect($d['total_moves'])->toBe(array_sum($d['total_choice']));
+});
+
+it('scopes results and events to the active scenario version', function () {
+    seedScenario();
+    $active = GameContent::current();
+    $other = GameContent::create(['is_active' => false, 'data' => ['years' => [], 'choices' => [], 'survey' => []]]);
+
+    $u1 = User::factory()->create(); // tagged to the active version
+    $u2 = User::factory()->create(); // legacy untagged (NULL) -> counts as active version
+    $u3 = User::factory()->create(); // tagged to an older inactive version -> excluded
+
+    GameResult::create(['user_id' => $u1->id, 'game_content_id' => $active->id, 'score_you' => 460000, 'score_bank' => 443521, 'score_max' => 487970, 'ratio' => 94, 'choices' => bondChoices(), 'survey_answers' => []]);
+    GameResult::create(['user_id' => $u2->id, 'game_content_id' => null, 'score_you' => 450000, 'score_bank' => 443521, 'score_max' => 487970, 'ratio' => 92, 'choices' => bondChoices(), 'survey_answers' => []]);
+    GameResult::create(['user_id' => $u3->id, 'game_content_id' => $other->id, 'score_you' => 470000, 'score_bank' => 443521, 'score_max' => 487970, 'ratio' => 96, 'choices' => bondChoices(), 'survey_answers' => []]);
+
+    GameEvent::create(['user_id' => $u1->id, 'game_content_id' => $active->id, 'event' => 'open']);
+    GameEvent::create(['user_id' => $u3->id, 'game_content_id' => $other->id, 'event' => 'open']);
+
+    $d = app(BuildGameResultsReport::class)();
+
+    expect($d['N'])->toBe(2);                                   // active + legacy null
+    expect($d['total_results'])->toBe(2);                       // other-version result excluded
+    expect($d['funnel'][0])->toBe(['Открыли игру', 1]);         // only the active-version open event
+    expect(collect($d['leaderboard'])->pluck('best_score'))->not->toContain(470000);
+});

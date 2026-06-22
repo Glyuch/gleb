@@ -1,6 +1,7 @@
 <?php
 
 use App\Models\GameContent;
+use App\Models\GameResult;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 
@@ -43,4 +44,17 @@ it('redirects the old stats path and /admin root', function () {
     $admin = admin();
     $this->actingAs($admin)->get('/admin')->assertRedirect('/admin/dashboards/site');
     $this->actingAs($admin)->get('/admin/game/stats')->assertRedirect('/admin/dashboards/gameresults');
+});
+
+it('escapes player identity in the rendered dashboard (no stored XSS)', function () {
+    $victim = User::factory()->create(['name' => '<script>alert(1)</script>']);
+    GameResult::create(['user_id' => $victim->id, 'score_you' => 100, 'score_bank' => 1, 'score_max' => 1, 'ratio' => 1, 'choices' => [], 'survey_answers' => []]);
+
+    $html = $this->actingAs(admin())->get('/admin/dashboards/gameresults')->assertOk()->getContent();
+
+    // The leaderboard is built with innerHTML, so the client must escape name/email.
+    expect($html)->toContain('esc(r.name)')->toContain('esc(r.email)');
+    // The raw executable tag must never appear unescaped in the served document:
+    // @json hex-encodes it inside D, and esc() encodes it again when the row is built.
+    expect($html)->not->toContain('<script>alert(1)</script>');
 });
