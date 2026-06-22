@@ -3,8 +3,8 @@
 @section('title', 'Результаты · ФондыКвест')
 
 @push('head')
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3.0.1/dist/chartjs-plugin-annotation.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js" integrity="sha384-9nhczxUqK87bcKHh20fSQcTGD4qq5GhayNYSYWqwBkINBhOfQLg/P5HG5lF1urn4" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3.0.1/dist/chartjs-plugin-annotation.min.js" integrity="sha384-oNtu+d18330MVFpltUTve1DatxCkkctlpA2AC3GulbVFOSqhHdDat3qHse/Lbuek" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
 <style>
 .gr{--card:#fff;--ink:#1a1c20;--muted:#6b7280;--line:#e9ebef;--accent:#FF0032;--accent2:#2B5BD7;--warn:#f59e0b;--bad:#ef4444;color:#1a1c20;font:15px/1.55 -apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif}
 
@@ -199,6 +199,9 @@ const fmt=n=>Math.round(n).toLocaleString('ru-RU');
 const GREEN='#22c55e',BLUE='#0ea5e9',WARN='#f59e0b',BAD='#ef4444',GREY='#64748b',PURP='#a855f7';
 const LAB=D.instr_label,COL=D.instr_color;
 const pctOf=(n,d)=>Math.round(n/d*100);
+// Escape user-/admin-supplied strings before they go into innerHTML (player names, emails, survey questions).
+const ESCMAP={'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'};
+const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>ESCMAP[c]);
 
 
 
@@ -401,7 +404,7 @@ const PAL=[GREEN,'#5ee08a',WARN,BAD,BLUE,PURP];
 const sg=document.getElementById('surveyGrid');
 D.survey_stats.forEach((q,i)=>{
   const d=document.createElement('div');d.className='card';
-  d.innerHTML=`<h3>${q.question}</h3><div class="cap">ответили: ${q.answered} из ${D.N}</div>
+  d.innerHTML=`<h3>${esc(q.question)}</h3><div class="cap">ответили: ${q.answered} из ${D.N}</div>
     <div class="chartbox"><canvas id="sv${i}"></canvas></div>`;
   sg.appendChild(d);
   const o=q.options,c=o.map(x=>q.counts[x]||0);
@@ -454,7 +457,7 @@ grouped('crossRes','crossResTbl',[{name:'Планируют вложить',map:
     options:opt({plugins:{legend:{display:true,position:'bottom'},tooltip:{callbacks:{label:c=>`${c.dataset.label}: ${c.raw}%`}}},
       scales:{y:{beginAtZero:true,max:100,grid:{color:'#e9ebef'},ticks:{callback:v=>v+'%'}},x:{grid:{display:false}}}})});
   let h='<table><tr><th>Приоритет</th><th class="num">Игроков</th><th class="num">Доля акций</th><th class="num">Доля фондов</th></tr>';
-  D.prio_rows.forEach(r=>h+=`<tr><td>${r.prio}</td><td class="num">${r.n}</td><td class="num">${r.stock}%</td><td class="num">${r.fund}%</td></tr>`);
+  D.prio_rows.forEach(r=>h+=`<tr><td>${esc(r.prio)}</td><td class="num">${r.n}</td><td class="num">${r.stock}%</td><td class="num">${r.fund}%</td></tr>`);
   document.getElementById('crossPrioTbl').innerHTML=h+'</table>';
 })();
 
@@ -488,7 +491,7 @@ document.getElementById('foot').innerHTML=
   const rows=D.leaderboard||[];
   if(!rows.length){document.getElementById('leaderboard').innerHTML='<div class="cap">Пока нет игроков.</div>';return;}
   let h='<table><tr><th>#</th><th>Игрок</th><th class="num">Лучший счёт</th><th class="num">Ratio</th><th>Вклад</th><th class="num">Игр</th></tr>';
-  rows.forEach(r=>{h+=`<tr><td>${r.rank}</td><td>${r.name||'—'}<span style="display:block;color:#6b7280;font-size:11px">${r.email||''}</span></td>`+
+  rows.forEach(r=>{h+=`<tr><td>${r.rank}</td><td>${r.name?esc(r.name):'—'}<span style="display:block;color:#6b7280;font-size:11px">${esc(r.email)}</span></td>`+
     `<td class="num">${fmt(r.best_score)} ₽</td><td class="num">${r.ratio}%</td>`+
     `<td>${r.beat_bank?'<span style="color:#2B5BD7;font-weight:700">да</span>':'<span style="color:#FF0032;font-weight:700">нет</span>'}</td><td class="num">${r.plays}</td></tr>`;});
   document.getElementById('leaderboard').innerHTML=h+'</table>';
