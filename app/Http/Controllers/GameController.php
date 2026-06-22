@@ -6,6 +6,7 @@ use App\Models\GameContent;
 use App\Models\GameEvent;
 use App\Models\GameResult;
 use App\Models\User;
+use App\Support\Game\Scenario;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -171,14 +172,7 @@ class GameController extends Controller
      */
     private function instruments(array $content): array
     {
-        $keys = collect($content['choices'] ?? [])
-            ->pluck('k')
-            ->filter()
-            ->unique()
-            ->values()
-            ->all();
-
-        return $keys ?: ['bank', 'cash', 'bond', 'stock', 'mix'];
+        return (new Scenario($content))->instruments();
     }
 
     /**
@@ -213,18 +207,14 @@ class GameController extends Controller
     private function simulate(array $content, array $pick, array $instruments): array
     {
         $c = (int) config('game.contribution', 30000);
-        $years = $content['years'];
-        $n = count($years);
+        $scenario = new Scenario($content);
+        $n = $scenario->quarterCount();
         $bal = array_fill_keys($instruments, 0.0);
 
         for ($q = 0; $q < $n; $q++) {
             $k = $pick[$q + 1];
             // Every instrument (incl. the rolling deposit) floats: contribution grows over q+1..n-1.
-            $f = 1.0;
-            for ($t = $q + 1; $t < $n; $t++) {
-                $f *= 1 + (float) ($years[$t]['ret'][$k] ?? 0);
-            }
-            $bal[$k] += $c * $f;
+            $bal[$k] += $c * $scenario->forwardFactor($k, $q);
         }
 
         $you = array_sum($bal);
@@ -248,38 +238,9 @@ class GameController extends Controller
      */
     private function benchmarks(array $content): array
     {
-        $c = (int) config('game.contribution', 30000);
-        $instruments = $this->instruments($content);
-        $years = $content['years'];
-        $n = count($years);
+        $b = (new Scenario($content))->benchmarks();
 
-        $bank = 0.0;
-        $max = 0.0;
-
-        for ($q = 0; $q < $n; $q++) {
-            // Deposit benchmark rolls (floats by ret.bank); read ret.bank directly so it stays
-            // correct even if a content version drops 'bank' from the choices.
-            $bankFactor = 1.0;
-            for ($t = $q + 1; $t < $n; $t++) {
-                $bankFactor *= 1 + (float) ($years[$t]['ret']['bank'] ?? 0);
-            }
-
-            $bestFactor = $bankFactor;
-            foreach ($instruments as $i) {
-                $f = 1.0;
-                for ($t = $q + 1; $t < $n; $t++) {
-                    $f *= 1 + (float) ($years[$t]['ret'][$i] ?? 0);
-                }
-                if ($f > $bestFactor) {
-                    $bestFactor = $f;
-                }
-            }
-
-            $bank += $c * $bankFactor;
-            $max += $c * $bestFactor;
-        }
-
-        return [(int) round($bank), (int) round($max)];
+        return [$b['bank'], $b['max']];
     }
 
     /**
