@@ -93,3 +93,26 @@ it('does not divide by zero with no data', function () {
     expect($d['N'])->toBe(0);
     expect($d['leaderboard'])->toBe([]);
 });
+
+it('builds a 30-day daily activity series with today as the last bucket', function () {
+    seedScenario();
+    $u = User::factory()->create();
+    GameResult::create(['user_id' => $u->id, 'score_you' => 1, 'score_bank' => 1, 'score_max' => 1, 'ratio' => 1, 'choices' => [], 'survey_answers' => []]);
+    GameEvent::create(['user_id' => $u->id, 'event' => 'start']);
+
+    $d = app(BuildGameResultsReport::class)();
+    expect($d['daily']['labels'])->toHaveCount(30);
+    expect($d['daily']['completed'])->toHaveCount(30);
+    expect($d['daily']['started'])->toHaveCount(30);
+    expect(end($d['daily']['completed']))->toBe(1); // today is the last bucket
+    expect($d['daily']['today_completed'])->toBe(1);
+    expect($d['daily']['today_started'])->toBe(1);
+});
+
+it('reports zero activity for today when there are no games', function () {
+    seedScenario();
+    $d = app(BuildGameResultsReport::class)();
+    expect($d['daily']['today_completed'])->toBe(0);
+    expect($d['daily']['today_started'])->toBe(0);
+    expect(array_sum($d['daily']['completed']))->toBe(0);
+});

@@ -64,6 +64,8 @@ class BuildGameResultsReport
 
         return [
             'generated_at' => Carbon::now()->format('d.m.Y'),
+            'generated_full' => Carbon::now()->format('d.m.Y, H:i'),
+            'daily' => $this->daily(30),
             'N' => $N,
             'total_results' => $allResults->count(),
             'registered' => User::count(),
@@ -118,6 +120,52 @@ class BuildGameResultsReport
     private function uniqueUsers(string $event): int
     {
         return GameEvent::query()->where('event', $event)->distinct()->count('user_id');
+    }
+
+    /**
+     * Per-day completed games (results) and started games (start events) for the last $days,
+     * always including today (0 when there is no activity yet) so freshness is visible.
+     *
+     * @return array{labels: array<int,string>, completed: array<int,int>, started: array<int,int>, today_completed: int, today_started: int}
+     */
+    private function daily(int $days): array
+    {
+        $today = Carbon::today();
+        $start = $today->copy()->subDays($days - 1);
+
+        $completed = GameResult::query()
+            ->where('created_at', '>=', $start)
+            ->get(['created_at'])
+            ->groupBy(fn ($r) => $r->created_at->format('Y-m-d'))
+            ->map->count();
+
+        $started = GameEvent::query()
+            ->where('event', 'start')
+            ->where('created_at', '>=', $start)
+            ->get(['created_at'])
+            ->groupBy(fn ($e) => $e->created_at->format('Y-m-d'))
+            ->map->count();
+
+        $labels = [];
+        $comp = [];
+        $strt = [];
+        for ($d = 0; $d < $days; $d++) {
+            $day = $start->copy()->addDays($d);
+            $key = $day->format('Y-m-d');
+            $labels[] = $day->format('d.m');
+            $comp[] = (int) ($completed[$key] ?? 0);
+            $strt[] = (int) ($started[$key] ?? 0);
+        }
+
+        $todayKey = $today->format('Y-m-d');
+
+        return [
+            'labels' => $labels,
+            'completed' => $comp,
+            'started' => $strt,
+            'today_completed' => (int) ($completed[$todayKey] ?? 0),
+            'today_started' => (int) ($started[$todayKey] ?? 0),
+        ];
     }
 
     /**
