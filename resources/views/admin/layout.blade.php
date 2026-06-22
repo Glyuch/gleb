@@ -6,8 +6,9 @@
 <meta name="csrf-token" content="{{ csrf_token() }}">
 <title>@yield('title', 'Админка') · gleb.finance</title>
 <style>
-  :root{--red:#FF0032;--blue:#2B5BD7;--ink:#1a1c20;--muted:#6b7280;--faint:#9aa1ac;
+  :root{--red:#FF0032;--blue:#2B5BD7;--ink:#1a1c20;--muted:#6b7280;--faint:#6b7280;
     --bg:#f6f7f9;--surface:#fff;--line:#e9ebef;--line2:#f1f2f5}
+  /* --faint darkened to #6b7280 for WCAG AA contrast on white */
   *{box-sizing:border-box}
   body{margin:0;background:var(--bg);color:var(--ink);line-height:1.5;font-size:14px;
     font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif}
@@ -50,7 +51,7 @@
   /* ---- editor styles (carried verbatim from the former game admin layout) ---- */
   h2{font-size:16px;margin:26px 0 10px}
   .flash{padding:11px 14px;border-radius:10px;margin-bottom:16px;font-size:14px;font-weight:600;white-space:pre-line}
-  .flash.ok{background:#E8F6EE;color:#1A8049}
+  .flash.ok{background:#EAF0FB;color:#2B5BD7}
   .flash.err{background:#FFE8EC;color:#FF0032}
   .hint{font-size:13px;color:#62626a;margin:0 0 12px}
   .btn{display:inline-block;padding:11px 20px;border:none;border-radius:10px;background:#FF0032;color:#fff;font-size:15px;font-weight:700;cursor:pointer;margin-top:14px}
@@ -58,19 +59,19 @@
   textarea.json{width:100%;height:60vh;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12.5px;line-height:1.45;padding:14px;border:1.5px solid #e2e2e8;border-radius:12px;background:#fff;resize:vertical}
   .cards{display:flex;gap:12px;flex-wrap:wrap}
   .card{flex:1;min-width:160px;background:#fff;border-radius:12px;padding:14px 16px;box-shadow:0 2px 12px rgba(0,0,0,.05)}
-  .card-l{font-size:11px;text-transform:uppercase;letter-spacing:.3px;color:#9a9aa2;font-weight:700}
+  .card-l{font-size:11px;text-transform:uppercase;letter-spacing:.3px;color:#6b7280;font-weight:700}
   .card-v{font-size:22px;font-weight:800;margin-top:4px}
-  .card-v small{font-size:12px;color:#9a9aa2;font-weight:600}
+  .card-v small{font-size:12px;color:#6b7280;font-weight:600}
   .funnel{background:#fff;border-radius:12px;padding:14px 16px;box-shadow:0 2px 12px rgba(0,0,0,.05)}
   .frow{display:flex;align-items:center;gap:12px;margin-bottom:10px}
   .flabel{width:200px;flex:none;font-size:13.5px;font-weight:600}
   .fbarwrap{flex:1;background:#f0f0f2;border-radius:7px;height:22px;overflow:hidden}
   .fbar{height:100%;background:linear-gradient(90deg,#FF0032,#FF4D74);border-radius:7px;min-width:2px}
   .fcount{width:90px;flex:none;text-align:right;font-weight:800;font-size:14px}
-  .fcount small{color:#1A8049;font-weight:700;font-size:12px}
+  .fcount small{color:#6b7280;font-weight:700;font-size:12px}
   .survey-block{background:#fff;border-radius:12px;padding:14px 16px;margin-bottom:12px;box-shadow:0 2px 12px rgba(0,0,0,.05)}
   .sq{font-weight:700;font-size:14px;margin-bottom:10px}
-  .sq small{color:#9a9aa2;font-weight:600}
+  .sq small{color:#6b7280;font-weight:600}
   .srow{display:flex;align-items:center;gap:10px;margin-bottom:6px}
   .sopt{width:170px;flex:none;font-size:13px}
   .sbarwrap{flex:1;background:#f0f0f2;border-radius:6px;height:16px;overflow:hidden}
@@ -90,20 +91,20 @@
   .matrix th,.matrix td{padding:9px 12px;text-align:center;border-bottom:1px solid #f0f0f2;white-space:nowrap}
   .matrix thead th{font-weight:700;background:#fafafb;vertical-align:bottom}
   .matrix .qnum{font-weight:800;color:#1a1a1a;font-size:13px}
-  .matrix .qparams{font-weight:600;color:#9a9aa2;font-size:10.5px;margin-top:3px;line-height:1.35}
+  .matrix .qparams{font-weight:600;color:#6b7280;font-size:10.5px;margin-top:3px;line-height:1.35}
   .matrix th.corner,.matrix td.rowhead{position:sticky;left:0;text-align:left;font-weight:700;background:#fff;box-shadow:1px 0 0 #ececed}
   .matrix th.corner{background:#fafafb;z-index:2;color:#62626a;font-size:11px;text-transform:uppercase;letter-spacing:.3px}
   .matrix td.rowhead{min-width:150px;max-width:190px;white-space:normal;color:#1a1a1a;z-index:1}
   .matrix td.cell{font-variant-numeric:tabular-nums;font-weight:700;color:#1a1a1a}
-  .matrix td.cell .pct{display:block;font-size:10px;color:#9a9aa2;font-weight:600;margin-top:1px}
+  .matrix td.cell .pct{display:block;font-size:10px;color:#6b7280;font-weight:600;margin-top:1px}
   .matrix td.cell.zero{color:#cbcbd2}
   .matrix tbody tr:nth-child(even) td{background:#fcfcfd}
   .matrix tbody tr:nth-child(even) td.rowhead{background:#fcfcfd}
-  .yes{color:#1A8049;font-weight:700}
-  .no{color:#9a9aa2}
+  .yes{color:#2B5BD7;font-weight:700}
+  .no{color:#6b7280}
   .matrix td.cell.lb-ans{white-space:normal;min-width:96px;font-weight:600;color:#62626a;font-size:12.5px}
   .matrix th.lb-user,.matrix td.rowhead.lb-user{min-width:170px;max-width:230px}
-  .lb-email{display:block;font-size:11px;color:#9a9aa2;font-weight:600;margin-top:2px;word-break:break-all}
+  .lb-email{display:block;font-size:11px;color:#6b7280;font-weight:600;margin-top:2px;word-break:break-all}
 </style>
 @stack('head')
 </head>
@@ -115,21 +116,21 @@
     <div class="nav-group">Обзор</div>
     <nav class="nav">
       <a href="{{ route('admin.dashboards.site') }}" class="{{ request()->routeIs('admin.dashboards.site') ? 'active' : '' }}">
-        <svg viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M9 22V12h6v10"/></svg>Главная</a>
+        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M9 22V12h6v10"/></svg>Главная</a>
     </nav>
 
     <div class="nav-group">ФондыКвест</div>
     <nav class="nav">
       <a href="{{ route('admin.dashboards.gameresults') }}" class="{{ request()->routeIs('admin.dashboards.gameresults') ? 'active' : '' }}">
-        <svg viewBox="0 0 24 24"><line x1="6" y1="20" x2="6" y2="14"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="18" y1="20" x2="18" y2="10"/></svg>Результаты</a>
+        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><line x1="6" y1="20" x2="6" y2="14"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="18" y1="20" x2="18" y2="10"/></svg>Результаты</a>
       <a href="{{ route('admin.game.content') }}" class="{{ request()->routeIs('admin.game.content') ? 'active' : '' }}">
-        <svg viewBox="0 0 24 24"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/></svg>Контент</a>
+        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/></svg>Контент</a>
       <a href="{{ route('admin.game.survey') }}" class="{{ request()->routeIs('admin.game.survey') ? 'active' : '' }}">
-        <svg viewBox="0 0 24 24"><rect x="8" y="3" width="8" height="4" rx="1"/><path d="M9 5H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-3"/></svg>Опрос</a>
+        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><rect x="8" y="3" width="8" height="4" rx="1"/><path d="M9 5H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-3"/></svg>Опрос</a>
       <a href="{{ route('admin.game.returns') }}" class="{{ request()->routeIs('admin.game.returns') ? 'active' : '' }}">
-        <svg viewBox="0 0 24 24"><polyline points="3 17 9 11 13 15 21 7"/><polyline points="15 7 21 7 21 13"/></svg>Доходности</a>
+        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><polyline points="3 17 9 11 13 15 21 7"/><polyline points="15 7 21 7 21 13"/></svg>Доходности</a>
       <a href="{{ url('/game') }}" target="_blank">
-        <svg viewBox="0 0 24 24"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>Открыть игру<span class="ext">↗</span></a>
+        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>Открыть игру<span class="ext">↗</span></a>
     </nav>
   </aside>
 

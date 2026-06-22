@@ -33,6 +33,12 @@ it('serves both dashboards to admins', function () {
     $this->actingAs(admin())->get('/admin/dashboards/site')->assertOk();
 });
 
+it('marks the current dashboard active in the sidebar', function () {
+    // routeIs() needs real route context (works over HTTP, not in a bare ->render()).
+    $this->actingAs(admin())->get('/admin/dashboards/gameresults')->assertSee('class="active"', false);
+    $this->actingAs(admin())->get('/admin/dashboards/site')->assertSee('class="active"', false);
+});
+
 it('redirects the old stats path and /admin root', function () {
     $admin = admin();
     $this->actingAs($admin)->get('/admin')->assertRedirect('/admin/dashboards/site');

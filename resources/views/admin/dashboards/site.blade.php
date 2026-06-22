@@ -18,7 +18,7 @@
   .site .chartbox{position:relative;height:260px}
   .site table{width:100%;border-collapse:collapse;font-size:13.5px;background:transparent;box-shadow:none;border-radius:0}
   .site th,.site td{text-align:left;padding:10px 8px;border-bottom:1px solid #eef0f3}
-  .site th{font-size:11px;text-transform:uppercase;letter-spacing:.3px;color:#9aa1ac;font-weight:700}
+  .site th{font-size:11px;text-transform:uppercase;letter-spacing:.3px;color:#6b7280;font-weight:700}
   .site .num{text-align:right;font-variant-numeric:tabular-nums}
   .site a.proj{color:#2B5BD7;text-decoration:none;font-weight:700}
 </style>
@@ -29,7 +29,7 @@
   <div class="page-head">
     <h1>Сводка по сайту</h1>
     <div class="meta">
-      <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="3" y1="10" x2="21" y2="10"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="16" y1="2" x2="16" y2="6"/></svg>
+      <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="3" y1="10" x2="21" y2="10"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="16" y1="2" x2="16" y2="6"/></svg>
       Данные на {{ now()->format('d.m.Y, H:i') }} · <span class="fresh">обновлено только что</span>
     </div>
   </div>

@@ -41,8 +41,8 @@
   td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
   .qtbl td{white-space:nowrap}
   .pos{color:#16a34a}.neg{color:#dc2626}
-  .tag{display:inline-block;padding:1px 7px;border-radius:6px;font-size:11px;font-weight:700;color:#0b1020}
-  .ev-up{background:#22c55e}.ev-down{background:#ef4444;color:#fff}.ev-neutral{background:#64748b;color:#fff}
+  .tag{display:inline-block;padding:1px 7px;border-radius:6px;font-size:11px;font-weight:700;color:#fff}
+  .ev-up{background:#2B5BD7}.ev-down{background:#ef4444;color:#fff}.ev-neutral{background:#64748b;color:#fff}
   .chip{display:inline-block;padding:1px 7px;border-radius:6px;font-size:11px;font-weight:700;color:#fff}
   footer{color:var(--muted);font-size:12.5px;margin-top:54px;border-top:1px solid var(--line);padding-top:16px}
 
@@ -54,7 +54,7 @@
   <div class="page-head">
     <h1>Результаты · ФондыКвест</h1>
     <div class="meta">
-      <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="3" y1="10" x2="21" y2="10"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="16" y1="2" x2="16" y2="6"/></svg>
+      <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="3" y1="10" x2="21" y2="10"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="16" y1="2" x2="16" y2="6"/></svg>
       Данные на {{ $report['generated_full'] }} · <span class="fresh">обновлено только что</span> · {{ $report['registered'] }} регистраций · {{ $report['total_results'] }} игр · {{ $report['N'] }} игроков
     </div>
   </div>
@@ -225,7 +225,7 @@ const opt=(e={})=>Object.assign({responsive:true,maintainAspectRatio:false,
   plugins:{legend:{display:false}},scales:{}},e);
 const vlines=obj=>{const a={};for(const k in obj){const c=obj[k];
   a[c.id]= {type:'line',xMin:c.x,xMax:c.x,borderColor:c.color,borderWidth:2,borderDash:[5,4],
-    label:{display:true,content:c.t,position:'start',backgroundColor:c.color,color:'#0b1020',font:{size:10,weight:700}}};}
+    label:{display:true,content:c.t,position:'start',backgroundColor:c.color,color:'#fff',font:{size:10,weight:700}}};}
   return a;};
 
 // ---- funnel ----
@@ -322,7 +322,7 @@ new Chart(chaseStock,{data:{labels:D.quarters,datasets:[
   {type:'bar',label:'Доходность акций, %',data:D.ret_q.stock,yAxisID:'y',
     backgroundColor:D.ret_q.stock.map(v=>v>=0?'rgba(239,68,68,.45)':'rgba(239,68,68,.9)'),borderRadius:5},
   {type:'line',label:'Доля выбравших акции, %',data:D.stock_share_q,yAxisID:'y1',
-    borderColor:'#fff',backgroundColor:'#fff',tension:.3,pointRadius:3,borderWidth:2}]},
+    borderColor:'#2B5BD7',backgroundColor:'#2B5BD7',tension:.3,pointRadius:3,borderWidth:2}]},
   options:opt({plugins:{legend:{display:true,position:'bottom'},
     tooltip:{callbacks:{label:c=>`${c.dataset.label}: ${c.raw}%`}}},
     scales:{y:{position:'left',grid:{color:'#e9ebef'},ticks:{callback:v=>v+'%'},title:{display:true,text:'доходность'}},
@@ -334,7 +334,7 @@ new Chart(chaseBond,{data:{labels:D.quarters,datasets:[
   {type:'bar',label:'Доходность облигаций, %',data:D.ret_q.bond,yAxisID:'y',
     backgroundColor:'rgba(34,197,94,.45)',borderRadius:5},
   {type:'line',label:'Доля выбравших облигации, %',data:D.bond_share_q,yAxisID:'y1',
-    borderColor:'#fff',backgroundColor:'#fff',tension:.3,pointRadius:3,borderWidth:2}]},
+    borderColor:'#2B5BD7',backgroundColor:'#2B5BD7',tension:.3,pointRadius:3,borderWidth:2}]},
   options:opt({plugins:{legend:{display:true,position:'bottom'},
     tooltip:{callbacks:{label:c=>`${c.dataset.label}: ${c.raw}%`}}},
     scales:{y:{position:'left',grid:{color:'#e9ebef'},ticks:{callback:v=>v+'%'},title:{display:true,text:'доходность'}},
@@ -386,7 +386,7 @@ document.getElementById('tk-style').textContent=
 new Chart(replayPie,{type:'doughnut',data:{labels:['Улучшили','Без изменений','Ухудшили'],
   datasets:[{data:[D.improved,D.same,D.worsened],backgroundColor:[GREEN,GREY,BAD],borderWidth:0}]},
   options:opt({cutout:'60%',plugins:{legend:{display:true,position:'bottom'},
-    subtitle:{display:true,position:'top',text:`${D.replays.length} переигравших`,color:'#9aa7c7',padding:4}}})});
+    subtitle:{display:true,position:'top',text:`${D.replays.length} переигравших`,color:'#6b7280',padding:4}}})});
 new Chart(replayBars,{type:'bar',data:{labels:D.replays.map(r=>'#'+r.uid),
   datasets:[{label:'Первая',data:D.replays.map(r=>r.first),backgroundColor:GREY,borderRadius:4},
     {label:'Последняя',data:D.replays.map(r=>r.last),backgroundColor:GREEN,borderRadius:4}]},
@@ -415,7 +415,7 @@ document.getElementById('tk-survey').textContent=
   `Что значит: аудитория тепло приняла формат — преобладают позитивные ответы про пользу и готовность к фондам. Распределение по приоритетам и опыту помогает понять, на кого опираться в продукте.`;
 
 // ---- gauges ----
-const centerText=(t,col)=>({id:'ct'+Math.round(D[t.length]||0)+t,afterDraw(ch){
+const centerText=(t,col)=>({id:'ct'+col+t,afterDraw(ch){
   const{ctx,chartArea:{left,right,top,bottom}}=ch;ctx.save();
   ctx.font='700 34px -apple-system,sans-serif';ctx.fillStyle=col;ctx.textAlign='center';ctx.textBaseline='middle';
   ctx.fillText(t,(left+right)/2,(top+bottom)/2);ctx.restore();}});
@@ -488,9 +488,9 @@ document.getElementById('foot').innerHTML=
   const rows=D.leaderboard||[];
   if(!rows.length){document.getElementById('leaderboard').innerHTML='<div class="cap">Пока нет игроков.</div>';return;}
   let h='<table><tr><th>#</th><th>Игрок</th><th class="num">Лучший счёт</th><th class="num">Ratio</th><th>Вклад</th><th class="num">Игр</th></tr>';
-  rows.forEach(r=>{h+=`<tr><td>${r.rank}</td><td>${r.name||'—'}<span style="display:block;color:#9aa1ac;font-size:11px">${r.email||''}</span></td>`+
+  rows.forEach(r=>{h+=`<tr><td>${r.rank}</td><td>${r.name||'—'}<span style="display:block;color:#6b7280;font-size:11px">${r.email||''}</span></td>`+
     `<td class="num">${fmt(r.best_score)} ₽</td><td class="num">${r.ratio}%</td>`+
-    `<td>${r.beat_bank?'<span class="pos">да</span>':'<span class="neg">нет</span>'}</td><td class="num">${r.plays}</td></tr>`;});
+    `<td>${r.beat_bank?'<span style="color:#2B5BD7;font-weight:700">да</span>':'<span style="color:#FF0032;font-weight:700">нет</span>'}</td><td class="num">${r.plays}</td></tr>`;});
   document.getElementById('leaderboard').innerHTML=h+'</table>';
 })();
 

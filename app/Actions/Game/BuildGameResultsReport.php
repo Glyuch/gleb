@@ -132,16 +132,17 @@ class BuildGameResultsReport
     {
         $today = Carbon::today();
         $start = $today->copy()->subDays($days - 1);
+        $end = $today->copy()->endOfDay();
 
         $completed = GameResult::query()
-            ->where('created_at', '>=', $start)
+            ->whereBetween('created_at', [$start, $end])
             ->get(['created_at'])
             ->groupBy(fn ($r) => $r->created_at->format('Y-m-d'))
             ->map->count();
 
         $started = GameEvent::query()
             ->where('event', 'start')
-            ->where('created_at', '>=', $start)
+            ->whereBetween('created_at', [$start, $end])
             ->get(['created_at'])
             ->groupBy(fn ($e) => $e->created_at->format('Y-m-d'))
             ->map->count();
