@@ -43,19 +43,19 @@ A DCA portfolio quest. **Blade-rendered.**
 
 ### 3. Game admin (`/admin/game`)
 Behind `auth` + `admin`. **Blade.**
-- **URLs:** `/admin/game` (content), `/admin/game/survey`, `/admin/game/returns` (per-quarter returns-matrix editor), `/admin/game/stats` (results — *being retired, see §4 🚧*).
-- **Controllers:** `app/Http/Controllers/Admin/Game{Content,Survey,Returns,Stats}Controller.php`.
-- **Views:** `resources/views/admin/game/{content,survey,returns,stats,layout}.blade.php`.
+- **URLs:** `/admin/game` (content), `/admin/game/survey`, `/admin/game/returns` (per-quarter returns-matrix editor). `/admin/game/stats` now **redirects** to `/admin/dashboards/gameresults` (results moved to §4).
+- **Controllers:** `app/Http/Controllers/Admin/Game{Content,Survey,Returns}Controller.php`.
+- **Views:** `resources/views/admin/game/{content,survey,returns,layout}.blade.php`.
 
 ### 4. Reports & dashboards
-- **Static demo (untouched):** `public/reports/gamedemoresults.html` + `public/reports/gamedemoresults/` — ~25 Chart.js graphs with data hardcoded in `const D` (a snapshot). Anonymous aggregates; this is the *design target*.
-- **Current live stats:** `/admin/game/stats` → `Admin/GameStatsController` → `resources/views/admin/game/stats.blade.php`.
-- 🚧 **Active work — live dashboard rebuild.** Spec: `docs/specs/2026-06-22-game-dashboard-live-design.md`. Target once it lands:
-  - URLs move to `/admin/dashboards/gameresults` and `/admin/dashboards/site`; `/admin/game/stats` → redirect.
-  - Scenario math extracted from `GameController` into **`App\Support\Game\Scenario`** (`simulate` / `benchmarks` / `optimumPerQuarter` / `bestByQuarterReturn`).
-  - Report builders **`App\Actions\Game\BuildGameResultsReport`** (live game `D` object) and **`App\Actions\Admin\BuildSiteReport`** (site KPIs: users/verified/admin, registrations/day, active `sessions`, per-project cards).
-  - New controllers `Admin\GameResultsDashboardController`, `Admin\SiteDashboardController`; views `resources/views/admin/dashboards/{gameresults,site}.blade.php`; shared shell `resources/views/admin/layout.blade.php`.
-  - **When this ships: fold the 🚧 items into §3–§4 as current and delete this note** (per the keep-it-current rule).
+Behind `auth` + `admin`. **Blade.** Live and data-driven (rebuilt from the static demo).
+- **URLs:** `/admin/dashboards/gameresults` (game analytics) and `/admin/dashboards/site` (site KPIs). `/admin` → redirect to `/admin/dashboards/site`; `/admin/game/stats` → redirect to `/admin/dashboards/gameresults`.
+- **Controllers:** `Admin\GameResultsDashboardController`, `Admin\SiteDashboardController`.
+- **Report builders:** `App\Actions\Game\BuildGameResultsReport` (live game `D` object; **scopes results and events to the active scenario version** — `game_content_id`) and `App\Actions\Admin\BuildSiteReport` (site KPIs: users/verified/admin, registrations/day, active `sessions`, per-project cards).
+- **Scenario math:** `App\Support\Game\Scenario` (`simulate` / `benchmarks` / `optimumPerQuarter` / `bestByQuarterReturn`), extracted from `GameController`.
+- **Views:** `resources/views/admin/dashboards/{gameresults,site}.blade.php`; shared shell `resources/views/admin/layout.blade.php`. Chart.js is loaded from CDN with SRI; user-supplied strings are escaped client-side.
+- **Static demo (design reference, untouched):** `public/reports/gamedemoresults.html` (+ identical `public/reports/gamedemoresults/index.html`) — ~25 Chart.js graphs with data hardcoded in `const D`. The original design target the live dashboard was built from; committed so Forge deploys keep it.
+- **Spec:** `docs/specs/2026-06-22-game-dashboard-live-design.md`.
 
 ### 5. Auth & settings (Fortify)
 - **URLs:** standard Fortify auth; `/settings/profile`, `/settings/security`, `/settings/appearance`.
