@@ -35,6 +35,6 @@ it('serves both dashboards to admins', function () {
 
 it('redirects the old stats path and /admin root', function () {
     $admin = admin();
-    $this->actingAs($admin)->get('/admin')->assertRedirect('/admin/dashboards/gameresults');
+    $this->actingAs($admin)->get('/admin')->assertRedirect('/admin/dashboards/site');
     $this->actingAs($admin)->get('/admin/game/stats')->assertRedirect('/admin/dashboards/gameresults');
 });

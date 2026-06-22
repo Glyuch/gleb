@@ -26,7 +26,7 @@ Route::middleware(['auth'])->group(function () {
 });
 
 Route::middleware(['auth', 'admin'])->prefix('admin')->name('admin.')->group(function () {
-    Route::redirect('/', '/admin/dashboards/gameresults');
+    Route::redirect('/', '/admin/dashboards/site');
 
     Route::prefix('dashboards')->name('dashboards.')->group(function () {
         Route::get('/gameresults', [GameResultsDashboardController::class, 'index'])->name('gameresults');
