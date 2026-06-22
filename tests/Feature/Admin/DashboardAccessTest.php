@@ -54,6 +54,9 @@ it('escapes player identity in the rendered dashboard (no stored XSS)', function
 
     // The leaderboard is built with innerHTML, so the client must escape name/email.
     expect($html)->toContain('esc(r.name)')->toContain('esc(r.email)');
+    // The conditions table also injects admin-controlled scenario strings (instrument
+    // labels, quarter titles) into innerHTML — those must be escaped too.
+    expect($html)->toContain('esc(LAB[k])')->toContain('esc(c.title');
     // The raw executable tag must never appear unescaped in the served document:
     // @json hex-encodes it inside D, and esc() encodes it again when the row is built.
     expect($html)->not->toContain('<script>alert(1)</script>');

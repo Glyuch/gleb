@@ -8,9 +8,9 @@
 <style>
 .gr{--card:#fff;--ink:#1a1c20;--muted:#6b7280;--line:#e9ebef;--accent:#FF0032;--accent2:#2B5BD7;--warn:#f59e0b;--bad:#ef4444;color:#1a1c20;font:15px/1.55 -apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif}
 
-
+  
   *{box-sizing:border-box}
-
+  
   .wrap{max-width:1180px;margin:0 auto;padding:32px 20px 90px;}
   header h1{margin:0 0 6px;font-size:30px;letter-spacing:-.02em}
   header h1 .r{color:var(--accent)}
@@ -117,7 +117,7 @@
   <div class="cap">Когда облигации шли в ралли — толпа в них заходила.</div>
   <div class="chartbox"><canvas id="chaseBond"></canvas></div></div>
 <div class="card" style="margin-top:18px"><h3>Структура выбора по кварталам (100%)</h3>
-  <div class="cap">Полная картина: как смещался выбор от Q1 к Q12.</div>
+  <div class="cap">Полная картина: как смещался выбор от Q1 к Q{{ count($report['quarters']) }}.</div>
   <div class="chartbox tall"><canvas id="byQuarter"></canvas></div></div>
 <div class="takeaway" id="tk-choice"></div>
 
@@ -295,16 +295,16 @@ document.getElementById('tk-result').textContent=
 // ---- conditions table ----
 (function(){
   let h='<table class="qtbl"><tr><th>Квартал</th><th>Событие</th><th class="num">Ставка</th><th class="num">Инфл.</th>';
-  D.instr.forEach(k=>h+=`<th class="num">${LAB[k]}</th>`);
+  D.instr.forEach(k=>h+=`<th class="num">${esc(LAB[k])}</th>`);
   h+='<th>Топ-выбор</th><th>Оптимум*</th></tr>';
   D.qcards.forEach(c=>{
-    h+=`<tr><td><b>Q${c.q}</b></td><td><span class="tag ev-${c.type}">${c.type==='up'?'рост':c.type==='down'?'спад':'нейтр.'}</span> ${c.title.split('. ').slice(1).join('. ')||c.title}</td>`;
+    h+=`<tr><td><b>Q${c.q}</b></td><td><span class="tag ev-${c.type}">${c.type==='up'?'рост':c.type==='down'?'спад':'нейтр.'}</span> ${esc(c.title.split('. ').slice(1).join('. ')||c.title)}</td>`;
     h+=`<td class="num">${c.rate}%</td><td class="num">${c.infl}%</td>`;
     D.instr.forEach(k=>{const v=c.ret[k];const cls=v>0?'pos':v<0?'neg':'';
       const best=k===c.cur?'style="font-weight:700;text-decoration:underline"':'';
       h+=`<td class="num ${cls}" ${best}>${v>0?'+':''}${v}%</td>`;});
-    h+=`<td><span class="chip" style="background:${COL[c.top]}">${LAB[c.top]}</span></td>`;
-    h+=`<td><span class="chip" style="background:${COL[c.fwd]}">${LAB[c.fwd]}</span></td></tr>`;
+    h+=`<td><span class="chip" style="background:${COL[c.top]}">${esc(LAB[c.top])}</span></td>`;
+    h+=`<td><span class="chip" style="background:${COL[c.fwd]}">${esc(LAB[c.fwd])}</span></td></tr>`;
   });
   h+='</table><div class="cap" style="margin-top:8px">* Оптимум — инструмент, максимизирующий итог по правилам игры (доход взноса набегает в следующих кварталах). Подчёркнут — лучший по доходности самого квартала.</div>';
   document.getElementById('qtable').innerHTML=h;
