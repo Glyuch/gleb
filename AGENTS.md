@@ -212,3 +212,17 @@ Use Wayfinder to generate TypeScript functions for Laravel routes. Import from `
 - IMPORTANT: Activate `inertia-react-development` when working with Inertia React client-side patterns.
 
 </laravel-boost-guidelines>
+
+<project-map>
+## Project orientation (gleb.finance)
+
+This repo hosts several independent projects in one Laravel app (the game, the
+site, admin dashboards, …). BEFORE exploring the codebase, read
+`docs/PROJECT_MAP.md` — it maps each sub-project to its routes, controllers,
+models, DB tables, frontend files, and specs, so you don't re-discover the repo
+from scratch each session.
+
+Keep it current: when you add/rename/move a project or its routes, models, or
+tables, update `docs/PROJECT_MAP.md` in the same commit. Regenerate raw facts
+with `bash docs/project-map-facts.sh`.
+</project-map>
