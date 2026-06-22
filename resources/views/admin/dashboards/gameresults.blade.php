@@ -74,7 +74,7 @@
   <div class="takeaway" id="tk-funnel"></div></div>
 
 <h2>Результат игры</h2>
-<div class="note">По 33 уникальным игрокам — последняя попытка каждого. Бенчмарки одинаковы для всех: вклад = 443 521 ₽, идеал = 487 970 ₽.</div>
+<div class="note">По {{ $report['N'] }} уникальным игрокам — последняя попытка каждого. Бенчмарки одинаковы для всех: вклад = {{ number_format($report['BANK'], 0, '', ' ') }} ₽, идеал = {{ number_format($report['MAXB'], 0, '', ' ') }} ₽.</div>
 <div class="grid g2">
   <div class="card"><h3>Распределение итогового портфеля</h3>
     <div class="cap">Пунктир: среднее (синий), медиана (фиолет), порог «вклада» (серый).</div>
@@ -84,7 +84,7 @@
     <div class="chartbox"><canvas id="ratioHist"></canvas></div></div>
 </div>
 <div class="grid g2" style="margin-top:18px">
-  <div class="card"><h3>Обыграли ли вклад?</h3><div class="cap">score_you &gt; 443 521 ₽</div>
+  <div class="card"><h3>Обыграли ли вклад?</h3><div class="cap">score_you &gt; {{ number_format($report['BANK'], 0, '', ' ') }} ₽</div>
     <div class="chartbox"><canvas id="beat"></canvas></div></div>
   <div class="card"><h3>Игроки против бенчмарков</h3>
     <div class="cap">Средний портфель vs «всё на вкладе» vs идеал. Ось от нуля.</div>
@@ -93,18 +93,18 @@
 <div class="takeaway" id="tk-result"></div>
 
 <h2>Рыночные условия по кварталам</h2>
-<div class="note">Сценарий id=7: ставка ЦБ, инфляция и фактическая доходность каждого инструмента за квартал. Зелёным — лучший по доходности инструмент квартала.</div>
+<div class="note">Сценарий №{{ $report['scenario_id'] ?? '—' }}: ставка ЦБ, инфляция и фактическая доходность каждого инструмента за квартал. Зелёным — лучший по доходности инструмент квартала.</div>
 <div class="card" style="overflow-x:auto"><div id="qtable"></div></div>
 <div class="card" style="margin-top:18px"><h3>Доходность инструментов по кварталам (%)</h3>
-  <div class="cap">Видно, как менялись «фавориты»: акции волатильны (взлёты и крахи), облигации выстрелили в Год 3.</div>
+  <div class="cap">Видно, как менялись «фавориты»: акции волатильны (взлёты и крахи), облигации ускорялись на снижении ставки.</div>
   <div class="chartbox tall"><canvas id="retLines"></canvas></div></div>
 <div class="takeaway" id="tk-cond"></div>
 
 <h2>Как условия влияли на выбор</h2>
-<div class="note">Все ходы по 33 последним попыткам (396 решений). Сопоставляем поведение игроков с тем, что происходило на рынке.</div>
+<div class="note">Все ходы по {{ $report['N'] }} последним попыткам ({{ $report['total_moves'] }} решений). Сопоставляем поведение игроков с тем, что происходило на рынке.</div>
 <div class="grid g2">
   <div class="card"><h3>Суммарный выбор по инструментам</h3>
-    <div class="cap">Сколько раз выбран каждый инструмент за все 12 кварталов.</div>
+    <div class="cap">Сколько раз выбран каждый инструмент за все {{ count($report['quarters']) }} кварталов.</div>
     <div class="chartbox"><canvas id="instrTotal"></canvas></div></div>
   <div class="card"><h3>«Надёжно» vs «Фонды» по кварталам</h3>
     <div class="cap">Надёжно = вклад+ден.рынок. Фонды = облигации+акции+смешанный.</div>
@@ -114,7 +114,7 @@
   <div class="cap">Гонятся ли за акциями после роста и бегут ли после краха? Столбики — доходность акций, линия — доля выбравших акции.</div>
   <div class="chartbox"><canvas id="chaseStock"></canvas></div></div>
 <div class="card" style="margin-top:18px"><h3>Доля облигаций в выборе vs доходность облигаций</h3>
-  <div class="cap">Год 3 — ралли облигаций; толпа в него заходила.</div>
+  <div class="cap">Когда облигации шли в ралли — толпа в них заходила.</div>
   <div class="chartbox"><canvas id="chaseBond"></canvas></div></div>
 <div class="card" style="margin-top:18px"><h3>Структура выбора по кварталам (100%)</h3>
   <div class="cap">Полная картина: как смещался выбор от Q1 к Q12.</div>
@@ -135,7 +135,7 @@
     <div class="cap">Чем больше акций — тем хуже итог.</div>
     <div class="chartbox"><canvas id="bucketStock"></canvas></div></div>
   <div class="card"><h3>Поведенческие паттерны</h3>
-    <div class="cap">Сводка стиля по 33 игрокам.</div>
+    <div class="cap">Сводка стиля по {{ $report['N'] }} игрокам.</div>
     <div id="patterns" style="padding-top:4px"></div></div>
 </div>
 <div class="takeaway" id="tk-style"></div>
@@ -150,7 +150,7 @@
 <div class="takeaway" id="tk-replay"></div>
 
 <h2>Опрос</h2>
-<div class="note">% от 33 уникальных игроков (последняя попытка). Доли — от числа ответивших на вопрос.</div>
+<div class="note">% от {{ $report['N'] }} уникальных игроков (последняя попытка). Доли — от числа ответивших на вопрос.</div>
 <div class="grid g2" id="surveyGrid"></div>
 <div class="takeaway" id="tk-survey"></div>
 
@@ -198,19 +198,33 @@ Chart.defaults.borderColor='#e9ebef';
 const fmt=n=>Math.round(n).toLocaleString('ru-RU');
 const GREEN='#22c55e',BLUE='#0ea5e9',WARN='#f59e0b',BAD='#ef4444',GREY='#64748b',PURP='#a855f7';
 const LAB=D.instr_label,COL=D.instr_color;
-const pctOf=(n,d)=>Math.round(n/d*100);
+const pctOf=(n,d)=>d>0?Math.round(n/d*100):0;
 // Escape user-/admin-supplied strings before they go into innerHTML (player names, emails, survey questions).
 const ESCMAP={'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'};
 const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>ESCMAP[c]);
+// Empty current-version scenario: show a clear notice instead of a wall of zeros / fabricated narrative.
+const EMPTY=!D.N;
+if(EMPTY){
+  const b=document.createElement('div');
+  b.className='tldr';b.style.borderLeftColor='#f59e0b';
+  b.innerHTML='<h3>Пока нет завершённых игр в текущем сценарии</h3><p style="margin:0;color:#4b5563">Графики наполнятся после первых результатов. Воронка и активность ниже отражают текущие события.</p>';
+  const ph=document.querySelector('.gr .page-head');if(ph)ph.after(b);
+}
+// Narrative figures derived from data (so they stay correct when the scenario changes).
+const _sr=D.ret_q&&D.ret_q.stock?D.ret_q.stock:[],_br=D.ret_q&&D.ret_q.bond?D.ret_q.bond:[];
+const worstStockQ=_sr.length?_sr.indexOf(Math.min(..._sr))+1:0,worstStockV=_sr.length?Math.min(..._sr):0;
+const stockMaxV=_sr.length?Math.max(..._sr):0,bondMaxV=_br.length?Math.max(..._br):0;
+const safePeak=Math.round(Math.max(0,...(D.safe_q&&D.safe_q.length?D.safe_q:[0])));
+const bondPeak=Math.round(Math.max(0,...(D.bond_share_q&&D.bond_share_q.length?D.bond_share_q:[0])));
 
 
 
 // ---- TL;DR ----
-document.getElementById('tldr').innerHTML=`<h3>Коротко о главном</h3><ul>
+if(!EMPTY) document.getElementById('tldr').innerHTML=`<h3>Коротко о главном</h3><ul>
 <li><b>${D.N} человек</b> довели игру до конца; <b>${pctOf(D.beat_bank,D.N)}%</b> (${D.beat_bank}/${D.N}) обыграли вклад, средний ratio <b>${D.ratio_mean}%</b> от идеала.</li>
-<li><b>Вклад почти никто не держал</b>: депозит — самый редкий выбор (${D.total_choice.bank} из 396 ходов), в среднем <b>${D.pat.avg_fund}%</b> портфеля игроки держали в фондах.</li>
+<li><b>Вклад почти никто не держал</b>: депозит — самый редкий выбор (${D.total_choice.bank} из ${D.total_moves} ходов), в среднем <b>${D.pat.avg_fund}%</b> портфеля игроки держали в фондах.</li>
 <li><b>Гонка за акциями каралась</b>: связь доли акций с результатом — <b>${D.cors.stock}</b>; кто избегал акций, набирал ratio <b>${D.stock_buckets[0][2]}%</b> против <b>${D.stock_buckets[2][2]}%</b> у стоковых.</li>
-<li><b>Толпа реагировала на рынок</b>: после краха акций в Q6 их доля упала почти до нуля, а в Год 3 игроки массово ушли в облигации — туда же, куда указывал оптимум.</li>
+<li><b>Толпа реагировала на рынок</b>: в худшем для акций квартале (Q${worstStockQ}) их доля в выборе падала, а на ралли облигаций игроки массово уходили в них — туда же, куда указывал оптимум.</li>
 <li><b>Эффект обучения сильный</b>: <b>${pctOf(D.helped_pos,D.helped_ans)}%</b> сказали, что игра помогла понять инвестиции, и <b>${pctOf(D.ready_pos,D.ready_ans)}%</b> стали готовее рассматривать фонды.</li>
 </ul>`;
 
@@ -304,12 +318,12 @@ new Chart(retLines,{type:'line',data:{labels:D.quarters,
     tooltip:{callbacks:{label:c=>`${c.dataset.label}: ${c.raw>0?'+':''}${c.raw}%`}}},
     scales:{y:{grid:{color:'#e9ebef'},ticks:{callback:v=>v+'%'}},x:{grid:{display:false}}}})});
 document.getElementById('tk-cond').textContent=
-  `Что значит: акции (красная) — самый «качельный» инструмент: рывки до +18% и обвалы до −11%. Облигации (зелёная) выстрелили в Год 3 на снижении ставки (+10% за квартал). Вклад и денежный рынок шли ровно. Именно эта структура определила, что выгодная долгосрочная ставка была на облигации, а не на хайповые акции.`;
+  `Что значит: акции (красная) — самый «качельный» инструмент: рывки до +${stockMaxV}% и обвалы до ${worstStockV}%. Облигации (зелёная) на снижении ставки доходили до +${bondMaxV}% за квартал. Вклад и денежный рынок шли ровно. Именно эта структура определила, что выгодная долгосрочная ставка была на облигации, а не на хайповые акции.`;
 
 // ---- instr total ----
 new Chart(instrTotal,{type:'bar',data:{labels:D.instr.map(k=>LAB[k]),
   datasets:[{data:D.instr.map(k=>D.total_choice[k]),backgroundColor:D.instr.map(k=>COL[k]),borderRadius:7}]},
-  options:opt({plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>`${c.raw} выборов (${pctOf(c.raw,396)}%)`}}},
+  options:opt({plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>`${c.raw} выборов (${pctOf(c.raw,D.total_moves)}%)`}}},
     scales:{y:{beginAtZero:true,grid:{color:'#e9ebef'}},x:{grid:{display:false}}}})});
 
 // ---- safe vs fund ----
@@ -352,7 +366,7 @@ new Chart(byQuarter,{type:'bar',data:{labels:D.quarters,
     scales:{x:{stacked:true,grid:{display:false}},
       y:{stacked:true,max:100,grid:{color:'#e9ebef'},ticks:{callback:v=>v+'%'}}}})});
 document.getElementById('tk-choice').textContent=
-  `Что значит: выбор не был случайным. После краха акций в Q6 (−11%) их доля в Q7 упала до 0% — классическое бегство в защиту (надёжное достигло 61%). А в Год 3, когда облигации пошли в ралли, доля облигаций выросла до ${Math.max(...D.bond_share_q)}% — игроки уловили тренд. Депозит (серый) почти не использовали ни в одном квартале.`;
+  `Что значит: выбор не был случайным. В худшем для акций квартале (Q${worstStockQ}, ${worstStockV}%) их доля в выборе резко падала — классическое бегство в защиту (надёжное достигало ${safePeak}%). Когда облигации шли в ралли, их доля в выборе доходила до ${bondPeak}% — игроки улавливали тренд. Депозит (серый) почти не использовали ни в одном квартале.`;
 
 // ---- scatter helper ----
 function scatter(canvas,xs,ys,color,xlabel){
@@ -364,7 +378,7 @@ function scatter(canvas,xs,ys,color,xlabel){
         y:{grid:{color:'#e9ebef'},title:{display:true,text:'ratio, %'}}}})});
 }
 scatter(scStock,D.players.map(p=>Math.round(p.stock*100)),D.players.map(p=>p.ratio),'rgba(239,68,68,.8)','доля акций, %');
-scatter(scFwd,D.players.map(p=>p.fwdbest),D.players.map(p=>p.ratio),'rgba(34,197,94,.8)','совпадений с оптимумом (из 12)');
+scatter(scFwd,D.players.map(p=>p.fwdbest),D.players.map(p=>p.ratio),'rgba(34,197,94,.8)',`совпадений с оптимумом (из ${D.quarters.length})`);
 document.getElementById('cap-stock').textContent=`Корреляция: ${D.cors.stock} (чем больше акций — тем ниже ratio).`;
 document.getElementById('cap-fwd').textContent=`Корреляция: ${D.cors.fwdbest} (попадание в оптимум поднимает ratio).`;
 
@@ -376,14 +390,14 @@ new Chart(bucketStock,{type:'bar',data:{labels:D.stock_buckets.map(b=>`${b[0]} (
 
 // ---- patterns ----
 document.getElementById('patterns').innerHTML=`<table>
-<tr><td>Средн. число переключений за 12 кв.</td><td class="num"><b>${D.pat.avg_switches}</b></td></tr>
-<tr><td>Средн. число разных инструментов</td><td class="num"><b>${D.pat.avg_distinct}</b> из 5</td></tr>
+<tr><td>Средн. число переключений за ${D.quarters.length} кв.</td><td class="num"><b>${D.pat.avg_switches}</b></td></tr>
+<tr><td>Средн. число разных инструментов</td><td class="num"><b>${D.pat.avg_distinct}</b> из ${D.instr.length}</td></tr>
 <tr><td>Доля в фондах (среднее)</td><td class="num"><b>${D.pat.avg_fund}%</b></td></tr>
 <tr><td>«Всегда только вклад/защита»</td><td class="num"><b>${D.pat.always_bank}</b></td></tr>
 <tr><td>«Всё в акции»</td><td class="num"><b>${D.pat.all_stock}</b></td></tr>
-<tr><td>Совпадений с оптимумом (среднее)</td><td class="num"><b>${D.pat.avg_fwdbest}</b> из 12</td></tr></table>`;
+<tr><td>Совпадений с оптимумом (среднее)</td><td class="num"><b>${D.pat.avg_fwdbest}</b> из ${D.quarters.length}</td></tr></table>`;
 document.getElementById('tk-style').textContent=
-  `Что значит: побеждала умеренность. Игроки активно управляли (≈${D.pat.avg_switches} переключений, ${D.pat.avg_distinct} инструмента), но крайностей избегали — ни одного «всё в акции» или «только вклад». Лучшие результаты — у тех, кто меньше брал акции и чаще попадал в оптимум (облигации). Перебор с акциями и частые метания результат снижали.`;
+  `Что значит: побеждала умеренность. Игроки активно управляли (≈${D.pat.avg_switches} переключений, ${D.pat.avg_distinct} инструмента), а крайностей было мало (${D.pat.all_stock} «всё в акции», ${D.pat.always_bank} «только защита»). Лучшие результаты — у тех, кто меньше брал акции и чаще попадал в оптимум. Перебор с акциями и частые метания результат снижали.`;
 
 // ---- replays ----
 new Chart(replayPie,{type:'doughnut',data:{labels:['Улучшили','Без изменений','Ухудшили'],
@@ -462,7 +476,7 @@ grouped('crossRes','crossResTbl',[{name:'Планируют вложить',map:
 })();
 
 // ---- conclusions ----
-document.getElementById('conclusions').innerHTML=`<h3>Что сработало и что показывают данные</h3><ul>
+if(!EMPTY) document.getElementById('conclusions').innerHTML=`<h3>Что сработало и что показывают данные</h3><ul>
 <li><b>Игра доносит главный месседж.</b> ${pctOf(D.beat_bank,D.N)}% обыграли вклад, средний портфель выше депозита — игроки на себе почувствовали, что фонды на длинном горизонте обгоняют вклад. ${pctOf(D.helped_pos,D.helped_ans)}% подтвердили, что стало понятнее.</li>
 <li><b>Поведение реалистичное и поучительное.</b> Игроки гнались за доходностью и обжигались на акциях (связь доли акций с ratio ${D.cors.stock}), бежали в защиту после краха и заходили в облигации на ралли. Это ровно те ошибки и реакции, которые важно показать новичку.</li>
 <li><b>Победила диверсификация, а не хайп.</b> Лучшие ratio — у умеренных (смешанный фонд и облигации), а не у любителей акций. Стоит усилить этот вывод в финале игры: «скучное» часто выигрывает.</li>
@@ -472,7 +486,7 @@ document.getElementById('conclusions').innerHTML=`<h3>Что сработало 
 </ul>`;
 
 document.getElementById('foot').innerHTML=
-  `Источник: gleb.finance · game_results / game_events / game_contents (сценарий id=7) · опрос в game_results.survey_answers.<br>`+
+  `Источник: gleb.finance · game_results / game_events / game_contents (сценарий №${D.scenario_id??'—'}) · опрос в game_results.survey_answers.<br>`+
   `Дедупликация: последняя попытка каждого игрока (${D.N} из ${D.total_results} игр). Доходности и условия — учебные (из сценария). Только чтение БД; код и репозиторий не затрагивались.`;
 
 // ---- daily activity (freshness) ----

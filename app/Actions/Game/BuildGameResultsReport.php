@@ -7,6 +7,7 @@ use App\Models\GameEvent;
 use App\Models\GameResult;
 use App\Models\User;
 use App\Support\Game\Scenario;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 
@@ -27,12 +28,16 @@ class BuildGameResultsReport
 
     private const FUND = ['bond', 'stock', 'mix'];
 
+    /** Active scenario version the dashboard is scoped to (null when none is published). */
+    private ?int $contentId = null;
+
     /**
      * @return array<string, mixed>
      */
     public function __invoke(): array
     {
         $content = GameContent::current();
+        $this->contentId = $content?->id;
         $scenario = new Scenario($content?->data ?? ['years' => [], 'choices' => [], 'survey' => []]);
         $data = $content?->data ?? [];
         $instr = $scenario->instruments();
@@ -40,7 +45,9 @@ class BuildGameResultsReport
         $optimum = $scenario->optimumPerQuarter();
         $bench = $scenario->benchmarks();
 
-        $allResults = GameResult::query()->with('user:id,name,email')->get();
+        // Only the active scenario version. Historical plays were scored against their own
+        // benchmarks/optimum/survey; mixing them with a re-edited scenario would misrate them.
+        $allResults = $this->scopeToVersion(GameResult::query())->with('user:id,name,email')->get();
         $last = $allResults->groupBy('user_id')
             ->map(fn (Collection $g) => $g->sortByDesc('id')->first())
             ->values();
@@ -50,6 +57,7 @@ class BuildGameResultsReport
         $scores = $rows->pluck('score')->all();
         $ratios = $rows->pluck('ratio')->all();
         $byq = $this->byQuarter($last, $instr, $n);
+        $totalChoice = $this->totalChoice($last, $instr);
         [$replays, $improved, $worsened, $same] = $this->replays($allResults);
         $survey = $data['survey'] ?? [];
 
@@ -65,6 +73,7 @@ class BuildGameResultsReport
         return [
             'generated_at' => Carbon::now()->format('d.m.Y'),
             'generated_full' => Carbon::now()->format('d.m.Y, H:i'),
+            'scenario_id' => $content?->id,
             'daily' => $this->daily(30),
             'N' => $N,
             'total_results' => $allResults->count(),
@@ -82,7 +91,8 @@ class BuildGameResultsReport
             'instr' => $instr,
             'instr_label' => $scenario->labels(),
             'instr_color' => collect($instr)->mapWithKeys(fn ($k) => [$k => self::INSTR_COLOR[$k] ?? '#64748b'])->all(),
-            'total_choice' => $this->totalChoice($last, $instr),
+            'total_choice' => $totalChoice,
+            'total_moves' => array_sum($totalChoice),
             'byq_pct' => $byq,
             'safe_q' => $this->sumShares($byq, self::SAFE, $n),
             'fund_q' => $this->sumShares($byq, self::FUND, $n),
@@ -117,9 +127,30 @@ class BuildGameResultsReport
         ];
     }
 
+    /**
+     * Restrict a game_results / game_events query to the active scenario version, so the
+     * whole dashboard reflects one version. With no version published it yields nothing
+     * (an impossible predicate) rather than leaking legacy rows.
+     *
+     * Rows with a NULL game_content_id are legacy plays from before that column existed;
+     * they were all played under the current scenario, so they count as the active version.
+     * The 2026_06_23 backfill migration tags them permanently, after which the NULL branch
+     * is a no-op.
+     */
+    private function scopeToVersion(Builder $query): Builder
+    {
+        if ($this->contentId === null) {
+            return $query->whereRaw('1 = 0');
+        }
+
+        return $query->where(function (Builder $q) {
+            $q->where('game_content_id', $this->contentId)->orWhereNull('game_content_id');
+        });
+    }
+
     private function uniqueUsers(string $event): int
     {
-        return GameEvent::query()->where('event', $event)->distinct()->count('user_id');
+        return $this->scopeToVersion(GameEvent::query()->where('event', $event))->distinct()->count('user_id');
     }
 
     /**
@@ -134,14 +165,13 @@ class BuildGameResultsReport
         $start = $today->copy()->subDays($days - 1);
         $end = $today->copy()->endOfDay();
 
-        $completed = GameResult::query()
+        $completed = $this->scopeToVersion(GameResult::query())
             ->whereBetween('created_at', [$start, $end])
             ->get(['created_at'])
             ->groupBy(fn ($r) => $r->created_at->format('Y-m-d'))
             ->map->count();
 
-        $started = GameEvent::query()
-            ->where('event', 'start')
+        $started = $this->scopeToVersion(GameEvent::query()->where('event', 'start'))
             ->whereBetween('created_at', [$start, $end])
             ->get(['created_at'])
             ->groupBy(fn ($e) => $e->created_at->format('Y-m-d'))
