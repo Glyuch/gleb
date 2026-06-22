@@ -21,6 +21,9 @@ class Scenario
 
     public static function current(): self
     {
+        // current() genuinely returns null when no scenario is published yet (empty state),
+        // so the nullsafe ?-> is required despite phpstan flagging it.
+        // @phpstan-ignore nullsafe.neverNull
         return new self(GameContent::current()?->data ?? ['years' => [], 'choices' => []]);
     }
 
@@ -31,7 +34,10 @@ class Scenario
      */
     public function instruments(): array
     {
-        $keys = collect($this->data['choices'] ?? [])
+        /** @var array<int, array<string, mixed>> $choices */
+        $choices = $this->data['choices'] ?? [];
+
+        $keys = collect($choices)
             ->pluck('k')->filter()->unique()->values()->all();
 
         return $keys ?: self::CANONICAL;
@@ -44,7 +50,10 @@ class Scenario
      */
     public function labels(): array
     {
-        return collect($this->data['choices'] ?? [])
+        /** @var array<int, array<string, mixed>> $choices */
+        $choices = $this->data['choices'] ?? [];
+
+        return collect($choices)
             ->filter(fn ($c) => isset($c['k']))
             ->mapWithKeys(fn ($c) => [$c['k'] => $c['t'] ?? $c['k']])
             ->all();

@@ -9,7 +9,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * @property int $id
  * @property int|null $user_id
  * @property string $event
- * @property array|null $payload
+ * @property array<string, mixed>|null $payload
  */
 class GameEvent extends Model
 {
@@ -24,6 +24,9 @@ class GameEvent extends Model
         ];
     }
 
+    /**
+     * @return BelongsTo<User, $this>
+     */
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);

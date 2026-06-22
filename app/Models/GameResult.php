@@ -12,9 +12,9 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * @property int $score_bank
  * @property int $score_max
  * @property int $ratio
- * @property array|null $choices
- * @property array|null $survey_answers
- * @property array|null $composition
+ * @property array<int, mixed>|null $choices
+ * @property array<string, mixed>|null $survey_answers
+ * @property array<string, mixed>|null $composition
  * @property string $promo_code
  */
 class GameResult extends Model
@@ -41,6 +41,9 @@ class GameResult extends Model
         ];
     }
 
+    /**
+     * @return BelongsTo<User, $this>
+     */
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);

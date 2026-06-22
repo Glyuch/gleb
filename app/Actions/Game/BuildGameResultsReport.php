@@ -38,7 +38,11 @@ class BuildGameResultsReport
     {
         $content = GameContent::current();
         $this->contentId = $content?->id;
+        // current() genuinely returns null when no scenario is published yet (empty state),
+        // so the nullsafe ?-> is required despite phpstan flagging the two lines below.
+        // @phpstan-ignore nullsafe.neverNull
         $scenario = new Scenario($content?->data ?? ['years' => [], 'choices' => [], 'survey' => []]);
+        // @phpstan-ignore nullsafe.neverNull
         $data = $content?->data ?? [];
         $instr = $scenario->instruments();
         $n = max($scenario->quarterCount(), 1);
@@ -47,7 +51,11 @@ class BuildGameResultsReport
 
         // Only the active scenario version. Historical plays were scored against their own
         // benchmarks/optimum/survey; mixing them with a re-edited scenario would misrate them.
+        // Loading all current-version rows into memory is acceptable at current scale (tens of
+        // rows); if results grow large this should move to SQL aggregation or a cached payload.
         $allResults = $this->scopeToVersion(GameResult::query())->with('user:id,name,email')->get();
+        // Each user_id group is non-empty, so first() is always a GameResult here.
+        /** @var Collection<int, GameResult> $last */
         $last = $allResults->groupBy('user_id')
             ->map(fn (Collection $g) => $g->sortByDesc('id')->first())
             ->values();
@@ -136,6 +144,11 @@ class BuildGameResultsReport
      * they were all played under the current scenario, so they count as the active version.
      * The 2026_06_23 backfill migration tags them permanently, after which the NULL branch
      * is a no-op.
+     *
+     * @template TModel of \Illuminate\Database\Eloquent\Model
+     *
+     * @param  Builder<TModel>  $query
+     * @return Builder<TModel>
      */
     private function scopeToVersion(Builder $query): Builder
     {
@@ -216,12 +229,17 @@ class BuildGameResultsReport
     /**
      * One enriched row per unique player (last attempt).
      *
+     * @param  Collection<int, GameResult>  $last
+     * @param  array<int, string>  $optimum
      * @return Collection<int, array<string, mixed>>
      */
     private function playerRows(Collection $last, array $optimum, int $bank): Collection
     {
-        return $last->map(function ($r) use ($optimum, $bank) {
-            $choices = collect($r->choices ?? [])->sortBy('quarter')->values();
+        /** @var Collection<int, array<string, mixed>> $rows */
+        $rows = $last->map(function (GameResult $r) use ($optimum, $bank): array {
+            /** @var array<int, array<string, mixed>> $rawChoices */
+            $rawChoices = $r->choices ?? [];
+            $choices = collect($rawChoices)->sortBy('quarter')->values();
             $keys = $choices->pluck('k')->filter()->values()->all();
             $count = max(count($keys), 1);
             $fund = count(array_filter($keys, fn ($k) => in_array($k, self::FUND, true)));
@@ -255,9 +273,13 @@ class BuildGameResultsReport
                 'survey' => (array) ($r->survey_answers ?? []),
             ];
         });
+
+        return $rows;
     }
 
     /**
+     * @param  Collection<int, GameResult>  $last
+     * @param  array<int, string>  $instr
      * @return array<string, int>
      */
     private function totalChoice(Collection $last, array $instr): array
@@ -278,6 +300,8 @@ class BuildGameResultsReport
     /**
      * Per-quarter percent share of each instrument among that quarter's choices.
      *
+     * @param  Collection<int, GameResult>  $last
+     * @param  array<int, string>  $instr
      * @return array<string, array<int, float>>
      */
     private function byQuarter(Collection $last, array $instr, int $n): array
@@ -310,6 +334,7 @@ class BuildGameResultsReport
 
     /**
      * @param  array<string, array<int, float>>  $byq
+     * @param  array<int, string>  $keys
      * @return array<int, float>
      */
     private function sumShares(array $byq, array $keys, int $n): array
@@ -340,6 +365,8 @@ class BuildGameResultsReport
     }
 
     /**
+     * @param  array<string, array<int, float>>  $byq
+     * @param  array<int, string>  $optimum
      * @return array<int, array<string, mixed>>
      */
     private function qcards(Scenario $s, array $byq, array $optimum, int $n): array
@@ -382,6 +409,7 @@ class BuildGameResultsReport
     }
 
     /**
+     * @param  Collection<int, array<string, mixed>>  $rows
      * @return array<string, mixed>
      */
     private function patterns(Collection $rows): array
@@ -402,6 +430,7 @@ class BuildGameResultsReport
     }
 
     /**
+     * @param  Collection<int, array<string, mixed>>  $rows
      * @return array<string, float>
      */
     private function correlations(Collection $rows): array
@@ -417,6 +446,7 @@ class BuildGameResultsReport
     }
 
     /**
+     * @param  Collection<int, array<string, mixed>>  $rows
      * @return array<int, array{0:string,1:int,2:float}>
      */
     private function stockBuckets(Collection $rows): array
@@ -436,6 +466,7 @@ class BuildGameResultsReport
     }
 
     /**
+     * @param  Collection<int, GameResult>  $allResults
      * @return array{0:array<int,array<string,mixed>>,1:int,2:int,3:int}
      */
     private function replays(Collection $allResults): array
@@ -447,8 +478,14 @@ class BuildGameResultsReport
                 continue;
             }
             $sorted = $g->sortBy('id')->values();
-            $first = (int) $sorted->first()->score_you;
-            $lastScore = (int) $sorted->last()->score_you;
+            // Group has >= 2 rows, so first()/last() are non-null GameResult instances.
+            $firstRow = $sorted->first();
+            $lastRow = $sorted->last();
+            if ($firstRow === null || $lastRow === null) {
+                continue;
+            }
+            $first = (int) $firstRow->score_you;
+            $lastScore = (int) $lastRow->score_you;
             $rows[] = ['uid' => (int) $uid, 'n' => $g->count(), 'first' => $first, 'last' => $lastScore];
             $lastScore > $first ? $improved++ : ($lastScore < $first ? $worsened++ : $same++);
         }
@@ -457,6 +494,8 @@ class BuildGameResultsReport
     }
 
     /**
+     * @param  array<int, array<string, mixed>>  $survey
+     * @param  Collection<int, GameResult>  $last
      * @return array<int, array<string, mixed>>
      */
     private function surveyStats(array $survey, Collection $last): array
@@ -478,6 +517,7 @@ class BuildGameResultsReport
 
     /**
      * @param  array<string, int>  $counts
+     * @param  array<int, string>  $positive
      */
     private function positive(array $counts, array $positive): int
     {
@@ -505,6 +545,8 @@ class BuildGameResultsReport
     /**
      * Group rows by a label, returning [label => [positiveCount, total]].
      *
+     * @param  Collection<int, array<string, mixed>>  $rows
+     * @param  array<int, string>  $positive
      * @return array<string, array{0:int,1:int}>
      */
     private function crossGroup(Collection $rows, callable $groupOf, string $answerKey, array $positive): array
@@ -526,13 +568,14 @@ class BuildGameResultsReport
     }
 
     /**
+     * @param  Collection<int, array<string, mixed>>  $rows
      * @return array<int, array<string, mixed>>
      */
     private function priorityRows(Collection $rows): array
     {
         return collect($rows)
             ->filter(fn ($r) => ($r['survey']['priority'] ?? null) !== null)
-            ->groupBy(fn ($r) => $r['survey']['priority'])
+            ->groupBy(fn ($r) => (string) $r['survey']['priority'])
             ->map(fn ($g, $prio) => [
                 'prio' => $prio,
                 'n' => $g->count(),
@@ -543,12 +586,16 @@ class BuildGameResultsReport
     }
 
     /**
+     * @param  Collection<int, GameResult>  $allResults
      * @return array<int, array<string, mixed>>
      */
     private function leaderboard(Collection $allResults, int $bank): array
     {
         return $allResults->groupBy('user_id')
             ->map(function (Collection $g) use ($bank) {
+                /** @var Collection<int, GameResult> $g */
+                // Each group comes from groupBy and is non-empty, so first() is a GameResult.
+                /** @var GameResult $best */
                 $best = $g->sortByDesc('score_you')->first();
 
                 return [

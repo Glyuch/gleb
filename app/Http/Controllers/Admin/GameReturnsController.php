@@ -18,7 +18,9 @@ class GameReturnsController extends Controller
      */
     public function edit(): View
     {
-        $data = GameContent::current()?->data ?? [];
+        // current() genuinely returns null when no scenario is published yet (empty state),
+        // so the nullsafe ?-> is required despite phpstan flagging it.
+        $data = GameContent::current()?->data ?? []; // @phpstan-ignore nullsafe.neverNull
 
         return view('admin.game.returns', [
             'years' => $data['years'] ?? [],

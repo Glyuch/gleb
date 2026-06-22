@@ -7,7 +7,7 @@ use Illuminate\Database\Eloquent\Model;
 
 /**
  * @property int $id
- * @property array $data
+ * @property array<string, mixed> $data
  * @property bool $is_active
  */
 class GameContent extends Model
@@ -22,6 +22,10 @@ class GameContent extends Model
         ];
     }
 
+    /**
+     * @param  Builder<GameContent>  $query
+     * @return Builder<GameContent>
+     */
     public function scopeActive(Builder $query): Builder
     {
         return $query->where('is_active', true)->latest('id');

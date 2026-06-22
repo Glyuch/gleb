@@ -46,8 +46,8 @@ class BuildSiteReport
             'reg_today' => User::where('created_at', '>=', $now->copy()->startOfDay())->count(),
             'reg_7d' => User::where('created_at', '>=', $now->copy()->subDays(7))->count(),
             'reg_30d' => User::where('created_at', '>=', $now->copy()->subDays(30))->count(),
-            'sessions_active' => $this->sessions($now->copy()->subMinutes(15)->timestamp),
-            'sessions_24h' => $this->sessions($now->copy()->subDay()->timestamp),
+            'sessions_active' => $this->sessions((int) $now->copy()->subMinutes(15)->timestamp),
+            'sessions_24h' => $this->sessions((int) $now->copy()->subDay()->timestamp),
             'projects' => [
                 [
                     'key' => 'game',

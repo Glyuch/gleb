@@ -252,7 +252,9 @@ class GameController extends Controller
      */
     private function sanitizeSurvey(array $content, array $answers): array
     {
-        $allowed = collect($content['survey'] ?? [])->mapWithKeys(
+        /** @var array<int, array<string, mixed>> $survey */
+        $survey = $content['survey'] ?? [];
+        $allowed = collect($survey)->mapWithKeys(
             fn ($q) => [$q['id'] => $q['options']]
         );
 
@@ -268,6 +270,8 @@ class GameController extends Controller
 
     /**
      * Best score per user, ordered desc. Collection of {user_id, best}.
+     *
+     * @return Collection<int, GameResult>
      */
     private function bests(): Collection
     {
@@ -292,7 +296,8 @@ class GameController extends Controller
         return $top->map(fn ($row, $i) => [
             'rank' => $i + 1,
             'name' => $names[$row->user_id] ?? '—',
-            'score' => (int) $row->best,
+            // `best` is a raw-selected aggregate alias, not a model column.
+            'score' => (int) $row->getAttribute('best'),
         ])->all();
     }
 

@@ -30,8 +30,12 @@ class GameSurveyController extends Controller
         ]);
 
         $survey = [];
-        foreach ($request->input('questions', []) as $q) {
-            $options = collect($q['options'] ?? [])
+        /** @var array<int, array<string, mixed>> $questions */
+        $questions = $request->input('questions', []);
+        foreach ($questions as $q) {
+            /** @var array<int, mixed> $rawOptions */
+            $rawOptions = $q['options'] ?? [];
+            $options = collect($rawOptions)
                 ->map(fn ($o) => trim((string) $o))
                 ->filter()
                 ->values()

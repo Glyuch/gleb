@@ -16,13 +16,13 @@ class GameContentSeeder extends Seeder
     public function run(): void
     {
         if (GameContent::current() !== null) {
-            $this->command?->info('Game content already present — skipping seed.');
+            $this->command->info('Game content already present — skipping seed.');
 
             return;
         }
 
         GameContent::publish($this->defaultContent());
-        $this->command?->info('Seeded initial game content.');
+        $this->command->info('Seeded initial game content.');
     }
 
     /**
@@ -32,6 +32,9 @@ class GameContentSeeder extends Seeder
     {
         $json = file_get_contents(__DIR__.'/game_content.json');
 
-        return json_decode($json, true);
+        /** @var array<string, mixed> $decoded */
+        $decoded = json_decode($json ?: '{}', true);
+
+        return $decoded;
     }
 }
