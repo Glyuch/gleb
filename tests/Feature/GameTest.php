@@ -65,8 +65,12 @@ function maxClosed(): int
     return (int) round($sum);
 }
 
-it('redirects guests from the game to the branded register page', function () {
-    $this->get('/game')->assertRedirect(route('game.register'));
+it('shows guests a branded landing page with register and login CTAs', function () {
+    $this->get('/game')
+        ->assertOk()
+        ->assertSee('Играть')
+        ->assertSee(route('game.register'))
+        ->assertSee(route('game.login'));
 });
 
 it('shows the game to an authenticated user', function () {
