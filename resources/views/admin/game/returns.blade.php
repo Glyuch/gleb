@@ -1,4 +1,4 @@
-@extends('admin.game.layout')
+@extends('admin.layout')
 
 @php
 $labels = [

@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="csrf-token" content="{{ csrf_token() }}">
-<title>Админка · ФондыКвест</title>
+<title>Админка · gleb.finance</title>
 <style>
 *{box-sizing:border-box}
 body{margin:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;background:#f5f5f7;color:#1a1a1a;line-height:1.5}
@@ -73,16 +73,19 @@ th{font-size:11px;text-transform:uppercase;letter-spacing:.3px;color:#9a9aa2}
 .matrix td.cell.lb-ans{white-space:normal;min-width:96px;font-weight:600;color:#62626a;font-size:12.5px}
 .matrix th.lb-user,.matrix td.rowhead.lb-user{min-width:170px;max-width:230px}
 .lb-email{display:block;font-size:11px;color:#9a9aa2;font-weight:600;margin-top:2px;word-break:break-all}
+.tabs .sep{display:inline-block;width:1px;height:20px;background:#e2e2e8;margin:0 4px;vertical-align:middle}
 </style>
 </head>
 <body>
 <div class="wrap">
-  <h1>ФондыКвест · Админка</h1>
+  <h1>gleb.finance · Админка</h1>
   <nav class="tabs">
+    <a href="{{ route('admin.dashboards.gameresults') }}" class="{{ request()->routeIs('admin.dashboards.gameresults') ? 'active' : '' }}">Игра · результаты</a>
+    <a href="{{ route('admin.dashboards.site') }}" class="{{ request()->routeIs('admin.dashboards.site') ? 'active' : '' }}">Сайт</a>
+    <span class="sep"></span>
     <a href="{{ route('admin.game.content') }}" class="{{ request()->routeIs('admin.game.content') ? 'active' : '' }}">Контент</a>
     <a href="{{ route('admin.game.survey') }}" class="{{ request()->routeIs('admin.game.survey') ? 'active' : '' }}">Опрос</a>
     <a href="{{ route('admin.game.returns') }}" class="{{ request()->routeIs('admin.game.returns') ? 'active' : '' }}">Доходности</a>
-    <a href="{{ route('admin.game.stats') }}" class="{{ request()->routeIs('admin.game.stats') ? 'active' : '' }}">Статистика</a>
     <a href="{{ url('/game') }}" class="right" target="_blank">Открыть игру →</a>
   </nav>
 

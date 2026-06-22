@@ -1,9 +1,10 @@
 <?php
 
 use App\Http\Controllers\Admin\GameContentController;
+use App\Http\Controllers\Admin\GameResultsDashboardController;
 use App\Http\Controllers\Admin\GameReturnsController;
-use App\Http\Controllers\Admin\GameStatsController;
 use App\Http\Controllers\Admin\GameSurveyController;
+use App\Http\Controllers\Admin\SiteDashboardController;
 use App\Http\Controllers\GameController;
 use Illuminate\Support\Facades\Route;
 
@@ -24,14 +25,23 @@ Route::middleware(['auth'])->group(function () {
     Route::post('/game/event', [GameController::class, 'event'])->name('game.event');
 });
 
-Route::middleware(['auth', 'admin'])->prefix('admin/game')->name('admin.game.')->group(function () {
-    Route::get('/', [GameContentController::class, 'edit'])->name('content');
-    Route::put('/', [GameContentController::class, 'update'])->name('content.update');
-    Route::get('/survey', [GameSurveyController::class, 'edit'])->name('survey');
-    Route::put('/survey', [GameSurveyController::class, 'update'])->name('survey.update');
-    Route::get('/returns', [GameReturnsController::class, 'edit'])->name('returns');
-    Route::put('/returns', [GameReturnsController::class, 'update'])->name('returns.update');
-    Route::get('/stats', [GameStatsController::class, 'index'])->name('stats');
+Route::middleware(['auth', 'admin'])->prefix('admin')->name('admin.')->group(function () {
+    Route::redirect('/', '/admin/dashboards/gameresults');
+
+    Route::prefix('dashboards')->name('dashboards.')->group(function () {
+        Route::get('/gameresults', [GameResultsDashboardController::class, 'index'])->name('gameresults');
+        Route::get('/site', [SiteDashboardController::class, 'index'])->name('site');
+    });
+
+    Route::prefix('game')->name('game.')->group(function () {
+        Route::get('/', [GameContentController::class, 'edit'])->name('content');
+        Route::put('/', [GameContentController::class, 'update'])->name('content.update');
+        Route::get('/survey', [GameSurveyController::class, 'edit'])->name('survey');
+        Route::put('/survey', [GameSurveyController::class, 'update'])->name('survey.update');
+        Route::get('/returns', [GameReturnsController::class, 'edit'])->name('returns');
+        Route::put('/returns', [GameReturnsController::class, 'update'])->name('returns.update');
+        Route::redirect('/stats', '/admin/dashboards/gameresults');
+    });
 });
 
 require __DIR__.'/settings.php';

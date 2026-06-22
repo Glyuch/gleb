@@ -1,4 +1,4 @@
-@extends('admin.game.layout')
+@extends('admin.layout')
 
 @section('content')
   <p class="hint">Вопросы финального опроса и варианты ответов. Минимум 2 варианта на вопрос. Изменения применяются ко всем новым прохождениям.</p>
