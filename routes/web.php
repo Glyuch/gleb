@@ -6,6 +6,7 @@ use App\Http\Controllers\Admin\GameReturnsController;
 use App\Http\Controllers\Admin\GameSurveyController;
 use App\Http\Controllers\Admin\SiteDashboardController;
 use App\Http\Controllers\GameController;
+use App\Http\Controllers\NutritionBotController;
 use Illuminate\Support\Facades\Route;
 
 Route::inertia('/', 'welcome')->name('home');
@@ -43,5 +44,8 @@ Route::middleware(['auth', 'admin'])->prefix('admin')->name('admin.')->group(fun
         Route::redirect('/stats', '/admin/dashboards/gameresults');
     });
 });
+
+Route::post('/nutrition-bot/webhook', [NutritionBotController::class, 'webhook'])
+    ->name('nutrition.webhook');
 
 require __DIR__.'/settings.php';
