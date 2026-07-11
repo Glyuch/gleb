@@ -42,6 +42,13 @@ class HandleCallback
             return;
         }
 
+        // Повторный/устаревший callback: не затираем eaten_at/фото/фидбек.
+        if ($meal->status !== 'pending') {
+            $tg->send('Этот приём уже отмечен 👌🏻');
+
+            return;
+        }
+
         Planner::markEaten($meal, CarbonImmutable::now('Europe/Moscow'), null, null);
         $tg->send(MealPlan::LABELS[$type].' отмечен ✅');
     }
@@ -51,6 +58,13 @@ class HandleCallback
         $meal = $this->meal($type);
         if ($meal === null) {
             $tg->send('Не нашёл такой приём на сегодня 🤔');
+
+            return;
+        }
+
+        // Устаревший callback по уже отмеченному приёму — БД не трогаем.
+        if ($meal->status !== 'pending') {
+            $tg->send('Этот приём уже отмечен 👌🏻');
 
             return;
         }

@@ -4,6 +4,7 @@ namespace App\Actions\Nutrition;
 
 use App\Models\NutritionMeal;
 use App\Models\NutritionMetric;
+use App\Support\Nutrition\Fmt;
 use App\Support\Nutrition\MealPlan;
 use App\Support\Nutrition\Planner;
 use App\Support\Nutrition\Settings;
@@ -119,11 +120,11 @@ class HandleCommand
             $lines[] = '— нет данных';
         } else {
             foreach ($weights as $w) {
-                $lines[] = '— '.$w->date->format('d.m').' → '.$this->num((float) $w->value).' кг';
+                $lines[] = '— '.$w->date->format('d.m').' → '.Fmt::num((float) $w->value).' кг';
             }
             $delta = (float) $weights->last()->value - (float) $weights->first()->value;
             $sign = $delta > 0 ? '+' : '';
-            $lines[] = 'Динамика: '.$sign.$this->num($delta).' кг';
+            $lines[] = 'Динамика: '.$sign.Fmt::num($delta).' кг';
         }
 
         $lines[] = '';
@@ -146,7 +147,7 @@ class HandleCommand
             ->get();
         $lines[] = $water->isEmpty()
             ? '— нет данных'
-            : 'Среднее: '.$this->num((float) $water->avg('value')).' л';
+            : 'Среднее: '.Fmt::num((float) $water->avg('value')).' л';
 
         $tg->send(implode("\n", $lines));
     }
@@ -162,6 +163,13 @@ class HandleCommand
         }
 
         $value = (float) $raw;
+
+        if (! $this->inRange($type, $value)) {
+            $tg->send($this->formatHint($type));
+
+            return;
+        }
+
         $today = CarbonImmutable::now('Europe/Moscow')->format('Y-m-d');
 
         NutritionMetric::query()->updateOrCreate(
@@ -243,13 +251,26 @@ class HandleCommand
         $tg->send(implode("\n", $lines));
     }
 
+    /**
+     * Диапазоны значений — те же, что в HandleNumbers: вес 40–150, шаги 0–100000, вода 0–10.
+     */
+    private function inRange(string $type, float $value): bool
+    {
+        return match ($type) {
+            'weight' => $value >= 40 && $value <= 150,
+            'steps' => $value >= 0 && $value <= 100000,
+            'water' => $value > 0 && $value <= 10,
+            default => true,
+        };
+    }
+
     private function metricConfirm(string $type, float $value): string
     {
         return match ($type) {
-            'weight' => 'вес '.$this->num($value).' кг',
+            'weight' => 'вес '.Fmt::num($value).' кг',
             'steps' => 'шаги '.(int) round($value),
-            'water' => 'вода '.$this->num($value).' л',
-            default => $this->num($value),
+            'water' => 'вода '.Fmt::num($value).' л',
+            default => Fmt::num($value),
         };
     }
 
@@ -261,10 +282,5 @@ class HandleCommand
             'water' => 'Не понял число. Формат: /water 2.5',
             default => 'Не понял число.',
         };
-    }
-
-    private function num(float $value): string
-    {
-        return rtrim(rtrim(number_format($value, 1, '.', ''), '0'), '.');
     }
 }

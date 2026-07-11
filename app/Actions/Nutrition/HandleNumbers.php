@@ -4,6 +4,7 @@ namespace App\Actions\Nutrition;
 
 use App\Models\NutritionMessage;
 use App\Models\NutritionMetric;
+use App\Support\Nutrition\Fmt;
 use App\Support\Nutrition\TelegramClient;
 use Carbon\CarbonImmutable;
 
@@ -43,7 +44,7 @@ class HandleNumbers
                 ['value' => $weight],
             );
 
-            $tg->send('Записал: вес '.$this->num($weight).' кг 👌🏻');
+            $tg->send('Записал: вес '.Fmt::num($weight).' кг 👌🏻');
 
             return;
         }
@@ -70,7 +71,7 @@ class HandleNumbers
                         ['date' => $today, 'type' => 'water'],
                         ['value' => $water],
                     );
-                    $reply .= ', вода '.$this->num($water).' л';
+                    $reply .= ', вода '.Fmt::num($water).' л';
                 }
             }
 
@@ -80,10 +81,5 @@ class HandleNumbers
         }
 
         app(HandleQuestion::class)->handle($update);
-    }
-
-    private function num(float $value): string
-    {
-        return rtrim(rtrim(number_format($value, 1, '.', ''), '0'), '.');
     }
 }

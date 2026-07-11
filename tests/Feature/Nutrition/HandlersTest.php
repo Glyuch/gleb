@@ -8,6 +8,7 @@ use App\Actions\Nutrition\HandleQuestion;
 use App\Models\NutritionMeal;
 use App\Models\NutritionMessage;
 use App\Models\NutritionMetric;
+use App\Support\Nutrition\Planner;
 use App\Support\Nutrition\Settings;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\Http;
@@ -58,6 +59,20 @@ it('hints the format for an invalid /weight', function () {
 
     expect(NutritionMetric::query()->where('type', 'weight')->count())->toBe(0);
     expect(lastOutText())->toContain('/weight');
+});
+
+it('rejects an out-of-range /weight and writes no metric', function () {
+    app(HandleCommand::class)->handle(['message' => ['text' => '/weight 823']]);
+
+    expect(NutritionMetric::query()->where('type', 'weight')->count())->toBe(0);
+    expect(lastOutText())->toContain('/weight');
+});
+
+it('rejects out-of-range /steps and writes no metric', function () {
+    app(HandleCommand::class)->handle(['message' => ['text' => '/steps 999999']]);
+
+    expect(NutritionMetric::query()->where('type', 'steps')->count())->toBe(0);
+    expect(lastOutText())->toContain('/steps');
 });
 
 it('lists the day with the lunch label on /today', function () {
@@ -162,6 +177,49 @@ it('skips a meal from a skip callback', function () {
     ]]);
 
     expect(NutritionMeal::query()->where('type', 'lunch')->value('status'))->toBe('skipped');
+});
+
+it('does not overwrite an already eaten meal on a repeated ate callback', function () {
+    $this->travelTo(CarbonImmutable::create(2026, 7, 13, 11, 30, 0, 'Europe/Moscow'));
+    Planner::ensureDay(CarbonImmutable::now('Europe/Moscow'));
+
+    NutritionMeal::query()->where('type', 'lunch')->first()->update([
+        'status' => 'eaten',
+        'eaten_at' => '2026-07-13 11:10:00',
+        'photo_file_id' => 'orig-photo',
+        'ai_feedback' => 'Отличный обед!',
+    ]);
+
+    app(HandleCallback::class)->handle(['callback_query' => [
+        'id' => 'cb5',
+        'data' => 'ate:lunch',
+    ]]);
+
+    $lunch = NutritionMeal::query()->where('type', 'lunch')->first();
+    expect($lunch->status)->toBe('eaten')
+        ->and($lunch->eaten_at->format('H:i'))->toBe('11:10')
+        ->and($lunch->photo_file_id)->toBe('orig-photo')
+        ->and($lunch->ai_feedback)->toBe('Отличный обед!');
+    expect(lastOutText())->toContain('уже отмечен');
+    Http::assertSent(fn ($request) => str_contains($request->url(), '/answerCallbackQuery'));
+});
+
+it('does not skip an already eaten meal on a stale skip callback', function () {
+    $this->travelTo(CarbonImmutable::create(2026, 7, 13, 11, 30, 0, 'Europe/Moscow'));
+    Planner::ensureDay(CarbonImmutable::now('Europe/Moscow'));
+
+    NutritionMeal::query()->where('type', 'lunch')->first()->update([
+        'status' => 'eaten',
+        'eaten_at' => '2026-07-13 11:10:00',
+    ]);
+
+    app(HandleCallback::class)->handle(['callback_query' => [
+        'id' => 'cb6',
+        'data' => 'skip:lunch',
+    ]]);
+
+    expect(NutritionMeal::query()->where('type', 'lunch')->value('status'))->toBe('eaten');
+    expect(lastOutText())->toContain('уже отмечен');
 });
 
 it('applies pending adjustments on adj:yes and clears them', function () {
