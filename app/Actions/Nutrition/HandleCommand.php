@@ -4,6 +4,7 @@ namespace App\Actions\Nutrition;
 
 use App\Models\NutritionMeal;
 use App\Models\NutritionMetric;
+use App\Models\NutritionSetting;
 use App\Support\Nutrition\Fmt;
 use App\Support\Nutrition\MealPlan;
 use App\Support\Nutrition\Planner;
@@ -22,6 +23,9 @@ class HandleCommand
 
     public function handle(array $update): void
     {
+        // Любая команда выводит из режима ожидания значения настройки.
+        NutritionSetting::query()->where('key', 'awaiting_setting')->delete();
+
         $tg = app(TelegramClient::class);
 
         $text = trim((string) ($update['message']['text'] ?? ''));
@@ -30,7 +34,8 @@ class HandleCommand
         $arg = trim($parts[1] ?? '');
 
         match ($command) {
-            '/start', '/help' => $this->help($tg),
+            '/start' => $this->start($tg),
+            '/help' => $this->help($tg),
             '/today' => $this->today($tg),
             '/stats' => $this->stats($tg),
             '/weight' => $this->metric($tg, 'weight', $arg),
@@ -41,6 +46,45 @@ class HandleCommand
             '/settings' => $this->settings($tg),
             default => $tg->send('Не знаю такой команды. /help — список команд.'),
         };
+    }
+
+    private function start(TelegramClient $tg): void
+    {
+        $lines = [
+            'Привет! Я твой нутрициолог 🙌🏼',
+            '',
+            'Как мы работаем:',
+            '• 2–4 приёма пищи по окнам — присылай фото каждого, дам обратную связь.',
+            '• Вес — по четвергам и воскресеньям утром (командой /weight или просто числом).',
+            '• Шаги и воду — вечером (/steps, /water или скрин шагомера).',
+            '• Вопросы по питанию — задавай в любой момент, просто напиши текстом.',
+            '• Материалы программы буду присылать по расписанию.',
+            '',
+        ];
+
+        $startedOn = Settings::get('program_started_on');
+        $keyboard = null;
+
+        if ($startedOn === null) {
+            $lines[] = '📍 Программа ещё не запущена.';
+            $keyboard = [[['text' => '🚀 Начать программу 10 недель', 'callback_data' => 'program:start']]];
+        } elseif (Settings::get('phase') === 'maintenance') {
+            $lines[] = '📍 Режим поддержки.';
+        } else {
+            $lines[] = '📍 Идёт день '.$this->programDay().' программы.';
+        }
+
+        $lines[] = '';
+        $lines[] = '<b>Команды</b>';
+        $lines[] = '/today — план и статусы приёмов';
+        $lines[] = '/stats — вес, шаги, вода';
+        $lines[] = '/checkup — недельный чек-ап';
+        $lines[] = '/weight, /steps, /water — записать показатели';
+        $lines[] = '/skip — пропустить ближайший приём';
+        $lines[] = '/settings — режим дня и цели';
+        $lines[] = '/help — справка';
+
+        $tg->send(implode("\n", $lines), $keyboard);
     }
 
     private function help(TelegramClient $tg): void
@@ -233,6 +277,7 @@ class HandleCommand
         $portion = (int) Settings::get('portion_adjustment');
         $portionStr = ($portion > 0 ? '+' : '').$portion.'%';
         $phase = Settings::get('phase') === 'program' ? 'Программа TriDaily' : 'Поддержка';
+        $day = Settings::get('program_started_on') === null ? '—' : (string) $this->programDay();
 
         $lines = [
             '<b>Настройки</b>',
@@ -240,11 +285,34 @@ class HandleCommand
             'Отбой: '.Settings::get('sleep_time'),
             'Окна: '.implode(', ', $windowStrings),
             'Цель шагов: '.Settings::get('steps_target'),
-            'Фаза: '.$phase,
             'Поправка порций: '.$portionStr,
+            'Фаза: '.$phase,
+            'День программы: '.$day,
         ];
 
-        $tg->send(implode("\n", $lines));
+        $keyboard = [
+            [['text' => '⏰ Подъём', 'callback_data' => 'set:wake_time']],
+            [['text' => '🌙 Отбой', 'callback_data' => 'set:sleep_time']],
+            [['text' => '👣 Цель шагов', 'callback_data' => 'set:steps_target']],
+        ];
+
+        $tg->send(implode("\n", $lines), $keyboard);
+    }
+
+    /**
+     * Номер текущего дня программы (день старта = 1). 0, если программа не запущена.
+     */
+    private function programDay(): int
+    {
+        $startedOn = Settings::get('program_started_on');
+        if ($startedOn === null) {
+            return 0;
+        }
+
+        $start = CarbonImmutable::parse((string) $startedOn, 'Europe/Moscow')->startOfDay();
+        $today = CarbonImmutable::now('Europe/Moscow')->startOfDay();
+
+        return (int) $start->diffInDays($today) + 1;
     }
 
     /**

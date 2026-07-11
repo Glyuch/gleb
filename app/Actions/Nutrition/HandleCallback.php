@@ -25,6 +25,8 @@ class HandleCallback
             'ate' => $this->ate($tg, $arg),
             'skip' => $this->skip($tg, $arg),
             'adj' => $this->adjust($tg, $arg),
+            'program' => $this->programStart($tg),
+            'set' => $this->setSetting($tg, $arg),
             default => $tg->send('Не понял действие 🤔'),
         };
 
@@ -96,12 +98,74 @@ class HandleCallback
     }
 
     /**
+     * Запуск программы по кнопке онбординга. Идемпотентно: если уже идёт —
+     * сообщаем текущий день и ничего не меняем.
+     */
+    private function programStart(TelegramClient $tg): void
+    {
+        if (Settings::get('program_started_on') !== null) {
+            $tg->send('Программа уже идёт (день '.$this->programDay().') 👌🏻');
+
+            return;
+        }
+
+        app(StartProgram::class)->handle();
+
+        $lines = [
+            'Отлично, старт зафиксирован! 🚀',
+            '',
+            'Первым делом пришли свой стартовый вес — просто числом в кг (например 82.3). По желанию добавь замеры (талия, бёдра).',
+            '',
+            'Завтра начнём первый полный день по программе: приёмы пищи по окнам, я буду напоминать. Погнали! 💪🏼',
+        ];
+
+        // kind=weight_request — следующее число распознается как стартовый вес.
+        $tg->send(implode("\n", $lines), null, 'weight_request');
+    }
+
+    /**
+     * Кнопка настройки: запоминаем ожидаемый ключ и просим значение.
+     * Обрабатываем только три ключа; прочее игнорируем (answerCallback всё равно сработает).
+     */
+    private function setSetting(TelegramClient $tg, string $key): void
+    {
+        $prompts = [
+            'wake_time' => 'Пришли время подъёма в формате ЧЧ:ММ, например 07:00',
+            'sleep_time' => 'Пришли время отбоя в формате ЧЧ:ММ, например 23:00',
+            'steps_target' => 'Пришли число шагов в день (3000–30000)',
+        ];
+
+        if (! isset($prompts[$key])) {
+            return;
+        }
+
+        Settings::set('awaiting_setting', $key);
+        $tg->send($prompts[$key], null, 'setting_request');
+    }
+
+    /**
      * Очищает pending_adjustments. Столбец value NOT NULL, поэтому «пусто»
      * выражается отсутствием строки — тогда Settings::get вернёт дефолт null.
      */
     private function clearPending(): void
     {
         NutritionSetting::query()->where('key', 'pending_adjustments')->delete();
+    }
+
+    /**
+     * Номер текущего дня программы (день старта = 1). 0, если программа не запущена.
+     */
+    private function programDay(): int
+    {
+        $startedOn = Settings::get('program_started_on');
+        if ($startedOn === null) {
+            return 0;
+        }
+
+        $start = CarbonImmutable::parse((string) $startedOn, 'Europe/Moscow')->startOfDay();
+        $today = CarbonImmutable::now('Europe/Moscow')->startOfDay();
+
+        return (int) $start->diffInDays($today) + 1;
     }
 
     private function meal(string $type): ?NutritionMeal

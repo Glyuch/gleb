@@ -5,6 +5,7 @@ namespace App\Actions\Nutrition;
 use App\Models\NutritionMessage;
 use App\Models\NutritionMetric;
 use App\Support\Nutrition\Fmt;
+use App\Support\Nutrition\SettingInput;
 use App\Support\Nutrition\TelegramClient;
 use Carbon\CarbonImmutable;
 
@@ -12,6 +13,11 @@ class HandleNumbers
 {
     public function handle(array $update): void
     {
+        // Ожидание значения настройки перехватываем ДО контекстов weight/metrics.
+        if (SettingInput::intercept($update)) {
+            return;
+        }
+
         $tg = app(TelegramClient::class);
         $text = (string) ($update['message']['text'] ?? '');
 
