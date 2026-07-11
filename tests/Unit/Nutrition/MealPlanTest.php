@@ -44,13 +44,14 @@ it('shifts next meal to eaten_at + 3..4h', function () {
         ->and($w['lunch']['end']->format('H:i'))->toBe('12:20');
 });
 
-it('cascades late lunch into snack and dinner', function () {
+it('recalculates snack after late lunch, dinner stays default', function () {
     $facts = pendingAll();
     $facts['breakfast'] = ['status' => 'eaten', 'eaten_at' => mskDate()->setTime(8, 0)];
     $facts['lunch'] = ['status' => 'eaten', 'eaten_at' => mskDate()->setTime(13, 30)];
     $w = MealPlan::windows(mskDate(), defaults(), $facts, '23:00');
+    // полдник — первый pending после факта: 16:30–17:30; ужин остаётся дефолтным
     expect($w['snack']['start']->format('H:i'))->toBe('16:30')
-        ->and($w['dinner']['start']->format('H:i'))->toBe('19:30');
+        ->and($w['dinner']['start']->format('H:i'))->toBe('19:00');
 });
 
 it('recalculates from window end when a meal is skipped', function () {
@@ -82,4 +83,43 @@ it('moves dinner start back when chain pushes it past sleep-2h', function () {
     $w = MealPlan::windows(mskDate(), defaults(), $facts, '23:00');
     expect($w['dinner']['start']->format('H:i'))->toBe('20:00')
         ->and($w['dinner']['end']->format('H:i'))->toBe('21:00');
+});
+
+it('keeps default windows for pendings after the first recalculated one', function () {
+    $facts = pendingAll();
+    $facts['breakfast'] = ['status' => 'eaten', 'eaten_at' => mskDate()->setTime(8, 20)];
+    // пересчитывается только обед (первый pending после факта); полдник и ужин — дефолт
+    $w = MealPlan::windows(mskDate(), defaults(), $facts, '23:00');
+    expect($w['lunch']['start']->format('H:i'))->toBe('11:20')
+        ->and($w['lunch']['end']->format('H:i'))->toBe('12:20')
+        ->and($w['snack']['start']->format('H:i'))->toBe('14:40')
+        ->and($w['snack']['end']->format('H:i'))->toBe('16:10')
+        ->and($w['dinner']['start']->format('H:i'))->toBe('19:00')
+        ->and($w['dinner']['end']->format('H:i'))->toBe('20:00');
+});
+
+it('does not drag chain through pendings after a very late breakfast', function () {
+    $facts = pendingAll();
+    $facts['breakfast'] = ['status' => 'eaten', 'eaten_at' => mskDate()->setTime(16, 0)];
+    // обед 19:00–20:00 (пересчитан); полдник и ужин остаются дефолтными —
+    // окно полдника в прошлом допустимо, tick пометит missed и пересчитает
+    $w = MealPlan::windows(mskDate(), defaults(), $facts, '23:00');
+    expect($w['lunch']['start']->format('H:i'))->toBe('19:00')
+        ->and($w['lunch']['end']->format('H:i'))->toBe('20:00')
+        ->and($w['snack']['start']->format('H:i'))->toBe('14:40')
+        ->and($w['snack']['end']->format('H:i'))->toBe('16:10')
+        ->and($w['dinner']['start']->format('H:i'))->toBe('19:00')
+        ->and($w['dinner']['end']->format('H:i'))->toBe('20:00');
+});
+
+it('recalculates only first pending after skipped meal, rest stay default', function () {
+    $facts = pendingAll();
+    $facts['breakfast'] = ['status' => 'eaten', 'eaten_at' => mskDate()->setTime(8, 0)];
+    $facts['lunch'] = ['status' => 'skipped', 'eaten_at' => null];
+    // обед skipped (окно 11:00–12:00) → полдник 15:00–16:00; ужин — дефолт
+    $w = MealPlan::windows(mskDate(), defaults(), $facts, '23:00');
+    expect($w['snack']['start']->format('H:i'))->toBe('15:00')
+        ->and($w['snack']['end']->format('H:i'))->toBe('16:00')
+        ->and($w['dinner']['start']->format('H:i'))->toBe('19:00')
+        ->and($w['dinner']['end']->format('H:i'))->toBe('20:00');
 });

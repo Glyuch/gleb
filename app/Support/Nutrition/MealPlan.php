@@ -71,9 +71,11 @@ class MealPlan
                 continue;
             }
 
-            // pending
+            // pending: пересчитанное окно получает только первый pending после последнего
+            // факта; дальше цепочка не распространяется — последующие приёмы на дефолте
             $result[$type] = $window;
-            $anchor = $window['start'];
+            $chainBroken = false;
+            $anchor = null;
         }
 
         return $result;
