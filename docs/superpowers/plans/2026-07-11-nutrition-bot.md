@@ -537,7 +537,9 @@ it('marks overdue meals missed and shifts the rest', function () {
 - [ ] **Step 2:** FAIL → **Step 3:** реализация → **Step 4:** PASS.
 - [ ] **Step 5:** pint, commit `feat(nutrition): telegram client`.
 
----### Task 5: База знаний и Claude-клиент
+---
+
+### Task 5: База знаний и Claude-клиент
 
 **Files:**
 - Create: `resources/nutrition/knowledge/01-program.md`, `02-forbidden.md`, `03-style.md`, `04-profile.md` — **содержимое пишет координатор** (выжимка из PDF «Глеб питание», анализов и чата; субагент создаёт файлы-заглушки только если координатор не передал текст — тогда пометить TODO координатору в отчёте задачи).
