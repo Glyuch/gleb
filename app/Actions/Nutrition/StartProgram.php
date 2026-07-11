@@ -1,0 +1,51 @@
+<?php
+
+namespace App\Actions\Nutrition;
+
+use App\Models\NutritionTopic;
+use App\Support\Nutrition\Settings;
+use Carbon\CarbonImmutable;
+
+class StartProgram
+{
+    /** Смещения в днях от старта для позиций тем 1..12 (≈2 темы в неделю). */
+    private const OFFSET_STEP = 5;
+
+    private const FIRST_OFFSET = 3;
+
+    /**
+     * Стартует программу: фиксирует дату старта, переводит в фазу program и
+     * раскладывает scheduled_on тем (позиция 1 → день 3, каждая следующая +5 дней,
+     * позиция 12 → день 58). Идемпотентно: повторный запуск пересчитывает даты.
+     *
+     * @return string человекочитаемое резюме (дата старта, сколько тем запланировано)
+     */
+    public function handle(?CarbonImmutable $date = null): string
+    {
+        $start = ($date ?? CarbonImmutable::now('Europe/Moscow'))->startOfDay();
+
+        Settings::set('program_started_on', $start->format('Y-m-d'));
+        Settings::set('phase', 'program');
+
+        $topics = NutritionTopic::query()->orderBy('position')->get();
+
+        foreach ($topics as $topic) {
+            $offset = self::FIRST_OFFSET + ($topic->position - 1) * self::OFFSET_STEP;
+            $topic->update(['scheduled_on' => $start->addDays($offset)->format('Y-m-d')]);
+        }
+
+        $first = $topics->first();
+        $last = $topics->last();
+
+        $summary = "Программа стартует {$start->format('d.m.Y')}. Запланировано тем: {$topics->count()}.";
+
+        if ($first !== null && $last !== null) {
+            $firstOn = $start->addDays(self::FIRST_OFFSET)->format('d.m.Y');
+            $lastOffset = self::FIRST_OFFSET + ($last->position - 1) * self::OFFSET_STEP;
+            $lastOn = $start->addDays($lastOffset)->format('d.m.Y');
+            $summary .= " Первая тема «{$first->title}» — {$firstOn}, последняя «{$last->title}» — {$lastOn}.";
+        }
+
+        return $summary;
+    }
+}
