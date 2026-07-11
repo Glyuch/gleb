@@ -30,7 +30,11 @@ class RunCheckup
         $now = CarbonImmutable::now('Europe/Moscow');
         $tg = app(TelegramClient::class);
 
-        $prompt = $this->context($now)."\n\n".self::INSTRUCTION;
+        $occasion = $onDemand
+            ? 'Это внеплановый чек-ап по личному запросу Глеба.'
+            : 'Это плановый воскресный чек-ап.';
+
+        $prompt = $occasion."\n".$this->context($now)."\n\n".self::INSTRUCTION;
 
         $raw = Claude::text(
             [['type' => 'text', 'text' => $prompt]],

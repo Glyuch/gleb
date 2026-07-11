@@ -15,6 +15,7 @@ use App\Support\Nutrition\TelegramClient;
 use Carbon\CarbonImmutable;
 use Closure;
 use Illuminate\Console\Command;
+use Illuminate\Support\Facades\DB;
 
 class NutritionTick extends Command
 {
@@ -34,6 +35,25 @@ class NutritionTick extends Command
             ? CarbonImmutable::parse($at, 'Europe/Moscow')
             : CarbonImmutable::now('Europe/Moscow');
 
+        // Dry-run полностью изолирован от БД: любые записи (ensureDay/markMissed/
+        // graduation) откатываются безусловным rollback.
+        if ($this->dryRun) {
+            DB::beginTransaction();
+        }
+
+        try {
+            $this->tick($now);
+        } finally {
+            if ($this->dryRun) {
+                DB::rollBack();
+            }
+        }
+
+        return self::SUCCESS;
+    }
+
+    private function tick(CarbonImmutable $now): void
+    {
         $d = $now->format('Y-m-d');
         $phase = (string) Settings::get('phase');
         $tg = app(TelegramClient::class);
@@ -119,12 +139,11 @@ class NutritionTick extends Command
                 ->get();
 
             foreach ($topics as $topic) {
-                if ($this->dryRun) {
-                    $this->line("[topic] {$topic->title}");
-
-                    continue;
-                }
-                app(SendTopic::class)->handle($topic);
+                $this->fireAction(
+                    "{$d}:topic:{$topic->id}",
+                    "тема «{$topic->title}»",
+                    fn () => app(SendTopic::class)->handle($topic),
+                );
             }
         }
 
@@ -140,8 +159,6 @@ class NutritionTick extends Command
                 });
             }
         }
-
-        return self::SUCCESS;
     }
 
     /**

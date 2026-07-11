@@ -86,6 +86,10 @@ it('sends the lunch followup at 13:05 when lunch is still pending', function () 
 
     expect($followup)->not->toBeNull()
         ->and($followup->content)->toContain('обед');
+
+    // Повторный тик не дублирует followup.
+    $this->artisan('nutrition:tick')->assertExitCode(0);
+    expect(NutritionMessage::query()->where('kind', 'followup')->count())->toBe(1);
 });
 
 it('creates a day summary at 22:35 from the chat model', function () {
