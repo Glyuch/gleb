@@ -45,7 +45,7 @@ class HandleCommand
             '/steps' => $this->metric($tg, 'steps', $arg, $chatId),
             '/water' => $this->metric($tg, 'water', $arg, $chatId),
             '/skip' => $this->skip($tg, $chatId),
-            '/checkup' => $this->checkup($tg),
+            '/checkup' => $this->checkup($tg, $chatId),
             '/settings' => $this->settings($tg, $chatId),
             default => $tg->send('Не знаю такой команды. /help — список команд.', chatId: $chatId),
         };
@@ -262,9 +262,9 @@ class HandleCommand
         $tg->send(implode("\n", $lines), chatId: $chatId);
     }
 
-    private function checkup(TelegramClient $tg): void
+    private function checkup(TelegramClient $tg, ?int $chatId = null): void
     {
-        app(RunCheckup::class)->handle(onDemand: true);
+        app(RunCheckup::class)->handle(onDemand: true, chatId: $chatId);
     }
 
     private function settings(TelegramClient $tg, ?int $chatId = null): void

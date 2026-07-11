@@ -25,7 +25,7 @@ class RunCheckup
      * Запускает недельный чек-ап. При наличии корректировок сохраняет их в pending_adjustments
      * и предлагает кнопки применения.
      */
-    public function handle(bool $onDemand = false): void
+    public function handle(bool $onDemand = false, ?int $chatId = null): void
     {
         $now = CarbonImmutable::now('Europe/Moscow');
         $tg = app(TelegramClient::class);
@@ -43,7 +43,7 @@ class RunCheckup
         );
 
         if ($raw === null) {
-            $tg->send('Не смог сейчас собрать чек-ап, попробуем позже 🙏', null, 'checkup');
+            $tg->send('Не смог сейчас собрать чек-ап, попробуем позже 🙏', null, 'checkup', $chatId);
 
             return;
         }
@@ -52,7 +52,7 @@ class RunCheckup
 
         // Невалидный JSON → отправляем сырой текст без корректировок.
         if (! is_array($data) || ! isset($data['message'])) {
-            $tg->send($raw, null, 'checkup');
+            $tg->send($raw, null, 'checkup', $chatId);
 
             return;
         }
@@ -61,7 +61,7 @@ class RunCheckup
         $adjustments = $this->validAdjustments($data['adjustments'] ?? null);
 
         if ($adjustments === []) {
-            $tg->send($message, null, 'checkup');
+            $tg->send($message, null, 'checkup', $chatId);
 
             return;
         }
@@ -73,7 +73,7 @@ class RunCheckup
             [['text' => 'Не надо', 'callback_data' => 'adj:no']],
         ];
 
-        $tg->send($message, $keyboard, 'checkup');
+        $tg->send($message, $keyboard, 'checkup', $chatId);
     }
 
     /**

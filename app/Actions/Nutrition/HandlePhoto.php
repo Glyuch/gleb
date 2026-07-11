@@ -7,6 +7,7 @@ use App\Models\NutritionMessage;
 use App\Models\NutritionMetric;
 use App\Support\Nutrition\Claude;
 use App\Support\Nutrition\MealPlan;
+use App\Support\Nutrition\PendingRequest;
 use App\Support\Nutrition\Planner;
 use App\Support\Nutrition\Settings;
 use App\Support\Nutrition\TelegramClient;
@@ -47,7 +48,7 @@ class HandlePhoto
             ->where('type', 'steps')
             ->exists();
 
-        if ($lastOutKind === 'metrics_request' && ! $hasSteps) {
+        if (($lastOutKind === 'metrics_request' || PendingRequest::expectsMetrics($now)) && ! $hasSteps) {
             $this->pedometer($tg, $fileId, $now, $chatId);
 
             return;

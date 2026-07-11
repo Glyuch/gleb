@@ -8,6 +8,7 @@ use App\Actions\Nutrition\HandleQuestion;
 use App\Models\NutritionMeal;
 use App\Models\NutritionMessage;
 use App\Models\NutritionMetric;
+use App\Models\NutritionSentEvent;
 use App\Support\Nutrition\Planner;
 use App\Support\Nutrition\Settings;
 use Carbon\CarbonImmutable;
@@ -261,4 +262,65 @@ it('runs a checkup on /checkup', function () {
 
     Http::assertSent(fn ($request) => str_contains($request->url(), 'api.anthropic.com'));
     expect(NutritionMessage::query()->where('kind', 'checkup')->exists())->toBeTrue();
+});
+it('records weight from a bare number when later bot messages clobber the last out kind', function () {
+    // Утренний тик чт/вс шлёт weight_request → greeting → reminder одним прогоном:
+    // lastOutKind уже не weight_request, но sent_event за сегодня существует.
+    $this->travelTo(CarbonImmutable::create(2026, 7, 16, 7, 40, 0, 'Europe/Moscow'));
+
+    NutritionSentEvent::query()->create(['event_key' => '2026-07-16:weight_request', 'sent_at' => now()]);
+    NutritionMessage::query()->create(['direction' => 'out', 'kind' => 'weight_request', 'content' => 'Взвесься']);
+    NutritionMessage::query()->create(['direction' => 'out', 'kind' => 'greeting', 'content' => 'Доброе утро']);
+    NutritionMessage::query()->create(['direction' => 'out', 'kind' => 'reminder', 'content' => 'Завтрак']);
+
+    app(HandleNumbers::class)->handle(['message' => ['text' => '82.3']]);
+
+    $metric = NutritionMetric::query()->where('type', 'weight')->first();
+    expect($metric)->not->toBeNull()
+        ->and((float) $metric->value)->toBe(82.3);
+    Http::assertNotSent(fn ($request) => str_contains($request->url(), 'api.anthropic.com'));
+});
+
+it('routes a number to the question handler when today weight is already recorded', function () {
+    $this->travelTo(CarbonImmutable::create(2026, 7, 16, 9, 0, 0, 'Europe/Moscow'));
+
+    NutritionSentEvent::query()->create(['event_key' => '2026-07-16:weight_request', 'sent_at' => now()]);
+    NutritionMessage::query()->create(['direction' => 'out', 'kind' => 'greeting', 'content' => 'Доброе утро']);
+    NutritionMetric::query()->create(['date' => '2026-07-16', 'type' => 'weight', 'value' => 82.3]);
+
+    app(HandleNumbers::class)->handle(['message' => ['text' => '81.9']]);
+
+    // Записанный утром вес не перезаписан, число ушло как вопрос к ИИ.
+    expect((float) NutritionMetric::query()->where('type', 'weight')->value('value'))->toBe(82.3);
+    Http::assertSent(fn ($request) => str_contains($request->url(), 'api.anthropic.com'));
+});
+
+it('records steps and water after the evening summary clobbers the metrics request', function () {
+    $this->travelTo(CarbonImmutable::create(2026, 7, 16, 22, 40, 0, 'Europe/Moscow'));
+
+    NutritionSentEvent::query()->create(['event_key' => '2026-07-16:metrics_request', 'sent_at' => now()]);
+    NutritionMessage::query()->create(['direction' => 'out', 'kind' => 'metrics_request', 'content' => 'Шаги и вода?']);
+    NutritionMessage::query()->create(['direction' => 'out', 'kind' => 'summary', 'content' => 'Итог дня']);
+
+    app(HandleNumbers::class)->handle(['message' => ['text' => '11500 2']]);
+
+    expect((int) NutritionMetric::query()->where('type', 'steps')->value('value'))->toBe(11500)
+        ->and((float) NutritionMetric::query()->where('type', 'water')->value('value'))->toBe(2.0);
+    Http::assertNotSent(fn ($request) => str_contains($request->url(), 'api.anthropic.com'));
+});
+
+it('reads a pedometer screenshot after the summary clobbers the metrics request', function () {
+    $this->travelTo(CarbonImmutable::create(2026, 7, 16, 22, 45, 0, 'Europe/Moscow'));
+
+    NutritionSentEvent::query()->create(['event_key' => '2026-07-16:metrics_request', 'sent_at' => now()]);
+    NutritionMessage::query()->create(['direction' => 'out', 'kind' => 'summary', 'content' => 'Итог дня']);
+
+    app(HandlePhoto::class)->handle(['message' => [
+        'photo' => [['file_id' => 'small'], ['file_id' => 'big']],
+    ]]);
+
+    $steps = NutritionMetric::query()->where('type', 'steps')->first();
+    expect($steps)->not->toBeNull()
+        ->and((int) $steps->value)->toBe(11200);
+    expect(NutritionMeal::query()->where('status', 'eaten')->count())->toBe(0);
 });

@@ -5,6 +5,7 @@ namespace App\Actions\Nutrition;
 use App\Models\NutritionMessage;
 use App\Models\NutritionMetric;
 use App\Support\Nutrition\Fmt;
+use App\Support\Nutrition\PendingRequest;
 use App\Support\Nutrition\SettingInput;
 use App\Support\Nutrition\TelegramClient;
 use App\Support\Nutrition\Tg;
@@ -14,7 +15,8 @@ class HandleNumbers
 {
     public function handle(array $update): void
     {
-        // Ожидание значения настройки перехватываем ДО контекстов weight/metrics.
+        // Ожидание значения настройки перехватываем ДО контекстов weight/metrics
+        // (со своим setting_request-guard внутри intercept).
         if (SettingInput::intercept($update)) {
             return;
         }
@@ -32,14 +34,18 @@ class HandleNumbers
             return;
         }
 
+        $now = CarbonImmutable::now('Europe/Moscow');
+        $today = $now->format('Y-m-d');
+
+        // lastOutKind — быстрый путь (в т.ч. для program:start-ветки, где
+        // weight_request шлётся колбэком без sent_event); PendingRequest —
+        // устойчивый контекст на случай, когда после запроса ушли ещё сообщения.
         $lastOutKind = NutritionMessage::query()
             ->where('direction', 'out')
             ->orderByDesc('id')
             ->value('kind');
 
-        $today = CarbonImmutable::now('Europe/Moscow')->format('Y-m-d');
-
-        if ($lastOutKind === 'weight_request') {
+        if ($lastOutKind === 'weight_request' || PendingRequest::expectsWeight($now)) {
             $weight = (float) str_replace(',', '.', $numbers[0]);
             if ($weight < 40 || $weight > 150) {
                 $tg->send('Вес вне диапазона. Пришли значение в кг, например 82.3', chatId: $chatId);
@@ -57,7 +63,7 @@ class HandleNumbers
             return;
         }
 
-        if ($lastOutKind === 'metrics_request') {
+        if ($lastOutKind === 'metrics_request' || PendingRequest::expectsMetrics($now)) {
             $steps = (int) round((float) str_replace(',', '.', $numbers[0]));
             if ($steps < 0 || $steps > 100000) {
                 $tg->send('Шаги вне диапазона, проверь число 🙏', chatId: $chatId);

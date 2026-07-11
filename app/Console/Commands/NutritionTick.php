@@ -16,6 +16,7 @@ use Carbon\CarbonImmutable;
 use Closure;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
 class NutritionTick extends Command
 {
@@ -54,6 +55,14 @@ class NutritionTick extends Command
 
     private function tick(CarbonImmutable $now): void
     {
+        // Боевой режим без настроенного chat_id не шлёт и не пишет ничего.
+        // Симуляция (dry-run) работает и без настройки.
+        if (! $this->dryRun && blank(config('nutrition.chat_id'))) {
+            Log::info('nutrition: tick skipped, chat_id not configured');
+
+            return;
+        }
+
         $d = $now->format('Y-m-d');
         $phase = (string) Settings::get('phase');
         $tg = app(TelegramClient::class);

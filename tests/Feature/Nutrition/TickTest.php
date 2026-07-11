@@ -166,3 +166,14 @@ it('falls back to intro text when none of the topic files exist on disk', functi
 
     expect($topic->fresh()->sent_at)->not->toBeNull();
 });
+it('does nothing on a live tick when chat_id is not configured', function () {
+    config(['nutrition.chat_id' => null]);
+    $this->travelTo(CarbonImmutable::create(2026, 7, 16, 7, 35, 0, 'Europe/Moscow'));
+
+    $this->artisan('nutrition:tick')->assertExitCode(0);
+
+    expect(NutritionMeal::query()->count())->toBe(0)
+        ->and(NutritionSentEvent::query()->count())->toBe(0)
+        ->and(NutritionMessage::query()->count())->toBe(0);
+    Http::assertNothingSent();
+});

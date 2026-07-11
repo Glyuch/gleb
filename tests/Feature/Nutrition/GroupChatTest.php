@@ -163,3 +163,18 @@ it('handles a callback from the owner in a group and replies into the group', fu
     });
     Http::assertSent(fn ($request) => str_contains($request->url(), '/answerCallbackQuery'));
 });
+it('replies the checkup into the source group chat on /checkup', function () {
+    (new ProcessNutritionUpdate(['message' => [
+        'from' => ['id' => 777],
+        'chat' => ['id' => -100500, 'type' => 'supergroup'],
+        'message_id' => 9,
+        'text' => '/checkup',
+    ]]))->handle();
+
+    // ИИ в этом фейке отвечает не-JSON текстом → уходит сырой ответ, и именно в группу.
+    Http::assertSent(function ($request) {
+        return str_contains($request->url(), '/sendMessage')
+            && $request['chat_id'] == -100500
+            && str_contains($request['text'], 'Идеально');
+    });
+});

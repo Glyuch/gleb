@@ -15,6 +15,7 @@ it('builds a system prompt with the persona and the knowledge base', function ()
 
 it('includes meal labels and weight metrics in the day context', function () {
     $date = CarbonImmutable::parse('2026-07-13', 'Europe/Moscow');
+    $this->travelTo($date);
 
     Settings::set('phase', 'program');
     Settings::set('program_started_on', '2026-07-01');

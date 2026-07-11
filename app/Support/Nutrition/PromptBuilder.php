@@ -52,13 +52,11 @@ class PromptBuilder
     {
         $lines = [];
 
-        // Фаза и день программы.
+        // Фаза и день программы. Номер дня — единый источник: ProgramStatus::day().
         $phase = Settings::get('phase');
         $startedOn = Settings::get('program_started_on');
         if ($phase === 'program' && $startedOn !== null) {
-            $start = CarbonImmutable::parse((string) $startedOn, 'Europe/Moscow')->startOfDay();
-            $dayNum = (int) abs($start->diffInDays($date->startOfDay())) + 1;
-            $lines[] = "Фаза: День {$dayNum} программы TriDaily.";
+            $lines[] = 'Фаза: День '.ProgramStatus::day().' программы TriDaily.';
         } else {
             $lines[] = 'Фаза: Режим поддержки.';
         }
