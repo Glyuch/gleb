@@ -100,6 +100,12 @@ class ProcessNutritionUpdate implements ShouldQueue
 
         foreach ($members as $member) {
             if ($botId !== 0 && (int) ($member['id'] ?? 0) === $botId) {
+                // Приветствуем только если бот ещё не настроен (bootstrap)
+                // или бота добавил владелец. Чужие добавления — молча.
+                if (! $this->greetingAllowed()) {
+                    return true;
+                }
+
                 app(TelegramClient::class)->api('sendMessage', [
                     'chat_id' => $chatId,
                     'text' => "Привет! Я — персональный нутрициолог Глеба 🙌🏼\n\n"
@@ -115,6 +121,26 @@ class ProcessNutritionUpdate implements ShouldQueue
 
         // Вход участников без бота — служебное событие, молча игнорируем.
         return true;
+    }
+
+    /**
+     * Разрешено ли приветствие при добавлении бота: bootstrap-режим
+     * (владелец не настроен) либо бота добавил сам владелец.
+     */
+    private function greetingAllowed(): bool
+    {
+        $configuredUserId = config('nutrition.user_id');
+        $configuredChatId = config('nutrition.chat_id');
+
+        // Bootstrap: ни владельца, ни основного чата — приветствуем любого.
+        if (blank($configuredUserId) && blank($configuredChatId)) {
+            return true;
+        }
+
+        $ownerId = blank($configuredUserId) ? $configuredChatId : $configuredUserId;
+        $fromId = $this->update['message']['from']['id'] ?? null;
+
+        return $fromId !== null && (int) $fromId === (int) $ownerId;
     }
 
     /**

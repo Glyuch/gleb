@@ -74,13 +74,52 @@ it('handles /today from the owner in a group and replies into the source chat', 
         ->and($msg->meta['chat_id'])->toBe(-100500);
 });
 
-it('welcomes the group and logs when the bot is added via new_chat_members', function () {
+it('welcomes the group and logs when the owner adds the bot via new_chat_members', function () {
     Log::spy();
 
     (new ProcessNutritionUpdate(['message' => [
+        'from' => ['id' => 777],
         'chat' => ['id' => -100777, 'type' => 'supergroup'],
         'new_chat_members' => [
             ['id' => 111, 'is_bot' => false],
+            ['id' => 8640397639, 'is_bot' => true, 'username' => 'gleb_nutri_bot'],
+        ],
+    ]]))->handle();
+
+    Http::assertSent(function ($request) {
+        return str_contains($request->url(), '/sendMessage')
+            && $request['chat_id'] == -100777
+            && str_contains($request['text'], 'нутрициолог');
+    });
+    Log::shouldHaveReceived('info')
+        ->withArgs(fn ($message) => $message === 'nutrition: added to chat')
+        ->once();
+});
+
+it('stays silent when a foreign user adds the bot to a group while the owner is configured', function () {
+    Log::spy();
+
+    (new ProcessNutritionUpdate(['message' => [
+        'from' => ['id' => 999],
+        'chat' => ['id' => -100999, 'type' => 'supergroup'],
+        'new_chat_members' => [
+            ['id' => 8640397639, 'is_bot' => true, 'username' => 'gleb_nutri_bot'],
+        ],
+    ]]))->handle();
+
+    Http::assertNothingSent();
+    expect(NutritionMessage::count())->toBe(0);
+    Log::shouldNotHaveReceived('info', fn ($message) => $message === 'nutrition: added to chat');
+});
+
+it('welcomes the group in bootstrap mode when neither user_id nor chat_id is configured', function () {
+    config(['nutrition.user_id' => null, 'nutrition.chat_id' => null]);
+    Log::spy();
+
+    (new ProcessNutritionUpdate(['message' => [
+        'from' => ['id' => 999],
+        'chat' => ['id' => -100777, 'type' => 'supergroup'],
+        'new_chat_members' => [
             ['id' => 8640397639, 'is_bot' => true, 'username' => 'gleb_nutri_bot'],
         ],
     ]]))->handle();
