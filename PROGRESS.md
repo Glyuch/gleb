@@ -1,0 +1,4 @@
+
+## Нутрициолог-бот (2026-07-11)
+
+Telegram-бот, воспроизводящий работу нутрициологов TriDaily: динамические окна приёмов (MealPlan/Planner), напоминания/саммари/чек-апы через nutrition:tick (идемпотентно, Europe/Moscow), ИИ-функции через Anthropic API (haiku — фото еды/скрины шагомера, sonnet — вопросы/саммари/чек-апы с корректировками через кнопки). Вебхук /nutrition-bot/webhook → queued job; авторизация по NUTRITION_USER_ID, работает в личке и группах (owner-gated приветствие при добавлении). Онбординг /start с кнопкой старта 10-недельной программы, интерактивные /settings. 12 тем с PDF из storage/app/nutrition/materials. Спека: docs/superpowers/specs/2026-07-11-nutrition-bot-design.md; план: docs/superpowers/plans/2026-07-11-nutrition-bot.md. Тесты: tests/Feature/Nutrition (165 passed). ВАЖНО: тесты гонять только как config:clear → test → config:cache (кэш конфига направляет тесты в живую MySQL). Дашборд /nutrition — фаза 2.
