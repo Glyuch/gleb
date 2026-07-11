@@ -4,6 +4,7 @@ use App\Actions\Nutrition\HandleCommand;
 use App\Jobs\ProcessNutritionUpdate;
 use App\Models\NutritionMessage;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Queue;
 
 beforeEach(function () {
@@ -51,7 +52,22 @@ it('replies with the personal-bot notice for a foreign sender and stores nothing
             && str_contains($request['text'], 'персональный бот');
     });
 
-    expect(NutritionMessage::where('direction', 'in')->count())->toBe(0);
+    expect(NutritionMessage::count())->toBe(0);
+});
+
+it('logs a chat candidate and stores nothing when chat_id is not configured', function () {
+    config(['nutrition.chat_id' => null]);
+
+    Http::preventStrayRequests();
+    Http::fake([
+        'api.telegram.org/*' => Http::response(['ok' => true, 'result' => ['message_id' => 1]]),
+    ]);
+    Log::spy();
+
+    (new ProcessNutritionUpdate(['message' => ['from' => ['id' => 555], 'text' => 'hi']]))->handle();
+
+    Log::shouldHaveReceived('info')->withArgs(fn ($message) => $message === 'nutrition: chat candidate')->once();
+    expect(NutritionMessage::count())->toBe(0);
 });
 
 it('routes a slash command from the owner to HandleCommand and logs it inbound', function () {
