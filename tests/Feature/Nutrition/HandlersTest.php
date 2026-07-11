@@ -255,3 +255,10 @@ it('answers a free-form question via the chat model', function () {
         && $request['max_tokens'] === 800);
     expect(lastOutText())->toContain('Идеально');
 });
+
+it('runs a checkup on /checkup', function () {
+    app(HandleCommand::class)->handle(['message' => ['text' => '/checkup']]);
+
+    Http::assertSent(fn ($request) => str_contains($request->url(), 'api.anthropic.com'));
+    expect(NutritionMessage::query()->where('kind', 'checkup')->exists())->toBeTrue();
+});

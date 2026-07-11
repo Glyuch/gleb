@@ -217,11 +217,7 @@ class HandleCommand
 
     private function checkup(TelegramClient $tg): void
     {
-        if (class_exists(RunCheckup::class)) {
-            app(RunCheckup::class)->handle(onDemand: true);
-        } else {
-            $tg->send('Чек-ап появится чуть позже 🙌🏼');
-        }
+        app(RunCheckup::class)->handle(onDemand: true);
     }
 
     private function settings(TelegramClient $tg): void
