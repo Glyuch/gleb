@@ -8,6 +8,7 @@ use App\Models\NutritionSetting;
 use App\Support\Nutrition\Fmt;
 use App\Support\Nutrition\MealPlan;
 use App\Support\Nutrition\Planner;
+use App\Support\Nutrition\ProgramStatus;
 use App\Support\Nutrition\Settings;
 use App\Support\Nutrition\TelegramClient;
 use App\Support\Nutrition\Tg;
@@ -73,7 +74,7 @@ class HandleCommand
         } elseif (Settings::get('phase') === 'maintenance') {
             $lines[] = '📍 Режим поддержки.';
         } else {
-            $lines[] = '📍 Идёт день '.$this->programDay().' программы.';
+            $lines[] = '📍 Идёт день '.ProgramStatus::day().' программы.';
         }
 
         $lines[] = '';
@@ -279,7 +280,7 @@ class HandleCommand
         $portion = (int) Settings::get('portion_adjustment');
         $portionStr = ($portion > 0 ? '+' : '').$portion.'%';
         $phase = Settings::get('phase') === 'program' ? 'Программа TriDaily' : 'Поддержка';
-        $day = Settings::get('program_started_on') === null ? '—' : (string) $this->programDay();
+        $day = Settings::get('program_started_on') === null ? '—' : (string) ProgramStatus::day();
 
         $lines = [
             '<b>Настройки</b>',
@@ -299,22 +300,6 @@ class HandleCommand
         ];
 
         $tg->send(implode("\n", $lines), $keyboard, chatId: $chatId);
-    }
-
-    /**
-     * Номер текущего дня программы (день старта = 1). 0, если программа не запущена.
-     */
-    private function programDay(): int
-    {
-        $startedOn = Settings::get('program_started_on');
-        if ($startedOn === null) {
-            return 0;
-        }
-
-        $start = CarbonImmutable::parse((string) $startedOn, 'Europe/Moscow')->startOfDay();
-        $today = CarbonImmutable::now('Europe/Moscow')->startOfDay();
-
-        return (int) $start->diffInDays($today) + 1;
     }
 
     /**

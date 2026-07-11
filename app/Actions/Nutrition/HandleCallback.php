@@ -6,6 +6,7 @@ use App\Models\NutritionMeal;
 use App\Models\NutritionSetting;
 use App\Support\Nutrition\MealPlan;
 use App\Support\Nutrition\Planner;
+use App\Support\Nutrition\ProgramStatus;
 use App\Support\Nutrition\Settings;
 use App\Support\Nutrition\TelegramClient;
 use App\Support\Nutrition\Tg;
@@ -106,7 +107,7 @@ class HandleCallback
     private function programStart(TelegramClient $tg, ?int $chatId = null): void
     {
         if (Settings::get('program_started_on') !== null) {
-            $tg->send('Программа уже идёт (день '.$this->programDay().') 👌🏻', chatId: $chatId);
+            $tg->send('Программа уже идёт (день '.ProgramStatus::day().') 👌🏻', chatId: $chatId);
 
             return;
         }
@@ -152,22 +153,6 @@ class HandleCallback
     private function clearPending(): void
     {
         NutritionSetting::query()->where('key', 'pending_adjustments')->delete();
-    }
-
-    /**
-     * Номер текущего дня программы (день старта = 1). 0, если программа не запущена.
-     */
-    private function programDay(): int
-    {
-        $startedOn = Settings::get('program_started_on');
-        if ($startedOn === null) {
-            return 0;
-        }
-
-        $start = CarbonImmutable::parse((string) $startedOn, 'Europe/Moscow')->startOfDay();
-        $today = CarbonImmutable::now('Europe/Moscow')->startOfDay();
-
-        return (int) $start->diffInDays($today) + 1;
     }
 
     private function meal(string $type): ?NutritionMeal

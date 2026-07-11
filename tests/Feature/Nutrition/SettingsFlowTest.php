@@ -5,6 +5,8 @@ use App\Actions\Nutrition\HandleCommand;
 use App\Actions\Nutrition\HandleNumbers;
 use App\Actions\Nutrition\HandleQuestion;
 use App\Models\NutritionMeal;
+use App\Models\NutritionMessage;
+use App\Models\NutritionMetric;
 use App\Models\NutritionTopic;
 use App\Support\Nutrition\Planner;
 use App\Support\Nutrition\Settings;
@@ -124,6 +126,32 @@ it('captures sleep_time through the awaiting flow and recalculates windows', fun
 
     $dinner = NutritionMeal::query()->where('type', 'dinner')->first();
     expect($dinner->window_end->format('H:i') <= '20:30')->toBeTrue();
+});
+
+it('treats awaiting_setting as stale when a scheduled request came later', function () {
+    $this->travelTo(CarbonImmutable::create(2026, 7, 13, 21, 0, 0, 'Europe/Moscow'));
+
+    // Нажал кнопку настройки, не ответил; вечером тик прислал metrics_request.
+    Settings::set('awaiting_setting', 'steps_target');
+    NutritionMessage::query()->create(['direction' => 'out', 'kind' => 'metrics_request', 'content' => 'Шаги и вода?']);
+
+    app(HandleNumbers::class)->handle(['message' => ['text' => '11500']]);
+
+    // Число ушло в метрику шагов, цель не тронута, устаревший awaiting сброшен.
+    expect((int) NutritionMetric::query()->where('type', 'steps')->value('value'))->toBe(11500)
+        ->and((int) Settings::get('steps_target'))->toBe(7000)
+        ->and(Settings::get('awaiting_setting'))->toBeNull();
+});
+
+it('accepts a setting value while the setting request is the last outgoing message', function () {
+    Settings::set('awaiting_setting', 'steps_target');
+    NutritionMessage::query()->create(['direction' => 'out', 'kind' => 'setting_request', 'content' => 'Пришли число шагов']);
+
+    app(HandleNumbers::class)->handle(['message' => ['text' => '12000']]);
+
+    expect((int) Settings::get('steps_target'))->toBe(12000)
+        ->and(Settings::get('awaiting_setting'))->toBeNull()
+        ->and(NutritionMetric::query()->where('type', 'steps')->count())->toBe(0);
 });
 
 it('resets awaiting_setting when any command arrives', function () {
