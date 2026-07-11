@@ -10,6 +10,7 @@ use App\Support\Nutrition\MealPlan;
 use App\Support\Nutrition\Planner;
 use App\Support\Nutrition\Settings;
 use App\Support\Nutrition\TelegramClient;
+use App\Support\Nutrition\Tg;
 use Carbon\CarbonImmutable;
 
 class HandleCommand
@@ -27,6 +28,7 @@ class HandleCommand
         NutritionSetting::query()->where('key', 'awaiting_setting')->delete();
 
         $tg = app(TelegramClient::class);
+        $chatId = Tg::chatId($update);
 
         $text = trim((string) ($update['message']['text'] ?? ''));
         $parts = preg_split('/\s+/', $text, 2) ?: [];
@@ -34,21 +36,21 @@ class HandleCommand
         $arg = trim($parts[1] ?? '');
 
         match ($command) {
-            '/start' => $this->start($tg),
-            '/help' => $this->help($tg),
-            '/today' => $this->today($tg),
-            '/stats' => $this->stats($tg),
-            '/weight' => $this->metric($tg, 'weight', $arg),
-            '/steps' => $this->metric($tg, 'steps', $arg),
-            '/water' => $this->metric($tg, 'water', $arg),
-            '/skip' => $this->skip($tg),
+            '/start' => $this->start($tg, $chatId),
+            '/help' => $this->help($tg, $chatId),
+            '/today' => $this->today($tg, $chatId),
+            '/stats' => $this->stats($tg, $chatId),
+            '/weight' => $this->metric($tg, 'weight', $arg, $chatId),
+            '/steps' => $this->metric($tg, 'steps', $arg, $chatId),
+            '/water' => $this->metric($tg, 'water', $arg, $chatId),
+            '/skip' => $this->skip($tg, $chatId),
             '/checkup' => $this->checkup($tg),
-            '/settings' => $this->settings($tg),
-            default => $tg->send('Не знаю такой команды. /help — список команд.'),
+            '/settings' => $this->settings($tg, $chatId),
+            default => $tg->send('Не знаю такой команды. /help — список команд.', chatId: $chatId),
         };
     }
 
-    private function start(TelegramClient $tg): void
+    private function start(TelegramClient $tg, ?int $chatId = null): void
     {
         $lines = [
             'Привет! Я твой нутрициолог 🙌🏼',
@@ -84,10 +86,10 @@ class HandleCommand
         $lines[] = '/settings — режим дня и цели';
         $lines[] = '/help — справка';
 
-        $tg->send(implode("\n", $lines), $keyboard);
+        $tg->send(implode("\n", $lines), $keyboard, chatId: $chatId);
     }
 
-    private function help(TelegramClient $tg): void
+    private function help(TelegramClient $tg, ?int $chatId = null): void
     {
         $lines = [
             'Привет! Я твой нутрициолог 🙌🏼',
@@ -105,10 +107,10 @@ class HandleCommand
             '/settings — режим дня и цели',
         ];
 
-        $tg->send(implode("\n", $lines));
+        $tg->send(implode("\n", $lines), chatId: $chatId);
     }
 
-    private function today(TelegramClient $tg): void
+    private function today(TelegramClient $tg, ?int $chatId = null): void
     {
         $now = CarbonImmutable::now('Europe/Moscow');
         Planner::ensureDay($now);
@@ -142,10 +144,10 @@ class HandleCommand
         $lines[] = '';
         $lines[] = 'Цели: шаги '.Settings::get('steps_target').', вода 2 л, отбой '.Settings::get('sleep_time').'.';
 
-        $tg->send(implode("\n", $lines));
+        $tg->send(implode("\n", $lines), chatId: $chatId);
     }
 
-    private function stats(TelegramClient $tg): void
+    private function stats(TelegramClient $tg, ?int $chatId = null): void
     {
         $now = CarbonImmutable::now('Europe/Moscow');
         $from = $now->subDays(6)->format('Y-m-d');
@@ -193,15 +195,15 @@ class HandleCommand
             ? '— нет данных'
             : 'Среднее: '.Fmt::num((float) $water->avg('value')).' л';
 
-        $tg->send(implode("\n", $lines));
+        $tg->send(implode("\n", $lines), chatId: $chatId);
     }
 
-    private function metric(TelegramClient $tg, string $type, string $arg): void
+    private function metric(TelegramClient $tg, string $type, string $arg, ?int $chatId = null): void
     {
         $raw = str_replace(',', '.', trim($arg));
 
         if ($raw === '' || ! is_numeric($raw)) {
-            $tg->send($this->formatHint($type));
+            $tg->send($this->formatHint($type), chatId: $chatId);
 
             return;
         }
@@ -209,7 +211,7 @@ class HandleCommand
         $value = (float) $raw;
 
         if (! $this->inRange($type, $value)) {
-            $tg->send($this->formatHint($type));
+            $tg->send($this->formatHint($type), chatId: $chatId);
 
             return;
         }
@@ -221,17 +223,17 @@ class HandleCommand
             ['value' => $value],
         );
 
-        $tg->send('Записал: '.$this->metricConfirm($type, $value).' 👌🏻');
+        $tg->send('Записал: '.$this->metricConfirm($type, $value).' 👌🏻', chatId: $chatId);
     }
 
-    private function skip(TelegramClient $tg): void
+    private function skip(TelegramClient $tg, ?int $chatId = null): void
     {
         $now = CarbonImmutable::now('Europe/Moscow');
         Planner::ensureDay($now);
 
         $meal = Planner::currentMeal($now);
         if ($meal === null) {
-            $tg->send('Нет ближайшего приёма для пропуска 👌🏻');
+            $tg->send('Нет ближайшего приёма для пропуска 👌🏻', chatId: $chatId);
 
             return;
         }
@@ -256,7 +258,7 @@ class HandleCommand
             }
         }
 
-        $tg->send(implode("\n", $lines));
+        $tg->send(implode("\n", $lines), chatId: $chatId);
     }
 
     private function checkup(TelegramClient $tg): void
@@ -264,7 +266,7 @@ class HandleCommand
         app(RunCheckup::class)->handle(onDemand: true);
     }
 
-    private function settings(TelegramClient $tg): void
+    private function settings(TelegramClient $tg, ?int $chatId = null): void
     {
         $windows = Settings::get('default_windows');
         $windowStrings = [];
@@ -296,7 +298,7 @@ class HandleCommand
             [['text' => '👣 Цель шагов', 'callback_data' => 'set:steps_target']],
         ];
 
-        $tg->send(implode("\n", $lines), $keyboard);
+        $tg->send(implode("\n", $lines), $keyboard, chatId: $chatId);
     }
 
     /**

@@ -6,6 +6,7 @@ use App\Support\Nutrition\Claude;
 use App\Support\Nutrition\PromptBuilder;
 use App\Support\Nutrition\SettingInput;
 use App\Support\Nutrition\TelegramClient;
+use App\Support\Nutrition\Tg;
 use Carbon\CarbonImmutable;
 
 class HandleQuestion
@@ -18,6 +19,7 @@ class HandleQuestion
         }
 
         $tg = app(TelegramClient::class);
+        $chatId = Tg::chatId($update);
         $text = trim((string) ($update['message']['text'] ?? ''));
         $today = CarbonImmutable::now('Europe/Moscow');
 
@@ -27,6 +29,6 @@ class HandleQuestion
             800,
         );
 
-        $tg->send($answer ?? 'Не смог сейчас ответить, попробуй ещё раз чуть позже 🙏');
+        $tg->send($answer ?? 'Не смог сейчас ответить, попробуй ещё раз чуть позже 🙏', chatId: $chatId);
     }
 }

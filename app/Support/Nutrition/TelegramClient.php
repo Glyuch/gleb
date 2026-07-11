@@ -23,17 +23,20 @@ class TelegramClient
      * Отправляет текстовое сообщение (HTML) и логирует его в nutrition_messages.
      *
      * @param  array<int, array<int, array<string, string>>>|null  $inlineKeyboard  ряды inline-кнопок
+     * @param  int|null  $chatId  чат назначения; null → основной чат из конфига
      */
-    public function send(string $text, ?array $inlineKeyboard = null, string $kind = 'text'): void
+    public function send(string $text, ?array $inlineKeyboard = null, string $kind = 'text', ?int $chatId = null): void
     {
-        if (blank($this->chatId)) {
+        $target = $chatId ?? $this->chatId;
+
+        if (blank($target)) {
             Log::info('Nutrition TelegramClient: chat_id пуст, сообщение не отправлено.', ['kind' => $kind]);
 
             return;
         }
 
         $params = [
-            'chat_id' => $this->chatId,
+            'chat_id' => $target,
             'text' => $text,
             'parse_mode' => 'HTML',
         ];
@@ -54,16 +57,20 @@ class TelegramClient
 
     /**
      * Отправляет документ (multipart) и логирует его как kind=topic.
+     *
+     * @param  int|null  $chatId  чат назначения; null → основной чат из конфига
      */
-    public function sendDocument(string $absolutePath, ?string $caption = null): void
+    public function sendDocument(string $absolutePath, ?string $caption = null, ?int $chatId = null): void
     {
-        if (blank($this->chatId)) {
+        $target = $chatId ?? $this->chatId;
+
+        if (blank($target)) {
             Log::info('Nutrition TelegramClient: chat_id пуст, документ не отправлен.');
 
             return;
         }
 
-        $params = ['chat_id' => $this->chatId];
+        $params = ['chat_id' => $target];
         if ($caption !== null) {
             $params['caption'] = $caption;
             $params['parse_mode'] = 'HTML';

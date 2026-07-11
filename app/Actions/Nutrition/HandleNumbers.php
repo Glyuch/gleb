@@ -7,6 +7,7 @@ use App\Models\NutritionMetric;
 use App\Support\Nutrition\Fmt;
 use App\Support\Nutrition\SettingInput;
 use App\Support\Nutrition\TelegramClient;
+use App\Support\Nutrition\Tg;
 use Carbon\CarbonImmutable;
 
 class HandleNumbers
@@ -19,6 +20,7 @@ class HandleNumbers
         }
 
         $tg = app(TelegramClient::class);
+        $chatId = Tg::chatId($update);
         $text = (string) ($update['message']['text'] ?? '');
 
         preg_match_all('/\d+(?:[.,]\d+)?/', $text, $matches);
@@ -40,7 +42,7 @@ class HandleNumbers
         if ($lastOutKind === 'weight_request') {
             $weight = (float) str_replace(',', '.', $numbers[0]);
             if ($weight < 40 || $weight > 150) {
-                $tg->send('Вес вне диапазона. Пришли значение в кг, например 82.3');
+                $tg->send('Вес вне диапазона. Пришли значение в кг, например 82.3', chatId: $chatId);
 
                 return;
             }
@@ -50,7 +52,7 @@ class HandleNumbers
                 ['value' => $weight],
             );
 
-            $tg->send('Записал: вес '.Fmt::num($weight).' кг 👌🏻');
+            $tg->send('Записал: вес '.Fmt::num($weight).' кг 👌🏻', chatId: $chatId);
 
             return;
         }
@@ -58,7 +60,7 @@ class HandleNumbers
         if ($lastOutKind === 'metrics_request') {
             $steps = (int) round((float) str_replace(',', '.', $numbers[0]));
             if ($steps < 0 || $steps > 100000) {
-                $tg->send('Шаги вне диапазона, проверь число 🙏');
+                $tg->send('Шаги вне диапазона, проверь число 🙏', chatId: $chatId);
 
                 return;
             }
@@ -81,7 +83,7 @@ class HandleNumbers
                 }
             }
 
-            $tg->send($reply);
+            $tg->send($reply, chatId: $chatId);
 
             return;
         }

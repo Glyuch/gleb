@@ -2,6 +2,7 @@
 
 return [
     'bot_token' => env('NUTRITION_BOT_TOKEN'),
+    'user_id' => env('NUTRITION_USER_ID'),
     'chat_id' => env('NUTRITION_CHAT_ID'),
     'anthropic_key' => env('ANTHROPIC_API_KEY'),
     'webhook_secret' => env('NUTRITION_WEBHOOK_SECRET'),

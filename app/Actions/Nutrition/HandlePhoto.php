@@ -10,6 +10,7 @@ use App\Support\Nutrition\MealPlan;
 use App\Support\Nutrition\Planner;
 use App\Support\Nutrition\Settings;
 use App\Support\Nutrition\TelegramClient;
+use App\Support\Nutrition\Tg;
 use Carbon\CarbonImmutable;
 
 class HandlePhoto
@@ -19,6 +20,7 @@ class HandlePhoto
     public function handle(array $update): void
     {
         $tg = app(TelegramClient::class);
+        $chatId = Tg::chatId($update);
         $now = CarbonImmutable::now('Europe/Moscow');
 
         Planner::ensureDay($now);
@@ -46,14 +48,14 @@ class HandlePhoto
             ->exists();
 
         if ($lastOutKind === 'metrics_request' && ! $hasSteps) {
-            $this->pedometer($tg, $fileId, $now);
+            $this->pedometer($tg, $fileId, $now, $chatId);
 
             return;
         }
 
         // 3. Фото еды: если нет активного приёма — перекусов на программе нет.
         if ($meal === null) {
-            $tg->send('Перекусов на программе нет 👌🏻 До следующего приёма — вода/чай/кофе без всего');
+            $tg->send('Перекусов на программе нет 👌🏻 До следующего приёма — вода/чай/кофе без всего', chatId: $chatId);
 
             return;
         }
@@ -73,14 +75,14 @@ class HandlePhoto
             $reply .= "\n\n".$warning;
         }
 
-        $tg->send($reply);
+        $tg->send($reply, chatId: $chatId);
     }
 
-    private function pedometer(TelegramClient $tg, string $fileId, CarbonImmutable $now): void
+    private function pedometer(TelegramClient $tg, string $fileId, CarbonImmutable $now, ?int $chatId = null): void
     {
         $image = $tg->downloadPhotoBase64($fileId);
         if ($image === null) {
-            $tg->send('Не смог открыть скрин, пришли ещё раз 🙏');
+            $tg->send('Не смог открыть скрин, пришли ещё раз 🙏', chatId: $chatId);
 
             return;
         }
@@ -91,7 +93,7 @@ class HandlePhoto
         );
 
         if ($answer === null || ! preg_match('/\d[\d\s]*/u', $answer, $m)) {
-            $tg->send('Не смог распознать шаги на скрине, пришли число текстом 🙏');
+            $tg->send('Не смог распознать шаги на скрине, пришли число текстом 🙏', chatId: $chatId);
 
             return;
         }
@@ -103,7 +105,7 @@ class HandlePhoto
             ['value' => $steps],
         );
 
-        $tg->send('Записал шаги: '.$steps.' 👌🏻');
+        $tg->send('Записал шаги: '.$steps.' 👌🏻', chatId: $chatId);
     }
 
     private function tooSoonWarning(CarbonImmutable $now): ?string
