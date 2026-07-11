@@ -22,6 +22,7 @@ class StartProgram
      */
     public function handle(?CarbonImmutable $date = null): string
     {
+        $date = $date?->setTimezone('Europe/Moscow');
         $start = ($date ?? CarbonImmutable::now('Europe/Moscow'))->startOfDay();
 
         Settings::set('program_started_on', $start->format('Y-m-d'));

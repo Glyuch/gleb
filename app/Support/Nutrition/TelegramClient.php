@@ -139,12 +139,27 @@ class TelegramClient
     }
 
     /**
-     * Общий вызов Bot API. Возвращает поле result либо null. Никогда не бросает исключений.
+     * Общий вызов Bot API. Возвращает поле result, только если это массив, иначе null.
+     * Никогда не бросает исключений.
      *
      * @param  array<string, mixed>  $params
      * @return array<mixed>|null
      */
     public function api(string $method, array $params = []): ?array
+    {
+        $result = $this->apiRaw($method, $params);
+
+        return is_array($result) ? $result : null;
+    }
+
+    /**
+     * Вызов Bot API с результатом «как есть»: Telegram для некоторых методов
+     * (setWebhook и т.п.) возвращает boolean в поле result. При HTTP-ошибке или
+     * исключении — null. Никогда не бросает исключений.
+     *
+     * @param  array<string, mixed>  $params
+     */
+    public function apiRaw(string $method, array $params = []): mixed
     {
         try {
             $response = Http::timeout(30)
@@ -152,9 +167,7 @@ class TelegramClient
                 ->post($this->endpoint($method), $params);
 
             if ($response->successful() && $response->json('ok') === true) {
-                $result = $response->json('result');
-
-                return is_array($result) ? $result : null;
+                return $response->json('result');
             }
 
             Log::warning('Nutrition TelegramClient: вызов Bot API неуспешен.', [

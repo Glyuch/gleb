@@ -16,11 +16,10 @@ class NutritionStart extends Command
     {
         $date = $this->argument('date');
 
-        $start = $date !== null
-            ? CarbonImmutable::parse((string) $date, 'Europe/Moscow')
-            : CarbonImmutable::now('Europe/Moscow');
-
-        $summary = app(StartProgram::class)->handle($start);
+        // Дефолт «сегодня, Europe/Moscow» живёт в самом Action.
+        $summary = app(StartProgram::class)->handle(
+            $date !== null ? CarbonImmutable::parse((string) $date, 'Europe/Moscow') : null,
+        );
 
         $this->info($summary);
 

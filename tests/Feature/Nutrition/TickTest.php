@@ -1,11 +1,14 @@
 <?php
 
+use App\Actions\Nutrition\SendTopic;
 use App\Models\NutritionMeal;
 use App\Models\NutritionMessage;
 use App\Models\NutritionSentEvent;
+use App\Models\NutritionTopic;
 use App\Support\Nutrition\Planner;
 use App\Support\Nutrition\Settings;
 use Carbon\CarbonImmutable;
+use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Http;
 
 beforeEach(function () {
@@ -112,4 +115,54 @@ it('runs the Sunday checkup at 20:05 and stores pending adjustments', function (
     $checkup = NutritionMessage::query()->where('kind', 'checkup')->first();
     expect($checkup)->not->toBeNull()
         ->and($checkup->content)->toContain('Разбор недели');
+});
+
+it('sends every existing file of a multi-file topic with intro caption only on the first', function () {
+    $dir = storage_path('app/nutrition/materials');
+    File::ensureDirectoryExists($dir);
+    File::put($dir.'/__test_first.pdf', 'pdf-a');
+    File::put($dir.'/__test_second.pdf', 'pdf-b');
+
+    try {
+        $topic = NutritionTopic::query()->create([
+            'title' => 'Тестовая составная тема',
+            'file_path' => '__test_first.pdf|__test_missing.pdf|__test_second.pdf',
+            'intro' => 'Интро составной темы',
+            'position' => 1,
+        ]);
+
+        app(SendTopic::class)->handle($topic);
+    } finally {
+        File::delete([$dir.'/__test_first.pdf', $dir.'/__test_second.pdf']);
+    }
+
+    // Два существующих файла ушли документами, отсутствующий пропущен.
+    $docs = Http::recorded(fn ($request) => str_contains($request->url(), 'sendDocument'));
+    expect($docs)->toHaveCount(2);
+
+    // Intro — caption только у первого документа.
+    expect(str_contains($docs[0][0]->body(), 'Интро составной темы'))->toBeTrue()
+        ->and(str_contains($docs[1][0]->body(), 'Интро составной темы'))->toBeFalse();
+
+    expect(NutritionMessage::query()->where('kind', 'topic')->count())->toBe(2)
+        ->and($topic->fresh()->sent_at)->not->toBeNull();
+});
+
+it('falls back to intro text when none of the topic files exist on disk', function () {
+    $topic = NutritionTopic::query()->create([
+        'title' => 'Тема без файлов',
+        'file_path' => '__test_absent_one.pdf|__test_absent_two.pdf',
+        'intro' => 'Интро без файлов',
+        'position' => 2,
+    ]);
+
+    app(SendTopic::class)->handle($topic);
+
+    Http::assertNotSent(fn ($request) => str_contains($request->url(), 'sendDocument'));
+
+    $message = NutritionMessage::query()->where('kind', 'topic')->first();
+    expect($message)->not->toBeNull()
+        ->and($message->content)->toBe('Интро без файлов');
+
+    expect($topic->fresh()->sent_at)->not->toBeNull();
 });

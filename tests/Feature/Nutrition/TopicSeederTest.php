@@ -5,6 +5,7 @@ use App\Models\NutritionTopic;
 use App\Support\Nutrition\Settings;
 use Carbon\CarbonImmutable;
 use Database\Seeders\NutritionTopicSeeder;
+use Illuminate\Support\Facades\Http;
 
 it('seeds exactly 12 topics with unique positions 1..12', function () {
     $this->seed(NutritionTopicSeeder::class);
@@ -19,9 +20,14 @@ it('seeds exactly 12 topics with unique positions 1..12', function () {
         ->and($first->file_path)->toBe('Про метаболизм.pdf')
         ->and($first->intro)->not->toBeEmpty();
 
-    // Точное имя файла с пробелом перед .pdf для сборника рецептов.
+    // Точное имя файла с пробелом перед .pdf для сборника рецептов + второй файл через «|».
     $book = NutritionTopic::query()->where('position', 11)->first();
-    expect($book->file_path)->toBe('Здоровая Еда .pdf');
+    expect($book->file_path)->toBe('Здоровая Еда .pdf|Закупочный_лист_Приложение_к_сборнику_Здоровая_Еда_Андрей_Мокич.pdf');
+
+    // Составные темы хранят несколько файлов через разделитель «|».
+    $walking = NutritionTopic::query()->where('position', 4)->first();
+    expect($walking->file_path)->toContain('|')
+        ->and($walking->file_path)->toBe('ХОДЬБА Файл Марина.pdf|Окно жиросжигания.pdf');
 });
 
 it('is idempotent and refreshes title/file_path/intro without touching scheduled_on/sent_at', function () {
@@ -83,4 +89,43 @@ it('StartProgram action returns a human-readable summary', function () {
     expect($summary)->toContain('14.07.2026')
         ->and($summary)->toContain('12')
         ->and($summary)->toContain('Про метаболизм');
+});
+
+it('set-webhook succeeds when Telegram returns boolean result true', function () {
+    config(['nutrition.bot_token' => 'test-token', 'nutrition.webhook_secret' => 'test-secret']);
+
+    Http::preventStrayRequests();
+    Http::fake([
+        'api.telegram.org/*' => Http::response(['ok' => true, 'result' => true, 'description' => 'Webhook was set']),
+    ]);
+
+    $this->artisan('nutrition:set-webhook')->assertExitCode(0);
+
+    Http::assertSent(function ($request) {
+        return str_contains($request->url(), '/setWebhook')
+            && $request['secret_token'] === 'test-secret'
+            && $request['allowed_updates'] === json_encode(['message', 'callback_query'])
+            && str_contains((string) $request['url'], '/nutrition-bot/webhook');
+    });
+});
+
+it('set-webhook fails with exit code 1 when the API call errors', function () {
+    config(['nutrition.bot_token' => 'test-token', 'nutrition.webhook_secret' => 'test-secret']);
+
+    Http::preventStrayRequests();
+    Http::fake([
+        'api.telegram.org/*' => Http::response(['ok' => false, 'description' => 'Unauthorized'], 401),
+    ]);
+
+    $this->artisan('nutrition:set-webhook')->assertExitCode(1);
+});
+
+it('set-webhook fails with exit code 1 without secrets and makes no HTTP calls', function () {
+    config(['nutrition.bot_token' => null, 'nutrition.webhook_secret' => null]);
+
+    Http::fake();
+
+    $this->artisan('nutrition:set-webhook')->assertExitCode(1);
+
+    Http::assertNothingSent();
 });

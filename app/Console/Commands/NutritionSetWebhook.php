@@ -24,13 +24,14 @@ class NutritionSetWebhook extends Command
 
         $url = url('/nutrition-bot/webhook');
 
-        $result = app(TelegramClient::class)->api('setWebhook', [
+        // setWebhook возвращает boolean в поле result — поэтому apiRaw, а не api().
+        $result = app(TelegramClient::class)->apiRaw('setWebhook', [
             'url' => $url,
             'secret_token' => $secret,
             'allowed_updates' => json_encode(['message', 'callback_query']),
         ]);
 
-        if ($result === null) {
+        if ($result !== true && ! is_array($result)) {
             $this->error("setWebhook не удался (см. лог). URL: {$url}");
 
             return self::FAILURE;

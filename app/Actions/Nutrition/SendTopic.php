@@ -9,21 +9,27 @@ use Carbon\CarbonImmutable;
 class SendTopic
 {
     /**
-     * Отправляет материал темы документом (если файл есть на диске) либо только intro текстом.
-     * sent_at проставляется в любом случае.
+     * Отправляет материалы темы документами. file_path может содержать несколько
+     * имён файлов через «|» — отправляется каждый существующий файл (intro —
+     * caption только у первого; отсутствующие файлы пропускаются). Если ни одного
+     * файла нет на диске — intro уходит текстом. sent_at проставляется в любом случае.
      */
     public function handle(NutritionTopic $topic): void
     {
         $tg = app(TelegramClient::class);
 
-        $path = $topic->file_path !== null
-            ? storage_path('app/nutrition/materials/'.$topic->file_path)
-            : null;
+        $paths = collect(explode('|', (string) $topic->file_path))
+            ->filter(fn (string $name): bool => $name !== '')
+            ->map(fn (string $name): string => storage_path('app/nutrition/materials/'.$name))
+            ->filter(fn (string $path): bool => is_file($path))
+            ->values();
 
-        if ($path !== null && is_file($path)) {
-            $tg->sendDocument($path, $topic->intro);
-        } else {
+        if ($paths->isEmpty()) {
             $tg->send((string) $topic->intro, null, 'topic');
+        } else {
+            foreach ($paths as $i => $path) {
+                $tg->sendDocument($path, $i === 0 ? $topic->intro : null);
+            }
         }
 
         $topic->update(['sent_at' => CarbonImmutable::now('Europe/Moscow')]);
