@@ -139,10 +139,22 @@ class ProcessNutritionUpdate implements ShouldQueue
             'status' => 'onboarding',
         ]);
 
-        $invite->update([
-            'used_by_profile_id' => $profile->id,
-            'used_at' => CarbonImmutable::now('Europe/Moscow'),
-        ]);
+        // Атомарный клейм: одиночный UPDATE ... WHERE used_by_profile_id IS NULL —
+        // побеждает ровно один воркер. Проигравший откатывает свой профиль, чтобы
+        // не плодить дубли при будущем росте числа воркеров (ревью Task 4).
+        $claimed = NutritionInvite::query()
+            ->where('code', $code)
+            ->whereNull('used_by_profile_id')
+            ->update([
+                'used_by_profile_id' => $profile->id,
+                'used_at' => CarbonImmutable::now('Europe/Moscow'),
+            ]);
+
+        if ($claimed !== 1) {
+            $profile->delete();
+
+            return;
+        }
 
         Log::info('nutrition: invite redeemed', ['profile_id' => $profile->id]);
 
@@ -197,6 +209,9 @@ class ProcessNutritionUpdate implements ShouldQueue
                         ]],
                         chatId: (int) $chatId,
                     );
+
+                    // Запоминаем, какому профилю и в каком чате предложили: гейт колбэка.
+                    $adder->setWaiting('chatmain_offer', (int) $chatId);
                 }
 
                 return true;

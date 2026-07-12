@@ -203,7 +203,16 @@ class HandleCallback
      */
     private function chatMain(TelegramClient $tg, NutritionProfile $profile, string $decision, ?int $chatId = null): void
     {
-        if ($decision === 'yes' && $chatId !== null) {
+        // Гейт: реагируем только если ЭТОМУ профилю предлагали сделать основным
+        // именно ЭТОТ чат. Иначе — тихо (answerCallback всё равно отработает в handle()).
+        $offered = $profile->waiting('chatmain_offer');
+        if ($chatId === null || $offered === null || (int) $offered !== $chatId) {
+            return;
+        }
+
+        $profile->clearWaiting('chatmain_offer');
+
+        if ($decision === 'yes') {
             $profile->update(['main_chat_id' => $chatId]);
             $tg->send('Готово, теперь плановые сообщения буду слать сюда 👌🏻', chatId: $chatId);
 

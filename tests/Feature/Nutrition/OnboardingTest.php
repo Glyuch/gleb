@@ -214,6 +214,7 @@ it('produces different ai_profiles for two different users (isolation)', functio
 
 it('sets the main chat on chatmain:yes and leaves it on chatmain:no', function () {
     $admin = nutritionProfile(['telegram_user_id' => 777, 'main_chat_id' => 111]);
+    $admin->setWaiting('chatmain_offer', -100500);
 
     (new ProcessNutritionUpdate(['callback_query' => [
         'id' => 'cb1',
@@ -223,6 +224,10 @@ it('sets the main chat on chatmain:yes and leaves it on chatmain:no', function (
     ]]))->handle();
 
     expect($admin->fresh()->main_chat_id)->toBe(-100500);
+
+    // Новое предложение по другому чату; ответ «Нет» — основной чат не меняется.
+    $admin->refresh();
+    $admin->setWaiting('chatmain_offer', -100999);
 
     (new ProcessNutritionUpdate(['callback_query' => [
         'id' => 'cb2',
