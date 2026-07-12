@@ -66,8 +66,10 @@ class SettingInput
 
     /**
      * Ожидание времени приёма (после «🕐 Поел раньше»): следующее ЧЧ:ММ — время
-     * приёма. Пока ожидание активно, любое сообщение трактуется как попытка ввода
-     * времени (невалидное → подсказка, ожидание сохраняется).
+     * приёма. Пока ожидание активно И запрос времени — последнее исходящее, любое
+     * сообщение трактуется как попытка ввода времени (невалидное → подсказка,
+     * ожидание сохраняется). Если бот успел спросить что-то ещё (вес/шаги), ввод
+     * относится к тому запросу: сбрасываем устаревший awaiting и пропускаем дальше.
      *
      * @param  array<string, mixed>  $update
      */
@@ -78,12 +80,23 @@ class SettingInput
             return false;
         }
 
+        $lastOutKind = NutritionMessage::query()
+            ->where('direction', 'out')
+            ->orderByDesc('id')
+            ->value('kind');
+
+        if ($lastOutKind !== 'meal_time_request') {
+            self::clearMealTime();
+
+            return false;
+        }
+
         $tg = app(TelegramClient::class);
         $chatId = Tg::chatId($update);
         $text = trim((string) ($update['message']['text'] ?? ''));
 
         if (! preg_match('/^(\d{1,2}):(\d{2})$/', $text, $m)) {
-            $tg->send('Не понял время. Пришли в формате ЧЧ:ММ, например 10:00', chatId: $chatId);
+            $tg->send('Не понял время. Пришли в формате ЧЧ:ММ, например 10:00', null, 'meal_time_request', $chatId);
 
             return true;
         }
@@ -92,7 +105,7 @@ class SettingInput
         $minutes = (int) $m[2];
 
         if ($hours > 23 || $minutes > 59) {
-            $tg->send('Такого времени не бывает. Пришли в формате ЧЧ:ММ, например 10:00', chatId: $chatId);
+            $tg->send('Такого времени не бывает. Пришли в формате ЧЧ:ММ, например 10:00', null, 'meal_time_request', $chatId);
 
             return true;
         }
@@ -104,6 +117,14 @@ class SettingInput
             ->whereDate('date', $now->format('Y-m-d'))
             ->where('type', $type)
             ->first();
+
+        // Уже отмеченный приём не перезаписываем (иначе затрём eaten_at/фото/фидбек).
+        if ($meal !== null && $meal->status === 'eaten') {
+            self::clearMealTime();
+            $tg->send(MealPlan::LABELS[$type].' уже отмечен 👌🏻', chatId: $chatId);
+
+            return true;
+        }
 
         if ($meal !== null) {
             Planner::markEaten($meal, $now->setTime($hours, $minutes), null, null);

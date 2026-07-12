@@ -29,12 +29,20 @@ class MealLogger
         Planner::ensureDay($now);
 
         $resolved = [];
+        $alreadyEaten = [];
         $hasAmbiguous = false;
 
         foreach ($reports as $report) {
             $meal = self::resolve($now, $report['meal'] ?? null, $report['time'] ?? null);
             if ($meal === null) {
                 $hasAmbiguous = true;
+
+                continue;
+            }
+
+            // Уже отмеченный приём не перезаписываем (иначе затрём eaten_at/фото/фидбек).
+            if ($meal->status === 'eaten') {
+                $alreadyEaten[$meal->type] = $meal->type;
 
                 continue;
             }
@@ -53,23 +61,32 @@ class MealLogger
             Planner::recalculate($now->startOfDay());
         }
 
-        // Хоть один неоднозначный отчёт — уточняем приём кнопками.
+        $parts = [];
+        if (trim($reply) !== '') {
+            $parts[] = trim($reply);
+        }
+        foreach ($alreadyEaten as $type) {
+            $parts[] = MealPlan::LABELS[$type].' уже отмечен 👌🏻';
+        }
+        $tail = self::windowsTail($now);
+        if ($tail !== '') {
+            $parts[] = $tail;
+        }
+
+        // Есть неоднозначные отчёты — уточняем приём кнопками; записанное/уже-отмеченное
+        // подтверждаем в том же сообщении (не теряем записанные приёмы смешанного отчёта).
         if ($hasAmbiguous) {
-            self::askMeal($tg, $now, $reply, $chatId);
+            $parts[] = 'Какой это приём?';
+            $tg->send(implode("\n\n", $parts), self::mealButtons($now), chatId: $chatId);
 
             return;
         }
 
-        $text = trim($reply);
-        $tail = self::windowsTail($now);
-        if ($tail !== '') {
-            $text = ($text !== '' ? $text."\n\n" : '').$tail;
-        }
-        if ($text === '') {
-            $text = 'Записал приём 👌🏻';
+        if ($parts === []) {
+            $parts[] = 'Записал приём 👌🏻';
         }
 
-        $tg->send($text, chatId: $chatId);
+        $tg->send(implode("\n\n", $parts), chatId: $chatId);
     }
 
     /**
@@ -155,7 +172,12 @@ class MealLogger
         return implode("\n", $lines);
     }
 
-    private static function askMeal(TelegramClient $tg, CarbonImmutable $now, string $reply, ?int $chatId): void
+    /**
+     * Кнопки по не-съеденным приёмам за сегодня (для уточнения приёма).
+     *
+     * @return array<int, array<int, array<string, string>>>|null
+     */
+    private static function mealButtons(CarbonImmutable $now): ?array
     {
         $meals = self::todayMeals($now);
         $buttons = [];
@@ -167,10 +189,7 @@ class MealLogger
             }
         }
 
-        $text = trim($reply);
-        $text = ($text !== '' ? $text."\n\n" : '').'Какой это приём?';
-
-        $tg->send($text, $buttons ?: null, chatId: $chatId);
+        return $buttons !== [] ? $buttons : null;
     }
 
     private static function atTime(CarbonImmutable $now, ?string $time): CarbonImmutable

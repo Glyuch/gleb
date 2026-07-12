@@ -142,7 +142,8 @@ class HandleCallback
         // Взаимоисключаем с ожиданием настройки.
         $this->clearKey('awaiting_setting');
 
-        $tg->send('Во сколько поел? Пришли время ЧЧ:ММ, например 10:00', chatId: $chatId);
+        // kind=meal_time_request — staleness-guard в SettingInput::interceptMealTime.
+        $tg->send('Во сколько поел? Пришли время ЧЧ:ММ, например 10:00', null, 'meal_time_request', $chatId);
     }
 
     private function adjust(TelegramClient $tg, string $decision, ?int $chatId = null): void

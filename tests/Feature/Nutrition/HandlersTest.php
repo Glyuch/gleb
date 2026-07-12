@@ -84,8 +84,31 @@ it('lists the day with the lunch label on /today', function () {
     expect(lastOutText())->toContain('Обед');
 });
 
-it('marks the current meal eaten from a food photo and stores ai feedback', function () {
+it('asks which meal a late food photo belongs to when an earlier meal is still open', function () {
+    // 11:30: завтрак (07:30–08:30) просрочен, но ещё pending (до missed-порога),
+    // обед (11:00–12:30) активен. Оба — кандидаты → бот уточняет приём, не пишет молча.
     $this->travelTo(CarbonImmutable::create(2026, 7, 13, 11, 30, 0, 'Europe/Moscow'));
+
+    app(HandlePhoto::class)->handle(['message' => [
+        'photo' => [['file_id' => 'small'], ['file_id' => 'big']],
+    ]]);
+
+    expect(NutritionMeal::query()->where('status', 'eaten')->count())->toBe(0);
+    expect(Settings::get('awaiting_meal_photo'))->toBe('big');
+
+    Http::assertSent(fn ($r) => str_contains($r->url(), '/sendMessage')
+        && str_contains((string) ($r['reply_markup'] ?? ''), 'mealphoto:breakfast')
+        && str_contains((string) ($r['reply_markup'] ?? ''), 'mealphoto:lunch'));
+});
+
+it('attaches a food photo directly to the only open meal', function () {
+    // Завтрак уже съеден → единственный кандидат = обед → прямое прикрепление.
+    $this->travelTo(CarbonImmutable::create(2026, 7, 13, 11, 30, 0, 'Europe/Moscow'));
+    Planner::ensureDay(CarbonImmutable::now('Europe/Moscow'));
+    NutritionMeal::query()->where('type', 'breakfast')->update([
+        'status' => 'eaten',
+        'eaten_at' => '2026-07-13 08:00:00',
+    ]);
 
     app(HandlePhoto::class)->handle(['message' => [
         'photo' => [['file_id' => 'small'], ['file_id' => 'big']],
@@ -98,9 +121,11 @@ it('marks the current meal eaten from a food photo and stores ai feedback', func
     expect(lastOutText())->toContain('Идеально');
 });
 
-it('replies there are no snacks when a photo arrives with no current meal', function () {
-    // Late night: all windows are closed, currentMeal() returns null.
+it('replies there are no snacks when no meal window has candidates', function () {
+    // Все приёмы дня уже разобраны (skipped) → кандидатов нет → перекусов нет.
     $this->travelTo(CarbonImmutable::create(2026, 7, 13, 22, 30, 0, 'Europe/Moscow'));
+    Planner::ensureDay(CarbonImmutable::now('Europe/Moscow'));
+    NutritionMeal::query()->whereDate('date', '2026-07-13')->update(['status' => 'skipped']);
 
     app(HandlePhoto::class)->handle(['message' => [
         'photo' => [['file_id' => 'small'], ['file_id' => 'big']],

@@ -95,34 +95,22 @@ class HandlePhoto
     }
 
     /**
-     * Кандидаты для фото еды: пропущенные приёмы, чьё окно уже наступило, плюс
-     * текущий приём. По порядку окна. Пустой массив — приёмов нет (перекусов нет).
+     * Кандидаты для фото еды: незакрытые приёмы (pending|missed), чьё окно уже
+     * наступило (window_start <= now), по порядку окна. НЕ требуем window_end>=now —
+     * иначе просроченный, но ещё не помеченный missed приём выпадает и фото молча
+     * цепляется к следующему. Пустой массив — приёмов нет (перекусов нет).
      *
      * @return array<int, NutritionMeal>
      */
     private function foodCandidates(CarbonImmutable $now): array
     {
-        $missed = NutritionMeal::query()
+        return NutritionMeal::query()
             ->whereDate('date', $now->format('Y-m-d'))
-            ->where('status', 'missed')
+            ->whereIn('status', ['pending', 'missed'])
             ->where('window_start', '<=', $now->format('Y-m-d H:i:s'))
             ->orderBy('window_start')
-            ->get();
-
-        $byType = [];
-        foreach ($missed as $meal) {
-            $byType[$meal->type] = $meal;
-        }
-
-        $current = Planner::currentMeal($now);
-        if ($current !== null) {
-            $byType[$current->type] = $current;
-        }
-
-        $candidates = array_values($byType);
-        usort($candidates, fn ($a, $b) => $a->window_start->getTimestamp() <=> $b->window_start->getTimestamp());
-
-        return $candidates;
+            ->get()
+            ->all();
     }
 
     private function pedometer(TelegramClient $tg, string $fileId, CarbonImmutable $now, ?int $chatId = null): void

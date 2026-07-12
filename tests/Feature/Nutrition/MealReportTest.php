@@ -1,10 +1,12 @@
 <?php
 
 use App\Actions\Nutrition\HandleCallback;
+use App\Actions\Nutrition\HandleNumbers;
 use App\Actions\Nutrition\HandlePhoto;
 use App\Actions\Nutrition\HandleQuestion;
 use App\Models\NutritionMeal;
 use App\Models\NutritionMessage;
+use App\Models\NutritionMetric;
 use App\Support\Nutrition\Planner;
 use App\Support\Nutrition\Settings;
 use Carbon\CarbonImmutable;
@@ -213,4 +215,84 @@ it('marks a missed meal eaten from an ate callback', function () {
     ]]);
 
     expect(NutritionMeal::query()->where('type', 'breakfast')->value('status'))->toBe('eaten');
+});
+
+it('drops a stale meal-time wait when a later request clobbers it', function () {
+    // «Поел раньше» выставил awaiting_meal_time, но тик успел прислать metrics_request:
+    // ответ юзера «11500» относится к шагам, а не ко времени приёма.
+    $this->travelTo(CarbonImmutable::create(2026, 7, 13, 21, 40, 0, 'Europe/Moscow'));
+    Planner::ensureDay(CarbonImmutable::now('Europe/Moscow'));
+    Settings::set('awaiting_meal_time', 'lunch');
+    NutritionMessage::query()->create(['direction' => 'out', 'kind' => 'metrics_request', 'content' => 'Шаги?']);
+    fakeApis(null);
+
+    app(HandleNumbers::class)->handle(['message' => ['text' => '11500']]);
+
+    expect((int) NutritionMetric::query()->where('type', 'steps')->value('value'))->toBe(11500);
+    expect(Settings::get('awaiting_meal_time'))->toBeNull();
+    expect(NutritionMeal::query()->where('type', 'lunch')->value('status'))->toBe('pending');
+});
+
+it('does not overwrite an already eaten meal from a text report', function () {
+    $this->travelTo(CarbonImmutable::create(2026, 7, 13, 12, 0, 0, 'Europe/Moscow'));
+    Planner::ensureDay(CarbonImmutable::now('Europe/Moscow'));
+    NutritionMeal::query()->where('type', 'breakfast')->update([
+        'status' => 'eaten',
+        'eaten_at' => '2026-07-13 08:10:00',
+        'photo_file_id' => 'orig',
+        'ai_feedback' => 'Отличный завтрак!',
+    ]);
+
+    fakeApis([
+        'intent' => 'meal_report',
+        'reports' => [['meal' => 'breakfast', 'time' => '10:00', 'food' => 'овсянка']],
+        'reply' => 'Супер! 🙌🏼',
+    ]);
+
+    app(HandleQuestion::class)->handle(['message' => ['text' => 'да я утром позавтракал в 10 овсянкой']]);
+
+    $breakfast = NutritionMeal::query()->where('type', 'breakfast')->first();
+    expect($breakfast->eaten_at->format('H:i'))->toBe('08:10')
+        ->and($breakfast->photo_file_id)->toBe('orig')
+        ->and($breakfast->ai_feedback)->toBe('Отличный завтрак!');
+    expect(outText())->toContain('уже отмечен');
+});
+
+it('does not overwrite an already eaten meal via atepast time entry', function () {
+    $this->travelTo(CarbonImmutable::create(2026, 7, 13, 14, 0, 0, 'Europe/Moscow'));
+    Planner::ensureDay(CarbonImmutable::now('Europe/Moscow'));
+    NutritionMeal::query()->where('type', 'lunch')->update([
+        'status' => 'eaten',
+        'eaten_at' => '2026-07-13 12:30:00',
+        'ai_feedback' => 'Хороший обед!',
+    ]);
+    fakeApis(null);
+
+    app(HandleCallback::class)->handle(['callback_query' => ['id' => 'cbpp', 'data' => 'atepast:lunch']]);
+    app(HandleQuestion::class)->handle(['message' => ['text' => '13:00']]);
+
+    $lunch = NutritionMeal::query()->where('type', 'lunch')->first();
+    expect($lunch->eaten_at->format('H:i'))->toBe('12:30')
+        ->and($lunch->ai_feedback)->toBe('Хороший обед!');
+    expect(Settings::get('awaiting_meal_time'))->toBeNull();
+    expect(outText())->toContain('уже отмечен');
+});
+
+it('records the resolvable meal and asks about the ambiguous one in a mixed report', function () {
+    $this->travelTo(CarbonImmutable::create(2026, 7, 13, 15, 0, 0, 'Europe/Moscow'));
+    Planner::ensureDay(CarbonImmutable::now('Europe/Moscow'));
+
+    fakeApis([
+        'intent' => 'meal_report',
+        'reports' => [
+            ['meal' => 'breakfast', 'time' => '10:00', 'food' => 'овсянка'],
+            ['meal' => null, 'time' => null, 'food' => 'что-то ещё'],
+        ],
+        'reply' => 'Принял! 🙌🏼',
+    ]);
+
+    app(HandleQuestion::class)->handle(['message' => ['text' => 'позавтракал овсянкой в 10 и ещё что-то съел']]);
+
+    expect(NutritionMeal::query()->where('type', 'breakfast')->value('status'))->toBe('eaten');
+    expect(outText())->toContain('Какой это приём?');
 });
