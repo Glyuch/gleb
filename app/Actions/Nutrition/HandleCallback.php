@@ -34,6 +34,8 @@ class HandleCallback
             'adj' => $this->adjust($tg, $profile, $arg, $chatId),
             'program' => $this->programStart($tg, $profile, $chatId),
             'set' => $this->setSetting($tg, $profile, $arg, $chatId),
+            'chatmain' => $this->chatMain($tg, $profile, $arg, $chatId),
+            'onboard' => $this->onboard($tg, $profile, $arg, $chatId),
             default => $tg->send('Не понял действие 🤔', chatId: $chatId),
         };
 
@@ -191,6 +193,33 @@ class HandleCallback
 
         // kind=weight_request — следующее число распознается как стартовый вес.
         $tg->send(implode("\n", $lines), null, 'weight_request', $chatId);
+    }
+
+    /**
+     * Кнопка «Сделать этот чат основным?» после добавления бота в группу.
+     * yes → основной чат = чат этого колбэка; no → оставляем как было.
+     */
+    private function chatMain(TelegramClient $tg, NutritionProfile $profile, string $decision, ?int $chatId = null): void
+    {
+        if ($decision === 'yes' && $chatId !== null) {
+            $profile->update(['main_chat_id' => $chatId]);
+            $tg->send('Готово, теперь плановые сообщения буду слать сюда 👌🏻', chatId: $chatId);
+
+            return;
+        }
+
+        $tg->send('Ок, оставил как было 👌🏻', chatId: $chatId);
+    }
+
+    /**
+     * Колбэки анкеты онбординга. skip — «Пропустить» на последнем шаге: завершаем
+     * анкету без ответа о здоровье.
+     */
+    private function onboard(TelegramClient $tg, NutritionProfile $profile, string $arg, ?int $chatId = null): void
+    {
+        if ($arg === 'skip') {
+            app(Onboarding::class)->skip($profile, $chatId);
+        }
     }
 
     /**

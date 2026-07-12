@@ -74,13 +74,17 @@ it('redeems a valid invite code into an onboarding profile and marks it used', f
     $newProfile = NutritionProfile::query()->where('telegram_user_id', 555)->first();
     expect($newProfile)->not->toBeNull()
         ->and($newProfile->status)->toBe('onboarding')
-        ->and($newProfile->name)->toBe('Аня');
+        ->and($newProfile->name)->toBe('Аня')
+        ->and($newProfile->waiting('onboarding_step'))->toBe(1);
 
     expect($invite->fresh()->used_by_profile_id)->toBe($newProfile->id)
         ->and($invite->fresh()->used_at)->not->toBeNull();
 
+    // Погашение кода не только подтверждает, но и стартует анкету (первый вопрос).
     Http::assertSent(fn ($request) => str_contains($request->url(), '/sendMessage')
         && str_contains($request['text'], 'Код принят'));
+    Http::assertSent(fn ($request) => str_contains($request->url(), '/sendMessage')
+        && str_contains($request['text'], 'Как к тебе обращаться'));
 });
 
 it('politely refuses an unknown invite code and creates no profile', function () {
@@ -114,6 +118,22 @@ it('tells a paused profile it is on hold and does not route', function () {
 
     Http::assertSent(fn ($request) => str_contains($request->url(), '/sendMessage')
         && str_contains($request['text'], 'на паузе'));
+    expect(NutritionMessage::count())->toBe(0);
+});
+
+it('stays silent for a paused profile in a group chat', function () {
+    nutritionProfile(['telegram_user_id' => 559, 'status' => 'paused', 'is_admin' => false]);
+
+    Http::preventStrayRequests();
+    Http::fake(['api.telegram.org/*' => Http::response(['ok' => true, 'result' => ['message_id' => 1]])]);
+
+    (new ProcessNutritionUpdate(['message' => [
+        'from' => ['id' => 559],
+        'chat' => ['id' => -100559, 'type' => 'supergroup'],
+        'text' => '/today',
+    ]]))->handle();
+
+    Http::assertNothingSent();
     expect(NutritionMessage::count())->toBe(0);
 });
 

@@ -2,6 +2,7 @@
 
 namespace App\Actions\Nutrition;
 
+use App\Models\NutritionInvite;
 use App\Models\NutritionMeal;
 use App\Models\NutritionMetric;
 use App\Models\NutritionProfile;
@@ -48,6 +49,7 @@ class HandleCommand
             '/skip' => $this->skip($tg, $profile, $chatId),
             '/checkup' => $this->checkup($tg, $profile, $chatId),
             '/settings' => $this->settings($tg, $profile, $chatId),
+            '/invite' => $this->invite($tg, $profile, $chatId),
             default => $tg->send('Не знаю такой команды. /help — список команд.', chatId: $chatId),
         };
     }
@@ -270,6 +272,26 @@ class HandleCommand
     private function checkup(TelegramClient $tg, NutritionProfile $profile, ?int $chatId = null): void
     {
         app(RunCheckup::class)->handle($profile, onDemand: true, chatId: $chatId);
+    }
+
+    /**
+     * /invite: только для админ-профиля. Генерирует одноразовый инвайт-код и
+     * объясняет, как им воспользоваться. Не-админу — вежливый отказ.
+     */
+    private function invite(TelegramClient $tg, NutritionProfile $profile, ?int $chatId = null): void
+    {
+        if (! $profile->is_admin) {
+            $tg->send('Инвайты может создавать только владелец 🙂', chatId: $chatId);
+
+            return;
+        }
+
+        $invite = NutritionInvite::generate($profile);
+
+        $tg->send(
+            'Код: <b>'.$invite->code.'</b>. Друг пишет его боту в личку — и стартует онбординг.',
+            chatId: $chatId,
+        );
     }
 
     private function settings(TelegramClient $tg, NutritionProfile $profile, ?int $chatId = null): void

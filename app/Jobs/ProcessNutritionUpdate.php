@@ -7,6 +7,7 @@ use App\Actions\Nutrition\HandleCommand;
 use App\Actions\Nutrition\HandleNumbers;
 use App\Actions\Nutrition\HandlePhoto;
 use App\Actions\Nutrition\HandleQuestion;
+use App\Actions\Nutrition\Onboarding;
 use App\Models\NutritionInvite;
 use App\Models\NutritionMessage;
 use App\Models\NutritionProfile;
@@ -58,12 +59,15 @@ class ProcessNutritionUpdate implements ShouldQueue
                 return;
             }
 
-            // Профиль на паузе — короткое уведомление, без обработки.
+            // Профиль на паузе: в группе молчим (не мешаем чужой беседе), в личке —
+            // короткое уведомление, без обработки.
             if ($profile->status === 'paused') {
-                app(TelegramClient::class)->api('sendMessage', [
-                    'chat_id' => $chatId ?? $fromId,
-                    'text' => 'Профиль на паузе 💤',
-                ]);
+                if (! $this->isGroup()) {
+                    app(TelegramClient::class)->api('sendMessage', [
+                        'chat_id' => $chatId ?? $fromId,
+                        'text' => 'Профиль на паузе 💤',
+                    ]);
+                }
 
                 return;
             }
@@ -104,8 +108,8 @@ class ProcessNutritionUpdate implements ShouldQueue
 
     /**
      * Гасит инвайт-код: при валидном (существующий, ещё не использованный) создаёт
-     * onboarding-профиль отправителя, помечает инвайт использованным и отвечает
-     * заглушкой. Анкету онбординга подключит Task 5. Невалидный — вежливый отказ.
+     * onboarding-профиль отправителя, помечает инвайт использованным и запускает
+     * анкету онбординга. Невалидный — вежливый отказ.
      */
     private function redeemInvite(string $code, int $fromId, int $target): void
     {
@@ -140,12 +144,9 @@ class ProcessNutritionUpdate implements ShouldQueue
             'used_at' => CarbonImmutable::now('Europe/Moscow'),
         ]);
 
-        $tg->api('sendMessage', [
-            'chat_id' => $target,
-            'text' => 'Код принят! 🎉 Онбординг скоро — я задам пару вопросов и мы начнём.',
-        ]);
-
         Log::info('nutrition: invite redeemed', ['profile_id' => $profile->id]);
+
+        app(Onboarding::class)->start($profile, $target);
     }
 
     /**
@@ -273,6 +274,14 @@ class ProcessNutritionUpdate implements ShouldQueue
             return;
         }
 
+        // Профиль на онбординге: весь свободный текст ведёт анкету, мимо обычной
+        // маршрутизации (MealIntent/вопросы/числа). Фото и команды — особый разбор.
+        if ($profile->status === 'onboarding') {
+            $this->routeOnboarding($profile);
+
+            return;
+        }
+
         $message = $update['message'] ?? [];
 
         if (isset($message['photo'])) {
@@ -296,5 +305,49 @@ class ProcessNutritionUpdate implements ShouldQueue
         }
 
         app(HandleQuestion::class)->handle($update, $profile);
+    }
+
+    /**
+     * Маршрутизация во время онбординга: фото — мягкое «сначала закончим»;
+     * /help — обычная справка; /start — повтор текущего вопроса; прочие команды —
+     * «после онбординга»; любой другой текст — ответ на текущий вопрос анкеты.
+     */
+    private function routeOnboarding(NutritionProfile $profile): void
+    {
+        $message = $this->update['message'] ?? [];
+        $chatId = Tg::chatId($this->update);
+
+        $tg = app(TelegramClient::class);
+        $tg->profileId = $profile->id;
+
+        if (isset($message['photo'])) {
+            $tg->send('Сначала закончим знакомство 🙂 Ответь, пожалуйста, на вопрос выше — фото разберём потом.', chatId: $chatId);
+
+            return;
+        }
+
+        $text = trim((string) ($message['text'] ?? ''));
+
+        if (str_starts_with($text, '/')) {
+            $command = strtolower((string) (preg_split('/\s+/', $text)[0] ?? ''));
+
+            if ($command === '/help') {
+                app(HandleCommand::class)->handle($this->update, $profile);
+
+                return;
+            }
+
+            if ($command === '/start') {
+                app(Onboarding::class)->repeat($profile, $chatId);
+
+                return;
+            }
+
+            $tg->send('Это будет доступно после онбординга 🙂 Сейчас закончим пару вопросов.', chatId: $chatId);
+
+            return;
+        }
+
+        app(Onboarding::class)->answer($profile, $text, $chatId);
     }
 }
