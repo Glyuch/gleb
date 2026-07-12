@@ -169,6 +169,24 @@ it('does not duplicate a slot reminder within the same 30-minute bucket', functi
     expect(NutritionSentEvent::query()->where('event_key', 'like', '2026-07-16:meal:lunch:%')->count())->toBe(1);
 });
 
+it('does not burst-backfill missed slots when the worker was down (first tick at 14:20)', function () {
+    // Симуляция простоя воркера: до 14:20 тик не запускался, слот-события пусты.
+    $this->travelTo(CarbonImmutable::create(2026, 7, 16, 14, 20, 0, 'Europe/Moscow'));
+    prepareLunchWindow();
+
+    $this->artisan('nutrition:tick')->assertExitCode(0);
+
+    // Уходит РОВНО одно напоминание по обеду — наджа текущего 30-мин ведра (14:00),
+    // а не пачка за пропущенные слоты 13:00/13:30.
+    expect(NutritionMessage::query()->where('content', 'like', '%Поели обед%')->count())->toBe(1);
+    expect(NutritionSentEvent::query()->where('event_key', 'like', '2026-07-16:meal:lunch:%')->count())->toBe(1);
+    expect(NutritionSentEvent::query()->where('event_key', '2026-07-16:meal:lunch:14:00')->count())->toBe(1);
+
+    // Пропущенные слоты НЕ материализованы.
+    expect(NutritionSentEvent::query()->where('event_key', '2026-07-16:meal:lunch:13:00')->exists())->toBeFalse()
+        ->and(NutritionSentEvent::query()->where('event_key', '2026-07-16:meal:lunch:13:30')->exists())->toBeFalse();
+});
+
 it('in maintenance sends only the start reminder, no pre and no nudges', function () {
     Settings::set('phase', 'maintenance');
 
