@@ -4,6 +4,8 @@ namespace App\Actions\Nutrition;
 
 use App\Models\NutritionMeal;
 use App\Models\NutritionSetting;
+use App\Support\Nutrition\Claude;
+use App\Support\Nutrition\MealLogger;
 use App\Support\Nutrition\MealPlan;
 use App\Support\Nutrition\Planner;
 use App\Support\Nutrition\ProgramStatus;
@@ -27,6 +29,8 @@ class HandleCallback
         match ($action) {
             'ate' => $this->ate($tg, $arg, $chatId),
             'skip' => $this->skip($tg, $arg, $chatId),
+            'mealphoto' => $this->mealPhoto($tg, $arg, $chatId),
+            'atepast' => $this->atePast($tg, $arg, $chatId),
             'adj' => $this->adjust($tg, $arg, $chatId),
             'program' => $this->programStart($tg, $chatId),
             'set' => $this->setSetting($tg, $arg, $chatId),
@@ -47,8 +51,8 @@ class HandleCallback
             return;
         }
 
-        // Повторный/устаревший callback: не затираем eaten_at/фото/фидбек.
-        if ($meal->status !== 'pending') {
+        // Записываем и pending, и missed (поздняя отметка). Уже eaten/skipped не трогаем.
+        if (! in_array($meal->status, ['pending', 'missed'], true)) {
             $tg->send('Этот приём уже отмечен 👌🏻', chatId: $chatId);
 
             return;
@@ -77,6 +81,68 @@ class HandleCallback
         $meal->update(['status' => 'skipped']);
         Planner::recalculate(CarbonImmutable::now('Europe/Moscow')->startOfDay());
         $tg->send(MealPlan::LABELS[$type].' пропущен ⏭', chatId: $chatId);
+    }
+
+    /**
+     * Выбор приёма для отложенного фото: берём сохранённый file_id, распознаём,
+     * помечаем приём съеденным и очищаем ожидание.
+     */
+    private function mealPhoto(TelegramClient $tg, string $type, ?int $chatId = null): void
+    {
+        if (! in_array($type, MealPlan::TYPES, true)) {
+            return;
+        }
+
+        $fileId = Settings::get('awaiting_meal_photo');
+        if (! is_string($fileId) || $fileId === '') {
+            $tg->send('Фото не найдено, пришли ещё раз 🙏', chatId: $chatId);
+
+            return;
+        }
+
+        $meal = $this->meal($type);
+        if ($meal === null) {
+            $tg->send('Не нашёл такой приём на сегодня 🤔', chatId: $chatId);
+
+            return;
+        }
+
+        $now = CarbonImmutable::now('Europe/Moscow');
+
+        $image = $tg->downloadPhotoBase64($fileId);
+        $feedback = $image !== null
+            ? Claude::vision($image, MealLogger::foodPrompt($type))
+            : null;
+
+        Planner::markEaten($meal, $now, $fileId, $feedback);
+        $this->clearKey('awaiting_meal_photo');
+
+        $lines = [$feedback ?? 'Записал приём 👌🏻 Разбор пришлю позже'];
+        $tail = MealLogger::windowsTail($now);
+        if ($tail !== '') {
+            $lines[] = '';
+            $lines[] = $tail;
+        }
+        $lines[] = '';
+        $lines[] = 'Поел раньше? Напиши время, например «в 10:00» — поправлю.';
+
+        $tg->send(implode("\n", $lines), chatId: $chatId);
+    }
+
+    /**
+     * «Поел раньше»: ждём время ЧЧ:ММ следующим сообщением (перехватит SettingInput).
+     */
+    private function atePast(TelegramClient $tg, string $type, ?int $chatId = null): void
+    {
+        if (! in_array($type, MealPlan::TYPES, true)) {
+            return;
+        }
+
+        Settings::set('awaiting_meal_time', $type);
+        // Взаимоисключаем с ожиданием настройки.
+        $this->clearKey('awaiting_setting');
+
+        $tg->send('Во сколько поел? Пришли время ЧЧ:ММ, например 10:00', chatId: $chatId);
     }
 
     private function adjust(TelegramClient $tg, string $decision, ?int $chatId = null): void
@@ -143,6 +209,9 @@ class HandleCallback
         }
 
         Settings::set('awaiting_setting', $key);
+        // Взаимоисключаем с ожиданием времени приёма.
+        $this->clearKey('awaiting_meal_time');
+
         $tg->send($prompts[$key], null, 'setting_request', $chatId);
     }
 
@@ -153,6 +222,14 @@ class HandleCallback
     private function clearPending(): void
     {
         NutritionSetting::query()->where('key', 'pending_adjustments')->delete();
+    }
+
+    /**
+     * Сбрасывает ключ настройки удалением строки (value NOT NULL → «пусто» = нет строки).
+     */
+    private function clearKey(string $key): void
+    {
+        NutritionSetting::query()->where('key', $key)->delete();
     }
 
     private function meal(string $type): ?NutritionMeal

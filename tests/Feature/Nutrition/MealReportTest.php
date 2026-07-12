@@ -1,0 +1,216 @@
+<?php
+
+use App\Actions\Nutrition\HandleCallback;
+use App\Actions\Nutrition\HandlePhoto;
+use App\Actions\Nutrition\HandleQuestion;
+use App\Models\NutritionMeal;
+use App\Models\NutritionMessage;
+use App\Support\Nutrition\Planner;
+use App\Support\Nutrition\Settings;
+use Carbon\CarbonImmutable;
+use Illuminate\Support\Facades\Http;
+
+beforeEach(function () {
+    config([
+        'nutrition.chat_id' => 123,
+        'nutrition.bot_token' => 'test-token',
+        'nutrition.anthropic_key' => 'test-key',
+        'nutrition.models.vision' => 'claude-haiku-4-5',
+        'nutrition.models.chat' => 'claude-sonnet-5',
+    ]);
+
+    Http::preventStrayRequests();
+});
+
+/**
+ * Ставит фейки Telegram + Anthropic. Для vision-запросов (есть image-блок)
+ * всегда возвращаем реакцию на еду; для текстовых — переданный JSON классификатора
+ * (или дефолтную «Идеально!», если $classifyJson === null — имитируем невалидный JSON).
+ */
+function fakeApis(?array $classifyJson): void
+{
+    Http::fake([
+        'api.telegram.org/bot*/getFile*' => Http::response(['ok' => true, 'result' => ['file_path' => 'photos/x.jpg']]),
+        'api.telegram.org/file/*' => Http::response('BINARYIMAGE'),
+        'api.telegram.org/*' => Http::response(['ok' => true, 'result' => ['message_id' => 1]]),
+        'api.anthropic.com/*' => function ($request) use ($classifyJson) {
+            $body = json_encode($request->data(), JSON_UNESCAPED_UNICODE);
+
+            if (str_contains($body, '"type":"image"')) {
+                return Http::response(['content' => [['type' => 'text', 'text' => 'Идеально! 🙌🏼']]]);
+            }
+
+            $text = $classifyJson === null
+                ? 'Идеально! 🙌🏼'
+                : json_encode($classifyJson, JSON_UNESCAPED_UNICODE);
+
+            return Http::response(['content' => [['type' => 'text', 'text' => $text]]]);
+        },
+    ]);
+}
+
+function outText(): ?string
+{
+    return NutritionMessage::query()->where('direction', 'out')->orderByDesc('id')->value('content');
+}
+
+it('logs breakfast from free text when it was missed and shifts lunch', function () {
+    $this->travelTo(CarbonImmutable::create(2026, 7, 13, 12, 0, 0, 'Europe/Moscow'));
+    Planner::ensureDay(CarbonImmutable::now('Europe/Moscow'));
+    NutritionMeal::query()->where('type', 'breakfast')->update(['status' => 'missed']);
+
+    fakeApis([
+        'intent' => 'meal_report',
+        'reports' => [['meal' => 'breakfast', 'time' => '10:00', 'food' => 'овсянка+груша']],
+        'reply' => 'Отличный завтрак! 🙌🏼',
+    ]);
+
+    app(HandleQuestion::class)->handle(['message' => ['text' => 'забыл сфоткать, позавтракал в 10:00, овсянка+груша']]);
+
+    $breakfast = NutritionMeal::query()->where('type', 'breakfast')->first();
+    expect($breakfast->status)->toBe('eaten')
+        ->and($breakfast->eaten_at->format('H:i'))->toBe('10:00');
+
+    $lunch = NutritionMeal::query()->where('type', 'lunch')->first();
+    expect($lunch->window_start->format('H:i'))->toBe('13:00');
+    expect(outText())->toContain('13:00');
+});
+
+it('answers a question without touching meals', function () {
+    $this->travelTo(CarbonImmutable::create(2026, 7, 13, 8, 0, 0, 'Europe/Moscow'));
+    Planner::ensureDay(CarbonImmutable::now('Europe/Moscow'));
+
+    fakeApis([
+        'intent' => 'question',
+        'reports' => [],
+        'reply' => 'На завтрак — сложные углеводы плюс фрукт 👌🏻',
+    ]);
+
+    app(HandleQuestion::class)->handle(['message' => ['text' => 'что съесть на завтрак?']]);
+
+    expect(NutritionMeal::query()->where('status', 'eaten')->count())->toBe(0);
+    expect(outText())->toContain('сложные углеводы');
+});
+
+it('logs two meals from one message and shifts snack', function () {
+    $this->travelTo(CarbonImmutable::create(2026, 7, 13, 15, 0, 0, 'Europe/Moscow'));
+    Planner::ensureDay(CarbonImmutable::now('Europe/Moscow'));
+
+    fakeApis([
+        'intent' => 'meal_report',
+        'reports' => [
+            ['meal' => 'breakfast', 'time' => '10:00', 'food' => 'овсянка'],
+            ['meal' => 'lunch', 'time' => '14:00', 'food' => 'курица с салатом'],
+        ],
+        'reply' => 'Хорошо поел! 🙌🏼',
+    ]);
+
+    app(HandleQuestion::class)->handle(['message' => ['text' => 'позавтракал в 10 овсянкой, а в 14 обед — курица с салатом']]);
+
+    expect(NutritionMeal::query()->where('type', 'breakfast')->value('status'))->toBe('eaten')
+        ->and(NutritionMeal::query()->where('type', 'lunch')->value('status'))->toBe('eaten');
+
+    $snack = NutritionMeal::query()->where('type', 'snack')->first();
+    expect($snack->window_start->format('H:i'))->toBe('17:00');
+    expect(outText())->toContain('Полдник');
+});
+
+it('asks which meal a late food photo belongs to when a meal was missed', function () {
+    $this->travelTo(CarbonImmutable::create(2026, 7, 13, 12, 0, 0, 'Europe/Moscow'));
+    Planner::ensureDay(CarbonImmutable::now('Europe/Moscow'));
+    NutritionMeal::query()->where('type', 'breakfast')->update(['status' => 'missed']);
+    fakeApis(null);
+
+    app(HandlePhoto::class)->handle(['message' => [
+        'photo' => [['file_id' => 'small'], ['file_id' => 'big']],
+    ]]);
+
+    expect(NutritionMeal::query()->where('status', 'eaten')->count())->toBe(0);
+    expect(Settings::get('awaiting_meal_photo'))->toBe('big');
+
+    Http::assertSent(fn ($r) => str_contains($r->url(), '/sendMessage')
+        && str_contains((string) ($r['reply_markup'] ?? ''), 'mealphoto:breakfast')
+        && str_contains((string) ($r['reply_markup'] ?? ''), 'mealphoto:lunch'));
+    // Vision не вызывали до выбора приёма.
+    Http::assertNotSent(fn ($r) => str_contains($r->url(), 'api.anthropic.com'));
+});
+
+it('logs the chosen meal from a mealphoto callback and clears the pending photo', function () {
+    $this->travelTo(CarbonImmutable::create(2026, 7, 13, 12, 0, 0, 'Europe/Moscow'));
+    Planner::ensureDay(CarbonImmutable::now('Europe/Moscow'));
+    NutritionMeal::query()->where('type', 'breakfast')->update(['status' => 'missed']);
+    Settings::set('awaiting_meal_photo', 'big');
+    fakeApis(null);
+
+    app(HandleCallback::class)->handle(['callback_query' => [
+        'id' => 'cbm',
+        'data' => 'mealphoto:breakfast',
+    ]]);
+
+    $breakfast = NutritionMeal::query()->where('type', 'breakfast')->first();
+    expect($breakfast->status)->toBe('eaten')
+        ->and($breakfast->photo_file_id)->toBe('big')
+        ->and($breakfast->ai_feedback)->toBe('Идеально! 🙌🏼');
+
+    expect(Settings::get('awaiting_meal_photo'))->toBeNull();
+
+    $lunch = NutritionMeal::query()->where('type', 'lunch')->first();
+    expect($lunch->window_start->format('H:i'))->not->toBe('11:00');
+    Http::assertSent(fn ($r) => str_contains($r->url(), '/answerCallbackQuery'));
+});
+
+it('logs a meal via atepast then a typed time', function () {
+    $this->travelTo(CarbonImmutable::create(2026, 7, 13, 14, 0, 0, 'Europe/Moscow'));
+    Planner::ensureDay(CarbonImmutable::now('Europe/Moscow'));
+    fakeApis(null);
+
+    app(HandleCallback::class)->handle(['callback_query' => [
+        'id' => 'cbp',
+        'data' => 'atepast:lunch',
+    ]]);
+    expect(Settings::get('awaiting_meal_time'))->toBe('lunch');
+
+    app(HandleQuestion::class)->handle(['message' => ['text' => '13:30']]);
+
+    $lunch = NutritionMeal::query()->where('type', 'lunch')->first();
+    expect($lunch->status)->toBe('eaten')
+        ->and($lunch->eaten_at->format('H:i'))->toBe('13:30');
+
+    $snack = NutritionMeal::query()->where('type', 'snack')->first();
+    expect($snack->window_start->format('H:i'))->toBe('16:30');
+    expect(Settings::get('awaiting_meal_time'))->toBeNull();
+});
+
+it('logs a food photo directly when only the current meal is a candidate', function () {
+    $this->travelTo(CarbonImmutable::create(2026, 7, 13, 12, 0, 0, 'Europe/Moscow'));
+    Planner::ensureDay(CarbonImmutable::now('Europe/Moscow'));
+    NutritionMeal::query()->where('type', 'breakfast')->update([
+        'status' => 'eaten',
+        'eaten_at' => '2026-07-13 08:00:00',
+    ]);
+    fakeApis(null);
+
+    app(HandlePhoto::class)->handle(['message' => [
+        'photo' => [['file_id' => 'small'], ['file_id' => 'big']],
+    ]]);
+
+    $lunch = NutritionMeal::query()->where('type', 'lunch')->first();
+    expect($lunch->status)->toBe('eaten')
+        ->and($lunch->photo_file_id)->toBe('big')
+        ->and($lunch->ai_feedback)->toBe('Идеально! 🙌🏼');
+    expect(Settings::get('awaiting_meal_photo'))->toBeNull();
+});
+
+it('marks a missed meal eaten from an ate callback', function () {
+    $this->travelTo(CarbonImmutable::create(2026, 7, 13, 12, 0, 0, 'Europe/Moscow'));
+    Planner::ensureDay(CarbonImmutable::now('Europe/Moscow'));
+    NutritionMeal::query()->where('type', 'breakfast')->update(['status' => 'missed']);
+    fakeApis(null);
+
+    app(HandleCallback::class)->handle(['callback_query' => [
+        'id' => 'cba',
+        'data' => 'ate:breakfast',
+    ]]);
+
+    expect(NutritionMeal::query()->where('type', 'breakfast')->value('status'))->toBe('eaten');
+});

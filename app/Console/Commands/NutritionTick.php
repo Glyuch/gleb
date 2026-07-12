@@ -245,9 +245,14 @@ class NutritionTick extends Command
      */
     private function mealButtons(string $type): array
     {
-        return [[
-            ['text' => '✅ Поел', 'callback_data' => "ate:{$type}"],
-            ['text' => '⏭ Пропускаю', 'callback_data' => "skip:{$type}"],
-        ]];
+        return [
+            [
+                ['text' => '✅ Поел', 'callback_data' => "ate:{$type}"],
+                ['text' => '⏭ Пропускаю', 'callback_data' => "skip:{$type}"],
+            ],
+            [
+                ['text' => '🕐 Поел раньше', 'callback_data' => "atepast:{$type}"],
+            ],
+        ];
     }
 }

@@ -25,8 +25,8 @@ class HandleCommand
 
     public function handle(array $update): void
     {
-        // Любая команда выводит из режима ожидания значения настройки.
-        NutritionSetting::query()->where('key', 'awaiting_setting')->delete();
+        // Любая команда выводит из режима ожидания значения настройки и времени приёма.
+        NutritionSetting::query()->whereIn('key', ['awaiting_setting', 'awaiting_meal_time'])->delete();
 
         $tg = app(TelegramClient::class);
         $chatId = Tg::chatId($update);

@@ -2,25 +2,33 @@
 
 namespace App\Support\Nutrition;
 
+use App\Models\NutritionMeal;
 use App\Models\NutritionMessage;
 use App\Models\NutritionSetting;
 use Carbon\CarbonImmutable;
 
 /**
- * Перехват следующего сообщения как значения интерактивной настройки.
+ * Перехват следующего сообщения как значения интерактивной настройки или времени
+ * приёма.
  *
  * Когда пользователь нажал кнопку в /settings, ключ настройки лежит в
- * awaiting_setting. Ближайшее текстовое/числовое сообщение трактуется как
+ * awaiting_setting. После кнопки «🕐 Поел раньше» тип приёма лежит в
+ * awaiting_meal_time. Ближайшее текстовое/числовое сообщение трактуется как
  * значение и обрабатывается здесь — до обычной логики HandleNumbers/HandleQuestion.
  */
 class SettingInput
 {
     /**
      * @param  array<string, mixed>  $update
-     * @return bool true, если сообщение поглощено как значение настройки
+     * @return bool true, если сообщение поглощено как значение настройки/времени приёма
      */
     public static function intercept(array $update): bool
     {
+        // Ожидание времени приёма — раньше настройки (ключи взаимоисключающи).
+        if (self::interceptMealTime($update)) {
+            return true;
+        }
+
         $key = Settings::get('awaiting_setting');
         if (! is_string($key) || $key === '') {
             return false;
@@ -54,6 +62,64 @@ class SettingInput
             // Неизвестный ключ — сбрасываем и отдаём сообщение обычной обработке.
             default => self::abandon(),
         };
+    }
+
+    /**
+     * Ожидание времени приёма (после «🕐 Поел раньше»): следующее ЧЧ:ММ — время
+     * приёма. Пока ожидание активно, любое сообщение трактуется как попытка ввода
+     * времени (невалидное → подсказка, ожидание сохраняется).
+     *
+     * @param  array<string, mixed>  $update
+     */
+    private static function interceptMealTime(array $update): bool
+    {
+        $type = Settings::get('awaiting_meal_time');
+        if (! is_string($type) || ! in_array($type, MealPlan::TYPES, true)) {
+            return false;
+        }
+
+        $tg = app(TelegramClient::class);
+        $chatId = Tg::chatId($update);
+        $text = trim((string) ($update['message']['text'] ?? ''));
+
+        if (! preg_match('/^(\d{1,2}):(\d{2})$/', $text, $m)) {
+            $tg->send('Не понял время. Пришли в формате ЧЧ:ММ, например 10:00', chatId: $chatId);
+
+            return true;
+        }
+
+        $hours = (int) $m[1];
+        $minutes = (int) $m[2];
+
+        if ($hours > 23 || $minutes > 59) {
+            $tg->send('Такого времени не бывает. Пришли в формате ЧЧ:ММ, например 10:00', chatId: $chatId);
+
+            return true;
+        }
+
+        $now = CarbonImmutable::now('Europe/Moscow');
+        Planner::ensureDay($now);
+
+        $meal = NutritionMeal::query()
+            ->whereDate('date', $now->format('Y-m-d'))
+            ->where('type', $type)
+            ->first();
+
+        if ($meal !== null) {
+            Planner::markEaten($meal, $now->setTime($hours, $minutes), null, null);
+        }
+
+        self::clearMealTime();
+
+        $reply = 'Записал '.MealPlan::LABELS[$type].' в '.sprintf('%02d:%02d', $hours, $minutes).' 👌🏻';
+        $tail = MealLogger::windowsTail($now);
+        if ($tail !== '') {
+            $reply .= "\n\n".$tail;
+        }
+
+        $tg->send($reply, chatId: $chatId);
+
+        return true;
     }
 
     private static function applyTime(TelegramClient $tg, ?int $chatId, string $key, string $text, int $min, int $max, string $label, string $emoji): bool
@@ -131,5 +197,10 @@ class SettingInput
     private static function clear(): void
     {
         NutritionSetting::query()->where('key', 'awaiting_setting')->delete();
+    }
+
+    private static function clearMealTime(): void
+    {
+        NutritionSetting::query()->where('key', 'awaiting_meal_time')->delete();
     }
 }

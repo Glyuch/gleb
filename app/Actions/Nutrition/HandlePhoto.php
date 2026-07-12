@@ -6,6 +6,7 @@ use App\Models\NutritionMeal;
 use App\Models\NutritionMessage;
 use App\Models\NutritionMetric;
 use App\Support\Nutrition\Claude;
+use App\Support\Nutrition\MealLogger;
 use App\Support\Nutrition\MealPlan;
 use App\Support\Nutrition\PendingRequest;
 use App\Support\Nutrition\Planner;
@@ -16,8 +17,6 @@ use Carbon\CarbonImmutable;
 
 class HandlePhoto
 {
-    private const FORBIDDEN = 'сахар, мучное/выпечка, жареное, фастфуд, газировка/пакетированные соки, алкоголь';
-
     public function handle(array $update): void
     {
         $tg = app(TelegramClient::class);
@@ -25,7 +24,6 @@ class HandlePhoto
         $now = CarbonImmutable::now('Europe/Moscow');
 
         Planner::ensureDay($now);
-        $meal = Planner::currentMeal($now);
 
         $photos = $update['message']['photo'] ?? [];
         if ($photos === []) {
@@ -54,18 +52,35 @@ class HandlePhoto
             return;
         }
 
-        // 3. Фото еды: если нет активного приёма — перекусов на программе нет.
-        if ($meal === null) {
+        // 3. Фото еды: кандидаты = пропущенные приёмы до текущего + текущий приём.
+        $candidates = $this->foodCandidates($now);
+
+        if ($candidates === []) {
             $tg->send('Перекусов на программе нет 👌🏻 До следующего приёма — вода/чай/кофе без всего', chatId: $chatId);
 
             return;
         }
 
+        // Есть пропущенные приёмы до текущего — не пишем разбор молча, уточняем приём.
+        if (count($candidates) > 1) {
+            Settings::set('awaiting_meal_photo', $fileId);
+
+            $buttons = [];
+            foreach ($candidates as $candidate) {
+                $buttons[] = [['text' => MealPlan::LABELS[$candidate->type], 'callback_data' => 'mealphoto:'.$candidate->type]];
+            }
+
+            $tg->send('Это какой приём? 🤔', $buttons, chatId: $chatId);
+
+            return;
+        }
+
+        $meal = $candidates[0];
         $warning = $this->tooSoonWarning($now);
 
         $image = $tg->downloadPhotoBase64($fileId);
         $feedback = $image !== null
-            ? Claude::vision($image, $this->foodPrompt($meal->type))
+            ? Claude::vision($image, MealLogger::foodPrompt($meal->type))
             : null;
 
         Planner::markEaten($meal, $now, $fileId, $feedback);
@@ -77,6 +92,37 @@ class HandlePhoto
         }
 
         $tg->send($reply, chatId: $chatId);
+    }
+
+    /**
+     * Кандидаты для фото еды: пропущенные приёмы, чьё окно уже наступило, плюс
+     * текущий приём. По порядку окна. Пустой массив — приёмов нет (перекусов нет).
+     *
+     * @return array<int, NutritionMeal>
+     */
+    private function foodCandidates(CarbonImmutable $now): array
+    {
+        $missed = NutritionMeal::query()
+            ->whereDate('date', $now->format('Y-m-d'))
+            ->where('status', 'missed')
+            ->where('window_start', '<=', $now->format('Y-m-d H:i:s'))
+            ->orderBy('window_start')
+            ->get();
+
+        $byType = [];
+        foreach ($missed as $meal) {
+            $byType[$meal->type] = $meal;
+        }
+
+        $current = Planner::currentMeal($now);
+        if ($current !== null) {
+            $byType[$current->type] = $current;
+        }
+
+        $candidates = array_values($byType);
+        usort($candidates, fn ($a, $b) => $a->window_start->getTimestamp() <=> $b->window_start->getTimestamp());
+
+        return $candidates;
     }
 
     private function pedometer(TelegramClient $tg, string $fileId, CarbonImmutable $now, ?int $chatId = null): void
@@ -129,17 +175,5 @@ class HandlePhoto
         }
 
         return null;
-    }
-
-    private function foodPrompt(string $type): string
-    {
-        $portion = (int) Settings::get('portion_adjustment');
-        $portionStr = ($portion > 0 ? '+' : '').$portion.'%';
-
-        return 'На фото приём: '.MealPlan::LABELS[$type].".\n"
-            .'Ожидаемый состав: '.MealPlan::COMPOSITION[$type].".\n"
-            .'Запрещёнка (кратко): '.self::FORBIDDEN.".\n"
-            .'Поправка порций: '.$portionStr.".\n"
-            .'Оцени приём в стиле Насти — тепло и по делу, 1–3 предложения; при необходимости кратко объясни «почему» через физиологию.';
     }
 }
