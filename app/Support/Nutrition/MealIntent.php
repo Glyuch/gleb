@@ -13,11 +13,11 @@ use Carbon\CarbonImmutable;
 class MealIntent
 {
     private const INSTRUCTION = <<<'TXT'
-        Классифицируй сообщение Глеба ниже. Верни ОТВЕТ СТРОГО в формате JSON без пояснений и без markdown-заборов:
+        Классифицируй сообщение клиента ниже. Верни ОТВЕТ СТРОГО в формате JSON без пояснений и без markdown-заборов:
         {"intent": "meal_report|question|other", "reports": [{"meal": "breakfast|lunch|snack|dinner|null", "time": "HH:MM|null", "food": "краткое описание"}], "reply": "текст в стиле нутрициолога"}
 
         intent:
-        - "meal_report" — Глеб сообщает, что уже поел (в т.ч. без фото: «позавтракал», «съел обед», «перекусил»). reports непусто.
+        - "meal_report" — клиент сообщает, что уже поел (в т.ч. без фото: «позавтракал», «съел обед», «перекусил»). reports непусто.
         - "question" — вопрос по питанию/программе. reports = [].
         - "other" — всё прочее (болтовня, статусы). reports = [].
 
@@ -34,7 +34,7 @@ class MealIntent
      */
     public static function classify(NutritionProfile $profile, string $text, CarbonImmutable $now): ?array
     {
-        $prompt = PromptBuilder::dayContext($profile, $now)."\n\n".self::INSTRUCTION."\n\nСообщение Глеба: ".$text;
+        $prompt = PromptBuilder::dayContext($profile, $now)."\n\n".self::INSTRUCTION."\n\nСообщение клиента: ".$text;
 
         $raw = Claude::text(
             [['type' => 'text', 'text' => $prompt]],

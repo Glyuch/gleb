@@ -73,6 +73,12 @@ class NutritionProfile extends Model
         ];
     }
 
+    /** Имя клиента для обращений в промптах; при пустом — «клиент». */
+    public function displayName(): string
+    {
+        return filled($this->name) ? (string) $this->name : 'клиент';
+    }
+
     /** Первый профиль-администратор (владелец инстанса). */
     public static function admin(): ?self
     {

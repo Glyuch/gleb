@@ -33,7 +33,7 @@ class HandleQuestion
         // ИИ недоступен/невалидный JSON → фолбэк: обычный ответ на вопрос.
         if ($intent === null) {
             $answer = Claude::text(
-                [['type' => 'text', 'text' => PromptBuilder::dayContext($profile, $now)."\n\nВопрос Глеба: ".$text]],
+                [['type' => 'text', 'text' => PromptBuilder::dayContext($profile, $now)."\n\nВопрос клиента: ".$text]],
                 (string) config('nutrition.models.chat'),
                 800,
                 $profile,

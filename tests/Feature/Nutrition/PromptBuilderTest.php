@@ -20,6 +20,24 @@ it('builds a system prompt with the persona, knowledge base and the profile ai_p
         ->and($system)->toContain('Липиды — зона внимания');
 });
 
+it('personalizes the persona and day context with the profile name, not the owner', function () {
+    $andrey = nutritionProfile(['telegram_user_id' => 333, 'name' => 'Андрей', 'is_admin' => false]);
+
+    $system = PromptBuilder::system($andrey);
+    $context = PromptBuilder::dayContext($andrey, CarbonImmutable::parse('2026-07-13', 'Europe/Moscow'));
+
+    expect($system)->toContain('Андрей')
+        ->and($system)->not->toContain('Глеб')
+        ->and($context)->toContain('Андрей')
+        ->and($context)->not->toContain('Глеб');
+});
+
+it('falls back to «клиент» in the persona when the name is empty', function () {
+    $nameless = nutritionProfile(['telegram_user_id' => 444, 'name' => '', 'is_admin' => false]);
+
+    expect(PromptBuilder::system($nameless))->toContain('клиент');
+});
+
 it('includes meal labels and weight metrics in the day context', function () {
     $date = CarbonImmutable::parse('2026-07-13', 'Europe/Moscow');
     $this->travelTo($date);

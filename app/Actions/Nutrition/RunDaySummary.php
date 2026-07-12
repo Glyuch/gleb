@@ -14,7 +14,7 @@ use Carbon\CarbonImmutable;
 class RunDaySummary
 {
     private const INSTRUCTION = <<<'TXT'
-        Подведи итог дня для Глеба: что прошло по плану, что нарушено (интервалы между приёмами,
+        что прошло по плану, что нарушено (интервалы между приёмами,
         пропуски, запрещёнка из фидбеков, шаги и вода против цели) и один фокус на завтра.
         Пиши тепло, по-дружески на «ты», 4–6 предложений. Без списков и заголовков.
         TXT;
@@ -29,7 +29,8 @@ class RunDaySummary
         $tg = app(TelegramClient::class);
         $tg->profileId = $profile->id;
 
-        $prompt = PromptBuilder::dayContext($profile, $now)."\n\n".self::INSTRUCTION;
+        $prompt = PromptBuilder::dayContext($profile, $now)."\n\n"
+            .'Подведи итог дня для клиента '.$profile->displayName().': '.self::INSTRUCTION;
 
         $text = Claude::text(
             [['type' => 'text', 'text' => $prompt]],
