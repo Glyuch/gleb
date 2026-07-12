@@ -34,11 +34,19 @@ it('creates all v2 tables and columns', function () {
         ->and(Schema::hasColumn('nutrition_messages', 'profile_id'))->toBeTrue();
 });
 
-it('keeps the legacy meals unique[date,type] index working', function () {
-    NutritionMeal::create(['date' => '2026-07-11', 'type' => 'lunch']);
+it('enforces the per-profile meals unique[profile_id,date,type] index', function () {
+    $a = nutritionProfile(['telegram_user_id' => 100]);
+    $b = nutritionProfile(['telegram_user_id' => 200, 'is_admin' => false]);
 
-    expect(fn () => NutritionMeal::create(['date' => '2026-07-11', 'type' => 'lunch']))
+    NutritionMeal::create(['profile_id' => $a->id, 'date' => '2026-07-11', 'type' => 'lunch']);
+
+    // Тот же профиль/дата/тип — дубль запрещён.
+    expect(fn () => NutritionMeal::create(['profile_id' => $a->id, 'date' => '2026-07-11', 'type' => 'lunch']))
         ->toThrow(QueryException::class);
+
+    // Другой профиль — та же дата/тип разрешены (изоляция).
+    $other = NutritionMeal::create(['profile_id' => $b->id, 'date' => '2026-07-11', 'type' => 'lunch']);
+    expect($other->exists)->toBeTrue();
 });
 
 it('generates unique readable invite codes tied to the creator', function () {
