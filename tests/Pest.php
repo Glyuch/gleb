@@ -66,6 +66,9 @@ function nutritionProfile(array $attrs = []): NutritionProfile
         'name' => 'Глеб',
         'main_chat_id' => 123,
         'status' => 'active',
+        // Программа по умолчанию запущена: тик-гейт по program_started_on пройден.
+        // Там, где null — часть сценария, переопредели 'program_started_on' => null.
+        'program_started_on' => now('Europe/Moscow')->toDateString(),
         'is_admin' => true,
     ], $attrs));
 }

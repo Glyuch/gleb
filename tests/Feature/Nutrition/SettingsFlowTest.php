@@ -53,6 +53,9 @@ function sentContains(string $needle): bool
 }
 
 it('onboards on /start without a started program and offers the start button', function () {
+    // null — часть сценария: программа ещё не запущена.
+    $this->profile->update(['program_started_on' => null]);
+
     app(HandleCommand::class)->handle(['message' => ['text' => '/start']], $this->profile);
 
     expect(sentContains('не запущена'))->toBeTrue()
@@ -60,6 +63,8 @@ it('onboards on /start without a started program and offers the start button', f
 });
 
 it('starts the program on the program:start callback and asks for weight', function () {
+    // null — часть сценария: кнопка «Начать программу» и должна установить дату.
+    $this->profile->update(['program_started_on' => null]);
     $this->seed(NutritionTopicSeeder::class);
     $this->travelTo(CarbonImmutable::create(2026, 7, 13, 9, 0, 0, 'Europe/Moscow'));
 

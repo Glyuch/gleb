@@ -105,6 +105,22 @@ class NutritionTick extends Command
             return;
         }
 
+        // Guard: анкета завершена (status=active), но программа ещё не запущена
+        // кнопкой «Начать программу» (program_started_on=null). До старта тик
+        // не должен слать приветствие/напоминания/метрики/саммари.
+        if ($profile->program_started_on === null) {
+            if ($this->dryRun) {
+                $this->line("[{$profile->name}] пропуск: программа не начата");
+                $this->line('');
+            } else {
+                NutritionSentEvent::once("p{$profile->id}:{$d}:not-started", function () use ($profile) {
+                    Log::info('nutrition: tick skipped profile before program start', ['profile_id' => $profile->id]);
+                });
+            }
+
+            return;
+        }
+
         $phase = (string) $profile->phase;
         $chat = (int) $profile->main_chat_id;
         $tg = app(TelegramClient::class);

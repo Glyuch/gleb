@@ -87,7 +87,8 @@ it('recomputes topic-send dates on re-run without resetting sent_at', function (
 });
 
 it('start-program targets a specific profile via --profile', function () {
-    $admin = nutritionProfile();
+    // null — часть сценария: admin программу не стартовал, start-program целится в other.
+    $admin = nutritionProfile(['program_started_on' => null]);
     $other = nutritionProfile(['telegram_user_id' => 999, 'is_admin' => false, 'main_chat_id' => 999]);
     $this->seed(NutritionTopicSeeder::class);
 

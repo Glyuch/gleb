@@ -354,6 +354,41 @@ it('skips a profile without main_chat_id and logs it once', function () {
     expect(NutritionSentEvent::query()->where('event_key', pkey($this->profile, '2026-07-16:no-chat'))->count())->toBe(1);
 });
 
+it('skips an active profile until the program is started and then ticks normally', function () {
+    $this->travelTo(CarbonImmutable::create(2026, 7, 16, 7, 35, 0, 'Europe/Moscow'));
+    // Анкета завершена (status=active, чат есть), но «Начать программу» не нажата.
+    $this->profile->update(['program_started_on' => null]);
+
+    $this->artisan('nutrition:tick')->assertExitCode(0);
+
+    // Ни приёмов, ни исходящих сообщений — тик молчит до старта программы.
+    expect(NutritionMeal::query()->count())->toBe(0)
+        ->and(outCount())->toBe(0);
+    Http::assertNothingSent();
+
+    // Единственный след — once-событие p{id}:{d}:not-started.
+    expect(NutritionSentEvent::query()->where('event_key', pkey($this->profile, '2026-07-16:not-started'))->exists())->toBeTrue()
+        ->and(NutritionSentEvent::query()->count())->toBe(1);
+
+    // Повторный тик не плодит дублей события.
+    $this->artisan('nutrition:tick')->assertExitCode(0);
+    expect(NutritionSentEvent::query()->count())->toBe(1);
+
+    // Dry-run честно объявляет пропуск и ничего не пишет.
+    $this->artisan('nutrition:tick', ['--at' => '2026-07-16 13:00'])
+        ->expectsOutputToContain('программа не начата')
+        ->assertExitCode(0);
+    expect(NutritionSentEvent::query()->count())->toBe(1);
+
+    // После нажатия «Начать программу» тик работает как обычно.
+    $this->profile->update(['program_started_on' => '2026-07-16']);
+    $this->artisan('nutrition:tick')->assertExitCode(0);
+
+    $kinds = NutritionMessage::query()->where('direction', 'out')->pluck('kind')->all();
+    expect($kinds)->toContain('greeting')
+        ->and(NutritionMeal::query()->count())->toBeGreaterThan(0);
+});
+
 it('sends every existing file of a multi-file topic with intro caption only on the first', function () {
     $dir = storage_path('app/nutrition/materials');
     File::ensureDirectoryExists($dir);
