@@ -92,11 +92,12 @@ class Planner
     }
 
     /**
-     * Переводит просроченные pending-приёмы (window_end < now - 90 мин) в missed и пересчитывает.
+     * Переводит просроченные pending-приёмы (window_end < now - missed_after) в missed и пересчитывает.
      */
     public static function markMissed(CarbonImmutable $now): void
     {
-        $threshold = $now->subMinutes(90)->format('Y-m-d H:i:s');
+        $missedAfter = (int) config('nutrition.reminders.missed_after', 90);
+        $threshold = $now->subMinutes($missedAfter)->format('Y-m-d H:i:s');
 
         $overdue = NutritionMeal::query()
             ->whereDate('date', $now->format('Y-m-d'))

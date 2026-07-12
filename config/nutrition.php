@@ -11,4 +11,13 @@ return [
         'vision' => 'claude-haiku-4-5',
         'chat' => 'claude-sonnet-5',
     ],
+    'reminders' => [
+        // Пре-напоминание: за сколько минут до окна.
+        'lead_minutes' => 30,
+        // Шаг наджей внутри окна и грейс-периода.
+        'nudge_interval' => 30,
+        // Через сколько минут после window_end приём уходит в missed
+        // (единый источник для Planner::markMissed и жизни слотов напоминаний).
+        'missed_after' => 90,
+    ],
 ];

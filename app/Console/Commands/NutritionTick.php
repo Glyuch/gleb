@@ -95,7 +95,14 @@ class NutritionTick extends Command
             $this->fire("{$d}:greeting", $greeting, fn () => $tg->send($greeting, null, 'greeting'));
         }
 
-        // 3. Напоминания и follow-up по каждому pending-приёму.
+        // 3. Слот-привязанные напоминания по каждому pending-приёму.
+        // Ключи содержат ВРЕМЯ слота (H:i), поэтому сдвиг окна регенерирует
+        // напоминания: старые ключи израсходованы, новое время окна даёт новые.
+        // markMissed уже отработал выше — помеченные missed сюда не попадут.
+        $lead = (int) config('nutrition.reminders.lead_minutes', 30);
+        $step = max(1, (int) config('nutrition.reminders.nudge_interval', 30));
+        $missedAfter = (int) config('nutrition.reminders.missed_after', 90);
+
         $meals = NutritionMeal::query()
             ->whereDate('date', $d)
             ->get()
@@ -106,20 +113,47 @@ class NutritionTick extends Command
             if ($meal === null || $meal->status !== 'pending') {
                 continue;
             }
-
-            if ($meal->window_start !== null && $now->greaterThanOrEqualTo($meal->window_start)) {
-                $text = '⏰ '.MealPlan::LABELS[$type].' '
-                    .$meal->window_start->format('H:i').'–'.$meal->window_end->format('H:i')
-                    .'. '.MealPlan::COMPOSITION[$type];
-                $this->fire("{$d}:reminder:{$type}", $text, fn () => $tg->send($text, $this->mealButtons($type), 'reminder'));
+            if ($meal->window_start === null || $meal->window_end === null) {
+                continue;
             }
 
-            if ($phase !== 'maintenance' && $meal->window_end !== null) {
-                $followupAt = $meal->window_end->copy()->addMinutes(30);
-                if ($now->greaterThanOrEqualTo($followupAt)) {
-                    $ftext = 'Поели '.mb_strtolower(MealPlan::LABELS[$type]).'? ☺️';
-                    $this->fire("{$d}:followup:{$type}", $ftext, fn () => $tg->send($ftext, $this->mealButtons($type), 'followup'));
-                }
+            $ws = $meal->window_start->copy();
+            $we = $meal->window_end->copy();
+
+            // (1) Пре-напоминание: [ws-lead, ws). Только в фазе программы.
+            if ($phase !== 'maintenance'
+                && $now->greaterThanOrEqualTo($ws->copy()->subMinutes($lead))
+                && $now->lessThan($ws)) {
+                $pretext = 'Через полчаса '.MealPlan::LABELS[$type].' 🙌🏼 Окно '
+                    .$ws->format('H:i').'–'.$we->format('H:i');
+                $this->fire("{$d}:pre:{$type}:{$ws->format('H:i')}", $pretext,
+                    fn () => $tg->send($pretext, null, 'reminder'));
+            }
+
+            // (2) Активный 30-мин слот от ws: максимальный s <= now при now < s+step.
+            // Только текущее ведро — пропущенные слоты пачкой не бэкфиллим.
+            $sinceWs = (int) floor($ws->floatDiffInMinutes($now, false));
+            if ($sinceWs < 0) {
+                continue;
+            }
+            $slot = $ws->copy()->addMinutes(intdiv($sinceWs, $step) * $step);
+
+            // Слот жив, пока приём не ушёл бы в missed (окно + грейс до missed).
+            if ($slot->greaterThan($we->copy()->addMinutes($missedAfter))) {
+                continue;
+            }
+            $slotKey = "{$d}:meal:{$type}:{$slot->format('H:i')}";
+
+            if ($slot->equalTo($ws)) {
+                // Старт окна: полное напоминание с составом + кнопки.
+                $text = '⏰ '.MealPlan::LABELS[$type].' '
+                    .$ws->format('H:i').'–'.$we->format('H:i')
+                    .'. '.MealPlan::COMPOSITION[$type];
+                $this->fire($slotKey, $text, fn () => $tg->send($text, $this->mealButtons($type), 'reminder'));
+            } elseif ($phase !== 'maintenance') {
+                // Надж внутри окна/грейса. В maintenance — мягкий режим, без пингов.
+                $ntext = 'Поели '.mb_strtolower(MealPlan::LABELS[$type]).'? ☺️';
+                $this->fire($slotKey, $ntext, fn () => $tg->send($ntext, $this->mealButtons($type), 'followup'));
             }
         }
 
