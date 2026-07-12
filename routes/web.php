@@ -7,6 +7,7 @@ use App\Http\Controllers\Admin\GameSurveyController;
 use App\Http\Controllers\Admin\SiteDashboardController;
 use App\Http\Controllers\GameController;
 use App\Http\Controllers\NutritionBotController;
+use App\Http\Controllers\NutritionStatsController;
 use Illuminate\Support\Facades\Route;
 
 Route::inertia('/', 'welcome')->name('home');
@@ -47,5 +48,9 @@ Route::middleware(['auth', 'admin'])->prefix('admin')->name('admin.')->group(fun
 
 Route::post('/nutrition-bot/webhook', [NutritionBotController::class, 'webhook'])
     ->name('nutrition.webhook');
+
+Route::get('/nutrition/s/{profile}', [NutritionStatsController::class, 'show'])
+    ->name('nutrition.stats')
+    ->middleware('signed');
 
 require __DIR__.'/settings.php';

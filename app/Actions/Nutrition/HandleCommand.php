@@ -13,6 +13,7 @@ use App\Support\Nutrition\ProgramStatus;
 use App\Support\Nutrition\TelegramClient;
 use App\Support\Nutrition\Tg;
 use Carbon\CarbonImmutable;
+use Illuminate\Support\Facades\URL;
 
 class HandleCommand
 {
@@ -201,6 +202,9 @@ class HandleCommand
         $lines[] = $water->isEmpty()
             ? '— нет данных'
             : 'Среднее: '.Fmt::num((float) $water->avg('value')).' л';
+
+        $lines[] = '';
+        $lines[] = 'Подробные графики: '.URL::signedRoute('nutrition.stats', ['profile' => $profile->id]);
 
         $tg->send(implode("\n", $lines), chatId: $chatId);
     }
