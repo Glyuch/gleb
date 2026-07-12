@@ -10,7 +10,7 @@ class NutritionTopicSeeder extends Seeder
     /**
      * Темы программы в порядке прохождения. Составные темы хранят несколько
      * имён файлов в file_path через разделитель «|». Идемпотентно: updateOrCreate по position
-     * обновляет title/file_path/intro, но НЕ трогает scheduled_on/sent_at.
+     * обновляет только title/file_path/intro (даты выдачи — в nutrition_topic_sends).
      *
      * @var array<int, array{title: string, file_path: string, intro: string}>
      */

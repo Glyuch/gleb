@@ -198,12 +198,5 @@ class NutritionProfile extends Model
         NutritionMeal::query()->whereNull('profile_id')->update(['profile_id' => $profile->id]);
         NutritionMetric::query()->whereNull('profile_id')->update(['profile_id' => $profile->id]);
         NutritionMessage::query()->whereNull('profile_id')->update(['profile_id' => $profile->id]);
-
-        NutritionTopic::query()->whereNotNull('scheduled_on')->get()->each(function (NutritionTopic $topic) use ($profile) {
-            NutritionTopicSend::query()->updateOrCreate(
-                ['profile_id' => $profile->id, 'topic_id' => $topic->id],
-                ['scheduled_on' => $topic->scheduled_on, 'sent_at' => $topic->sent_at],
-            );
-        });
     }
 }

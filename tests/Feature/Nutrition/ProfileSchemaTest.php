@@ -104,7 +104,7 @@ it('backfills the Gleb profile from legacy data idempotently', function () {
     $meal = NutritionMeal::create(['date' => '2026-07-11', 'type' => 'lunch']);
     $metric = NutritionMetric::create(['date' => '2026-07-11', 'type' => 'weight', 'value' => 80]);
     $msg = NutritionMessage::create(['direction' => 'in', 'content' => 'hi']);
-    $topic = NutritionTopic::create(['title' => 'T', 'position' => 1, 'scheduled_on' => '2026-07-15', 'sent_at' => '2026-07-15 10:00:00']);
+    NutritionTopic::create(['title' => 'T', 'position' => 1]);
     NutritionTopic::create(['title' => 'T2', 'position' => 2]);
 
     NutritionProfile::backfillFromLegacy();
@@ -126,15 +126,12 @@ it('backfills the Gleb profile from legacy data idempotently', function () {
         ->and($metric->fresh()->profile_id)->toBe($p->id)
         ->and($msg->fresh()->profile_id)->toBe($p->id);
 
-    expect(NutritionTopicSend::where('profile_id', $p->id)->count())->toBe(1);
-    $send = NutritionTopicSend::first();
-    expect($send->topic_id)->toBe($topic->id)
-        ->and($send->scheduled_on->toDateString())->toBe('2026-07-15')
-        ->and($send->sent_at->toDateTimeString())->toBe('2026-07-15 10:00:00');
+    // Раскладка тем теперь per-profile через StartProgram, backfill их не создаёт.
+    expect(NutritionTopicSend::where('profile_id', $p->id)->count())->toBe(0);
 
     NutritionProfile::backfillFromLegacy();
     expect(NutritionProfile::where('telegram_user_id', 49465703)->count())->toBe(1)
-        ->and(NutritionTopicSend::count())->toBe(1);
+        ->and(NutritionTopicSend::count())->toBe(0);
 });
 
 it('does nothing when the legacy user id is not configured', function () {
