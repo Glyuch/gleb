@@ -48,14 +48,23 @@ class MealLogger
                 continue;
             }
 
-            $resolved[] = ['meal' => $meal, 'at' => self::atTime($now, $report['time'] ?? null)];
+            $resolved[] = [
+                'meal' => $meal,
+                'at' => self::atTime($now, $report['time'] ?? null),
+                'score' => self::validScore($report['score'] ?? null),
+                'extra' => [
+                    'composition_ok' => $report['composition_ok'] ?? null,
+                    'forbidden' => is_array($report['forbidden'] ?? null) ? array_values($report['forbidden']) : [],
+                    'comment' => isset($report['comment']) ? (string) $report['comment'] : null,
+                ],
+            ];
         }
 
         // Несколько приёмов — по возрастанию времени, чтобы цепочка окон считалась верно.
         usort($resolved, fn ($a, $b) => $a['at']->getTimestamp() <=> $b['at']->getTimestamp());
 
         foreach ($resolved as $item) {
-            Planner::markEaten($profile, $item['meal'], $item['at'], null, null);
+            Planner::markEaten($profile, $item['meal'], $item['at'], null, null, $item['score'], $item['extra']);
         }
 
         if ($resolved !== []) {
@@ -129,6 +138,7 @@ class MealLogger
 
     /**
      * Промпт vision для оценки фото приёма (единый источник для HandlePhoto и колбэков).
+     * Просит СТРОГИЙ JSON: фидбек в стиле Насти + балл и разбор состава/запрещёнки.
      */
     public static function foodPrompt(NutritionProfile $profile, string $type): string
     {
@@ -139,7 +149,89 @@ class MealLogger
             .'Ожидаемый состав: '.MealPlan::COMPOSITION[$type].".\n"
             .'Запрещёнка (кратко): '.self::FORBIDDEN.".\n"
             .'Поправка порций: '.$portionStr.".\n"
-            .'Оцени приём в стиле Насти — тепло и по делу, 1–3 предложения; при необходимости кратко объясни «почему» через физиологию.';
+            .'Оцени приём и верни ОТВЕТ СТРОГО в формате JSON без пояснений и без markdown-заборов:'."\n"
+            .'{"feedback": "реакция в стиле Насти — тепло и по делу, 1–3 предложения, при необходимости кратко «почему» через физиологию", '
+            .'"score": 8, "composition_ok": true, "forbidden": ["наименование запрещёнки, если есть"], "comment": "кратко для истории"}'."\n"
+            .'score — целое 1–10 (насколько приём соответствует ожидаемому составу и без запрещёнки). '
+            .'composition_ok — соответствует ли состав схеме. forbidden — список найденной запрещёнки (пустой, если нет).';
+    }
+
+    /**
+     * Разбирает ответ vision на фидбек + структуру рейтинга. Валидный JSON с
+     * целым score 1..10 → полная структура; иначе (не-JSON/битый score) —
+     * fallback: feedback = сырой текст, score null, без ИИ-составляющих рейтинга.
+     *
+     * @return array{feedback: ?string, score: ?int, extra: array{composition_ok: ?bool, forbidden: array<int, string>, comment: ?string}|null}
+     */
+    public static function parseFood(?string $raw): array
+    {
+        if ($raw === null) {
+            return ['feedback' => null, 'score' => null, 'extra' => null];
+        }
+
+        $data = json_decode(self::stripFences($raw), true);
+        $score = is_array($data) ? self::validScore($data['score'] ?? null) : null;
+
+        // Не-JSON или невалидный score → вся структура null, фидбек = сырой текст.
+        if (! is_array($data) || $score === null) {
+            return ['feedback' => trim($raw), 'score' => null, 'extra' => null];
+        }
+
+        return [
+            'feedback' => isset($data['feedback']) ? (string) $data['feedback'] : trim($raw),
+            'score' => $score,
+            'extra' => self::ratingExtra($data),
+        ];
+    }
+
+    /**
+     * Целое 1..10 из значения ИИ, иначе null.
+     */
+    public static function validScore(mixed $value): ?int
+    {
+        if (! is_int($value) && ! (is_string($value) && ctype_digit($value))) {
+            if (! is_float($value) || floor($value) !== $value) {
+                return null;
+            }
+        }
+
+        $int = (int) $value;
+
+        return ($int >= 1 && $int <= 10) ? $int : null;
+    }
+
+    /**
+     * ИИ-составляющие рейтинга из декодированного объекта.
+     *
+     * @param  array<string, mixed>  $data
+     * @return array{composition_ok: ?bool, forbidden: array<int, string>, comment: ?string}
+     */
+    public static function ratingExtra(array $data): array
+    {
+        $forbidden = [];
+        if (isset($data['forbidden']) && is_array($data['forbidden'])) {
+            foreach ($data['forbidden'] as $item) {
+                $str = trim((string) $item);
+                if ($str !== '') {
+                    $forbidden[] = $str;
+                }
+            }
+        }
+
+        return [
+            'composition_ok' => isset($data['composition_ok']) ? (bool) $data['composition_ok'] : null,
+            'forbidden' => $forbidden,
+            'comment' => isset($data['comment']) ? (string) $data['comment'] : null,
+        ];
+    }
+
+    private static function stripFences(string $raw): string
+    {
+        $text = trim($raw);
+        $text = preg_replace('/^```(?:json)?\s*/i', '', $text) ?? $text;
+        $text = preg_replace('/\s*```$/', '', $text) ?? $text;
+
+        return trim($text);
     }
 
     /**

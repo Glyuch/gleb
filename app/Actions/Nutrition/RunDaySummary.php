@@ -29,7 +29,10 @@ class RunDaySummary
         $tg = app(TelegramClient::class);
         $tg->profileId = $profile->id;
 
+        $d = $now->format('Y-m-d');
+
         $prompt = PromptBuilder::dayContext($profile, $now)."\n\n"
+            .PromptBuilder::ratingsDigest($profile, $d, $d)."\n\n"
             .'Подведи итог дня для клиента '.$profile->displayName().': '.self::INSTRUCTION;
 
         $text = Claude::text(

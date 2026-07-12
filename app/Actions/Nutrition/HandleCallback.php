@@ -112,14 +112,16 @@ class HandleCallback
         $now = CarbonImmutable::now('Europe/Moscow');
 
         $image = $tg->downloadPhotoBase64($fileId);
-        $feedback = $image !== null
+        $raw = $image !== null
             ? Claude::vision($image, MealLogger::foodPrompt($profile, $type), 400, $profile)
             : null;
 
-        Planner::markEaten($profile, $meal, $now, $fileId, $feedback);
+        $parsed = MealLogger::parseFood($raw);
+
+        Planner::markEaten($profile, $meal, $now, $fileId, $parsed['feedback'], $parsed['score'], $parsed['extra']);
         $profile->clearWaiting('meal_photo');
 
-        $lines = [$feedback ?? 'Записал приём 👌🏻 Разбор пришлю позже'];
+        $lines = [$parsed['feedback'] ?? 'Записал приём 👌🏻 Разбор пришлю позже'];
         $tail = MealLogger::windowsTail($profile, $now);
         if ($tail !== '') {
             $lines[] = '';

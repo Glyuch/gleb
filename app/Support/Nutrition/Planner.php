@@ -66,17 +66,73 @@ class Planner
 
     /**
      * Отмечает приём съеденным и пересчитывает окна оставшихся.
+     *
+     * $score — балл 1–10 от ИИ (null для кнопки «Поел» и не-JSON ответов).
+     * $ratingExtra — ИИ-составляющие рейтинга {composition_ok, forbidden, comment};
+     * null → в rating попадают только детерминированные interval_ok/window_ok.
+     *
+     * @param  array{composition_ok?: ?bool, forbidden?: array<int, string>, comment?: ?string}|null  $ratingExtra
      */
-    public static function markEaten(NutritionProfile $profile, NutritionMeal $meal, CarbonImmutable $at, ?string $photoFileId, ?string $feedback): void
+    public static function markEaten(NutritionProfile $profile, NutritionMeal $meal, CarbonImmutable $at, ?string $photoFileId, ?string $feedback, ?int $score = null, ?array $ratingExtra = null): void
     {
+        // Детерминированные флаги считаем ДО перевода приёма в eaten:
+        // interval_ok опирается на предыдущий съеденный приём сегодня.
+        $rating = ($ratingExtra ?? []) + [
+            'interval_ok' => self::intervalOk($profile, $meal, $at),
+            'window_ok' => self::windowOk($meal, $at),
+        ];
+
         $meal->update([
             'status' => 'eaten',
             'eaten_at' => $at->format('Y-m-d H:i:s'),
             'photo_file_id' => $photoFileId,
             'ai_feedback' => $feedback,
+            'score' => $score,
+            'rating' => $rating,
         ]);
 
         self::recalculate($profile, self::dateOf($meal));
+    }
+
+    /**
+     * Интервал между приёмами: 2.5–4.5 ч от прошлого съеденного приёма сегодня.
+     * Первый приём дня (нет предыдущего eaten) → true.
+     */
+    private static function intervalOk(NutritionProfile $profile, NutritionMeal $meal, CarbonImmutable $at): bool
+    {
+        $prev = NutritionMeal::query()
+            ->where('profile_id', $profile->id)
+            ->whereDate('date', self::dateOf($meal)->format('Y-m-d'))
+            ->where('status', 'eaten')
+            ->whereNotNull('eaten_at')
+            ->where('id', '!=', $meal->id)
+            ->orderByDesc('eaten_at')
+            ->first();
+
+        if ($prev === null || $prev->eaten_at === null) {
+            return true;
+        }
+
+        $prevAt = self::toMoscow($prev->eaten_at);
+        $minutes = abs($prevAt->diffInMinutes($at));
+
+        return $minutes >= 150 && $minutes <= 270;
+    }
+
+    /**
+     * Попадание во временное окно приёма: eaten_at в [window_start, window_end+15м].
+     * Нет окна → null (не оцениваем).
+     */
+    private static function windowOk(NutritionMeal $meal, CarbonImmutable $at): ?bool
+    {
+        if ($meal->window_start === null || $meal->window_end === null) {
+            return null;
+        }
+
+        $start = self::toMoscow($meal->window_start);
+        $end = self::toMoscow($meal->window_end)->addMinutes(15);
+
+        return $at->greaterThanOrEqualTo($start) && $at->lessThanOrEqualTo($end);
     }
 
     /**

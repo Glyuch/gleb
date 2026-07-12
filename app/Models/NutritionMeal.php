@@ -15,6 +15,8 @@ use Illuminate\Support\Carbon;
  * @property Carbon|null $eaten_at
  * @property string|null $photo_file_id
  * @property string|null $ai_feedback
+ * @property int|null $score
+ * @property array<string, mixed>|null $rating
  * @property string $status
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
@@ -30,6 +32,8 @@ class NutritionMeal extends Model
         'eaten_at',
         'photo_file_id',
         'ai_feedback',
+        'score',
+        'rating',
         'status',
     ];
 
@@ -41,6 +45,8 @@ class NutritionMeal extends Model
             'window_start' => 'datetime',
             'window_end' => 'datetime',
             'eaten_at' => 'datetime',
+            'score' => 'integer',
+            'rating' => 'array',
         ];
     }
 }

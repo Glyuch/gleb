@@ -82,19 +82,28 @@ class HandlePhoto
         $warning = $this->tooSoonWarning($profile, $now);
 
         $image = $tg->downloadPhotoBase64($fileId);
-        $feedback = $image !== null
+        $raw = $image !== null
             ? Claude::vision($image, MealLogger::foodPrompt($profile, $meal->type), 400, $profile)
             : null;
 
-        Planner::markEaten($profile, $meal, $now, $fileId, $feedback);
+        $parsed = MealLogger::parseFood($raw);
+
+        Planner::markEaten($profile, $meal, $now, $fileId, $parsed['feedback'], $parsed['score'], $parsed['extra']);
 
         // 4. Fallback: если ИИ не ответил — всё равно фиксируем приём.
-        $reply = $feedback ?? 'Записал приём 👌🏻 Разбор пришлю позже';
-        if ($warning !== null) {
-            $reply .= "\n\n".$warning;
+        $parts = [$parsed['feedback'] ?? 'Записал приём 👌🏻 Разбор пришлю позже'];
+
+        // Детерминированный хвост про сдвинутые окна следующих приёмов (общий с текстовым путём).
+        $tail = MealLogger::windowsTail($profile, $now);
+        if ($tail !== '') {
+            $parts[] = $tail;
         }
 
-        $tg->send($reply, chatId: $chatId);
+        if ($warning !== null) {
+            $parts[] = $warning;
+        }
+
+        $tg->send(implode("\n\n", $parts), chatId: $chatId);
     }
 
     /**

@@ -124,6 +124,9 @@ class PromptBuilder
             if ($meal->eaten_at !== null) {
                 $line .= ', съеден в '.$meal->eaten_at->format('H:i');
             }
+            if ($meal->score !== null) {
+                $line .= ', балл '.$meal->score.'/10';
+            }
             if (filled($meal->ai_feedback)) {
                 $line .= '. Фидбек: '.$meal->ai_feedback;
             }
@@ -175,6 +178,45 @@ class PromptBuilder
                 $lines[] = trim("{$arrow} {$kind}{$content}");
             }
         }
+
+        return implode("\n", $lines);
+    }
+
+    /**
+     * Детерминированный дайджест рейтингов за период [fromDate, toDate] (Y-m-d):
+     * средний балл съеденных приёмов и список нарушений-запрещёнки. Готовый текст
+     * для промптов саммари/чек-апа — считается из БД, а не из ответа ИИ.
+     */
+    public static function ratingsDigest(NutritionProfile $profile, string $fromDate, string $toDate, string $prefix = ''): string
+    {
+        $meals = NutritionMeal::query()
+            ->where('profile_id', $profile->id)
+            ->where('status', 'eaten')
+            ->whereDate('date', '>=', $fromDate)
+            ->whereDate('date', '<=', $toDate)
+            ->get();
+
+        $scores = $meals->pluck('score')->filter(fn ($s) => $s !== null)->values();
+
+        $forbidden = [];
+        foreach ($meals as $meal) {
+            $rating = $meal->rating;
+            if (is_array($rating) && is_array($rating['forbidden'] ?? null)) {
+                foreach ($rating['forbidden'] as $item) {
+                    $str = trim((string) $item);
+                    if ($str !== '') {
+                        $forbidden[$str] = $str;
+                    }
+                }
+            }
+        }
+
+        $avg = $scores->isEmpty()
+            ? 'нет данных'
+            : number_format((float) $scores->avg(), 1, '.', '').'/10 (по '.$scores->count().' приёмам)';
+
+        $lines = [$prefix.'Средний балл приёмов: '.$avg.'.'];
+        $lines[] = 'Нарушения (запрещёнка): '.($forbidden === [] ? 'нет' : implode(', ', array_values($forbidden))).'.';
 
         return implode("\n", $lines);
     }

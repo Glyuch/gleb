@@ -14,23 +14,29 @@ class MealIntent
 {
     private const INSTRUCTION = <<<'TXT'
         Классифицируй сообщение клиента ниже. Верни ОТВЕТ СТРОГО в формате JSON без пояснений и без markdown-заборов:
-        {"intent": "meal_report|question|other", "reports": [{"meal": "breakfast|lunch|snack|dinner|null", "time": "HH:MM|null", "food": "краткое описание"}], "reply": "текст в стиле нутрициолога"}
+        {"intent": "meal_report|question|other", "reports": [{"meal": "breakfast|lunch|snack|dinner|null", "time": "HH:MM|null", "food": "краткое описание", "score": 8, "composition_ok": true, "forbidden": ["наименование запрещёнки, если есть"], "comment": "кратко для истории"}], "reply": "текст в стиле нутрициолога"}
 
         intent:
-        - "meal_report" — клиент сообщает, что уже поел (в т.ч. без фото: «позавтракал», «съел обед», «перекусил»). reports непусто.
+        - "meal_report" — клиент сообщает, что УЖЕ поел (в т.ч. без фото: «позавтракал», «съел обед», «перекусил»). reports непусто.
         - "question" — вопрос по питанию/программе. reports = [].
         - "other" — всё прочее (болтовня, статусы). reports = [].
+
+        ВАЖНО: сообщение о НАМЕРЕНИИ поесть или о будущем приёме («собираюсь съесть», «планирую на обед», «буду ужинать», «можно ли мне X?») — это intent=question, а НЕ meal_report; reports = []. meal_report только про уже съеденное.
 
         Для meal_report заполни reports (можно несколько приёмов в одном сообщении):
         - meal: тип из явного слова (позавтракал→breakfast, пообедал→lunch, полдник→snack, поужинал→dinner) ИЛИ инференс по времени/окнам из контекста; если непонятно — null.
         - time: из «в 10:00»/«час назад»/«утром» в формате HH:MM (24ч, Europe/Moscow); если не указано — null.
         - food: краткое описание съеденного.
+        - score: целое 1–10 — насколько приём соответствует ожидаемому составу и без запрещёнки.
+        - composition_ok: соответствует ли состав схеме приёма (true/false).
+        - forbidden: список найденной запрещёнки (сахар, мучное/выпечка, жареное, фастфуд, газировка/соки, алкоголь); пустой, если нет.
+        - comment: краткая пометка для истории.
 
         reply — тёплая короткая реакция на еду (для meal_report) ИЛИ ответ на вопрос (для question), в стиле нутрициолога.
         TXT;
 
     /**
-     * @return array{intent: string, reports: array<int, array{meal: ?string, time: ?string, food: string}>, reply: string}|null
+     * @return array{intent: string, reports: array<int, array{meal: ?string, time: ?string, food: string, score: ?int, composition_ok: ?bool, forbidden: array<int, string>, comment: ?string}>, reply: string}|null
      */
     public static function classify(NutritionProfile $profile, string $text, CarbonImmutable $now): ?array
     {
@@ -75,10 +81,16 @@ class MealIntent
                     $time = null;
                 }
 
+                $extra = MealLogger::ratingExtra(is_array($report) ? $report : []);
+
                 $reports[] = [
                     'meal' => $meal,
                     'time' => $time,
                     'food' => (string) ($report['food'] ?? ''),
+                    'score' => MealLogger::validScore($report['score'] ?? null),
+                    'composition_ok' => $extra['composition_ok'],
+                    'forbidden' => $extra['forbidden'],
+                    'comment' => $extra['comment'],
                 ];
             }
         }

@@ -7,6 +7,7 @@ use App\Models\NutritionMetric;
 use App\Models\NutritionProfile;
 use App\Support\Nutrition\Claude;
 use App\Support\Nutrition\Fmt;
+use App\Support\Nutrition\PromptBuilder;
 use App\Support\Nutrition\TelegramClient;
 use Carbon\CarbonImmutable;
 
@@ -149,6 +150,10 @@ class RunCheckup
         $lines[] = 'Среднее шагов: '.($steps->isEmpty() ? '—' : (int) round((float) $steps->avg('value')))
             .' / цель '.$profile->setting('steps_target').'.';
         $lines[] = 'Среднее воды: '.($water->isEmpty() ? '—' : Fmt::num((float) $water->avg('value'))).' л.';
+
+        // Рейтинги приёмов за период (детерминированно из БД).
+        $lines[] = '';
+        $lines[] = PromptBuilder::ratingsDigest($profile, $fromStr, $toStr, 'За 14 дней — ');
 
         return implode("\n", $lines);
     }
