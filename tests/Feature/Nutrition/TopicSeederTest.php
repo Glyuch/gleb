@@ -2,7 +2,6 @@
 
 use App\Actions\Nutrition\StartProgram;
 use App\Models\NutritionTopic;
-use App\Support\Nutrition\Settings;
 use Carbon\CarbonImmutable;
 use Database\Seeders\NutritionTopicSeeder;
 use Illuminate\Support\Facades\Http;
@@ -54,13 +53,14 @@ it('is idempotent and refreshes title/file_path/intro without touching scheduled
 });
 
 it('start-program command lays out topic dates: position 1 → day +3', function () {
+    $profile = nutritionProfile();
     $this->seed(NutritionTopicSeeder::class);
 
     $this->artisan('nutrition:start-program', ['date' => '2026-07-14'])
         ->assertExitCode(0);
 
-    expect((string) Settings::get('program_started_on'))->toBe('2026-07-14')
-        ->and((string) Settings::get('phase'))->toBe('program');
+    expect($profile->fresh()->program_started_on->format('Y-m-d'))->toBe('2026-07-14')
+        ->and($profile->fresh()->phase)->toBe('program');
 
     $topic1 = NutritionTopic::query()->where('position', 1)->first();
     $topic12 = NutritionTopic::query()->where('position', 12)->first();
@@ -70,21 +70,23 @@ it('start-program command lays out topic dates: position 1 → day +3', function
 });
 
 it('recomputes dates on re-run of start-program', function () {
+    $profile = nutritionProfile();
     $this->seed(NutritionTopicSeeder::class);
 
     $this->artisan('nutrition:start-program', ['date' => '2026-07-14'])->assertExitCode(0);
     $this->artisan('nutrition:start-program', ['date' => '2026-07-21'])->assertExitCode(0);
 
-    expect((string) Settings::get('program_started_on'))->toBe('2026-07-21');
+    expect($profile->fresh()->program_started_on->format('Y-m-d'))->toBe('2026-07-21');
 
     $topic1 = NutritionTopic::query()->where('position', 1)->first();
     expect($topic1->scheduled_on->format('Y-m-d'))->toBe('2026-07-24'); // 2026-07-21 +3
 });
 
 it('StartProgram action returns a human-readable summary', function () {
+    $profile = nutritionProfile();
     $this->seed(NutritionTopicSeeder::class);
 
-    $summary = app(StartProgram::class)->handle(CarbonImmutable::parse('2026-07-14', 'Europe/Moscow'));
+    $summary = app(StartProgram::class)->handle($profile, CarbonImmutable::parse('2026-07-14', 'Europe/Moscow'));
 
     expect($summary)->toContain('14.07.2026')
         ->and($summary)->toContain('12')

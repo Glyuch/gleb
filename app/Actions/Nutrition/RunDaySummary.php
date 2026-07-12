@@ -4,10 +4,10 @@ namespace App\Actions\Nutrition;
 
 use App\Models\NutritionMeal;
 use App\Models\NutritionMetric;
+use App\Models\NutritionProfile;
 use App\Support\Nutrition\Claude;
 use App\Support\Nutrition\Fmt;
 use App\Support\Nutrition\PromptBuilder;
-use App\Support\Nutrition\Settings;
 use App\Support\Nutrition\TelegramClient;
 use Carbon\CarbonImmutable;
 
@@ -22,25 +22,28 @@ class RunDaySummary
     /**
      * Формирует и отправляет итог дня. При недоступности модели — детерминированный fallback.
      */
-    public function handle(?CarbonImmutable $now = null): void
+    public function handle(NutritionProfile $profile, ?CarbonImmutable $now = null): void
     {
         $now ??= CarbonImmutable::now('Europe/Moscow');
         $tg = app(TelegramClient::class);
+        $tg->profileId = $profile->id;
 
-        $prompt = PromptBuilder::dayContext($now)."\n\n".self::INSTRUCTION;
+        $prompt = PromptBuilder::dayContext($profile, $now)."\n\n".self::INSTRUCTION;
 
         $text = Claude::text(
             [['type' => 'text', 'text' => $prompt]],
             (string) config('nutrition.models.chat'),
             600,
+            $profile,
         );
 
-        $tg->send($text ?? $this->fallback($now), null, 'summary');
+        $tg->send($text ?? $this->fallback($profile, $now), null, 'summary');
     }
 
-    private function fallback(CarbonImmutable $now): string
+    private function fallback(NutritionProfile $profile, CarbonImmutable $now): string
     {
         $meals = NutritionMeal::query()
+            ->where('profile_id', $profile->id)
             ->whereDate('date', $now->format('Y-m-d'))
             ->get();
 
@@ -48,11 +51,13 @@ class RunDaySummary
         $missed = $meals->whereIn('status', ['missed', 'skipped'])->count();
 
         $steps = NutritionMetric::query()
+            ->where('profile_id', $profile->id)
             ->whereDate('date', $now->format('Y-m-d'))
             ->where('type', 'steps')
             ->value('value');
 
         $water = NutritionMetric::query()
+            ->where('profile_id', $profile->id)
             ->whereDate('date', $now->format('Y-m-d'))
             ->where('type', 'water')
             ->value('value');
@@ -63,7 +68,7 @@ class RunDaySummary
         return implode("\n", [
             'Итог дня 🙌🏼',
             'Съедено по плану: '.$eaten.'/4, пропущено: '.$missed.'.',
-            'Шаги: '.$stepsStr.' / цель '.Settings::get('steps_target').'.',
+            'Шаги: '.$stepsStr.' / цель '.$profile->setting('steps_target').'.',
             'Вода: '.$waterStr.' л.',
             'Завтра держим ритм и не забываем про воду 👌🏻',
         ]);

@@ -2,24 +2,25 @@
 
 namespace App\Support\Nutrition;
 
+use App\Models\NutritionProfile;
 use Carbon\CarbonImmutable;
 
 /**
- * Статус 10-недельной программы относительно сегодняшнего дня.
+ * Статус 10-недельной программы профиля относительно сегодняшнего дня.
  */
 class ProgramStatus
 {
     /**
-     * Номер текущего дня программы (день старта = 1). 0, если программа не запущена.
+     * Номер текущего дня программы профиля (день старта = 1). 0, если не запущена.
      */
-    public static function day(): int
+    public static function day(NutritionProfile $profile): int
     {
-        $startedOn = Settings::get('program_started_on');
+        $startedOn = $profile->program_started_on;
         if ($startedOn === null) {
             return 0;
         }
 
-        $start = CarbonImmutable::parse((string) $startedOn, 'Europe/Moscow')->startOfDay();
+        $start = CarbonImmutable::parse($startedOn->format('Y-m-d'), 'Europe/Moscow')->startOfDay();
         $today = CarbonImmutable::now('Europe/Moscow')->startOfDay();
 
         return (int) $start->diffInDays($today) + 1;

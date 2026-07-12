@@ -4,9 +4,9 @@ namespace App\Actions\Nutrition;
 
 use App\Models\NutritionMeal;
 use App\Models\NutritionMetric;
+use App\Models\NutritionProfile;
 use App\Support\Nutrition\Claude;
 use App\Support\Nutrition\Fmt;
-use App\Support\Nutrition\Settings;
 use App\Support\Nutrition\TelegramClient;
 use Carbon\CarbonImmutable;
 
@@ -25,21 +25,23 @@ class RunCheckup
      * Запускает недельный чек-ап. При наличии корректировок сохраняет их в pending_adjustments
      * и предлагает кнопки применения.
      */
-    public function handle(bool $onDemand = false, ?int $chatId = null): void
+    public function handle(NutritionProfile $profile, bool $onDemand = false, ?int $chatId = null): void
     {
         $now = CarbonImmutable::now('Europe/Moscow');
         $tg = app(TelegramClient::class);
+        $tg->profileId = $profile->id;
 
         $occasion = $onDemand
             ? 'Это внеплановый чек-ап по личному запросу Глеба.'
             : 'Это плановый воскресный чек-ап.';
 
-        $prompt = $occasion."\n".$this->context($now)."\n\n".self::INSTRUCTION;
+        $prompt = $occasion."\n".$this->context($profile, $now)."\n\n".self::INSTRUCTION;
 
         $raw = Claude::text(
             [['type' => 'text', 'text' => $prompt]],
             (string) config('nutrition.models.chat'),
             1000,
+            $profile,
         );
 
         if ($raw === null) {
@@ -66,7 +68,7 @@ class RunCheckup
             return;
         }
 
-        Settings::set('pending_adjustments', $adjustments);
+        $profile->setWaiting('pending_adjustments', $adjustments);
 
         $keyboard = [
             [['text' => 'Применить ✅', 'callback_data' => 'adj:yes']],
@@ -79,7 +81,7 @@ class RunCheckup
     /**
      * Контекст за 14 дней: тренд веса, съедено/пропущено по дням, среднее шагов, вода.
      */
-    private function context(CarbonImmutable $now): string
+    private function context(NutritionProfile $profile, CarbonImmutable $now): string
     {
         $from = $now->subDays(13)->startOfDay();
         $fromStr = $from->format('Y-m-d');
@@ -89,6 +91,7 @@ class RunCheckup
 
         // Тренд веса.
         $weights = NutritionMetric::query()
+            ->where('profile_id', $profile->id)
             ->where('type', 'weight')
             ->whereDate('date', '>=', $fromStr)
             ->whereDate('date', '<=', $toStr)
@@ -109,6 +112,7 @@ class RunCheckup
 
         // Приёмы по дням.
         $meals = NutritionMeal::query()
+            ->where('profile_id', $profile->id)
             ->whereDate('date', '>=', $fromStr)
             ->whereDate('date', '<=', $toStr)
             ->get()
@@ -128,12 +132,14 @@ class RunCheckup
 
         // Среднее шагов и вода.
         $steps = NutritionMetric::query()
+            ->where('profile_id', $profile->id)
             ->where('type', 'steps')
             ->whereDate('date', '>=', $fromStr)
             ->whereDate('date', '<=', $toStr)
             ->get();
 
         $water = NutritionMetric::query()
+            ->where('profile_id', $profile->id)
             ->where('type', 'water')
             ->whereDate('date', '>=', $fromStr)
             ->whereDate('date', '<=', $toStr)
@@ -141,7 +147,7 @@ class RunCheckup
 
         $lines[] = '';
         $lines[] = 'Среднее шагов: '.($steps->isEmpty() ? '—' : (int) round((float) $steps->avg('value')))
-            .' / цель '.Settings::get('steps_target').'.';
+            .' / цель '.$profile->setting('steps_target').'.';
         $lines[] = 'Среднее воды: '.($water->isEmpty() ? '—' : Fmt::num((float) $water->avg('value'))).' л.';
 
         return implode("\n", $lines);

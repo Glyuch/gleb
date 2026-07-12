@@ -2,6 +2,7 @@
 
 namespace App\Actions\Nutrition;
 
+use App\Models\NutritionProfile;
 use App\Support\Nutrition\Claude;
 use App\Support\Nutrition\MealIntent;
 use App\Support\Nutrition\MealLogger;
@@ -13,26 +14,29 @@ use Carbon\CarbonImmutable;
 
 class HandleQuestion
 {
-    public function handle(array $update): void
+    public function handle(array $update, NutritionProfile $profile): void
     {
+        $tg = app(TelegramClient::class);
+        $tg->profileId = $profile->id;
+
         // Ожидание значения настройки/времени приёма перехватываем до модели.
-        if (SettingInput::intercept($update)) {
+        if (SettingInput::intercept($update, $profile)) {
             return;
         }
 
-        $tg = app(TelegramClient::class);
         $chatId = Tg::chatId($update);
         $text = trim((string) ($update['message']['text'] ?? ''));
         $now = CarbonImmutable::now('Europe/Moscow');
 
-        $intent = MealIntent::classify($text, $now);
+        $intent = MealIntent::classify($profile, $text, $now);
 
         // ИИ недоступен/невалидный JSON → фолбэк: обычный ответ на вопрос.
         if ($intent === null) {
             $answer = Claude::text(
-                [['type' => 'text', 'text' => PromptBuilder::dayContext($now)."\n\nВопрос Глеба: ".$text]],
+                [['type' => 'text', 'text' => PromptBuilder::dayContext($profile, $now)."\n\nВопрос Глеба: ".$text]],
                 (string) config('nutrition.models.chat'),
                 800,
+                $profile,
             );
 
             $tg->send($answer ?? 'Не смог сейчас ответить, попробуй ещё раз чуть позже 🙏', chatId: $chatId);
@@ -42,7 +46,7 @@ class HandleQuestion
 
         // Отчёт о еде — записываем приёмы; иначе отправляем ответ ИИ.
         if ($intent['intent'] === 'meal_report' && $intent['reports'] !== []) {
-            MealLogger::logReports($update, $now, $intent['reports'], $intent['reply']);
+            MealLogger::logReports($update, $profile, $now, $intent['reports'], $intent['reply']);
 
             return;
         }

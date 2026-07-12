@@ -6,11 +6,11 @@ use App\Actions\Nutrition\RunCheckup;
 use App\Actions\Nutrition\RunDaySummary;
 use App\Actions\Nutrition\SendTopic;
 use App\Models\NutritionMeal;
+use App\Models\NutritionProfile;
 use App\Models\NutritionSentEvent;
 use App\Models\NutritionTopic;
 use App\Support\Nutrition\MealPlan;
 use App\Support\Nutrition\Planner;
-use App\Support\Nutrition\Settings;
 use App\Support\Nutrition\TelegramClient;
 use Carbon\CarbonImmutable;
 use Closure;
@@ -63,9 +63,19 @@ class NutritionTick extends Command
             return;
         }
 
+        // Task 2: тик работает от admin-профиля (владельца инстанса). Персональный
+        // тик остальных профилей — Task 3; sent_events тика пока без профиль-префикса.
+        $profile = NutritionProfile::admin();
+        if ($profile === null) {
+            Log::info('nutrition: tick skipped, no admin profile');
+
+            return;
+        }
+
         $d = $now->format('Y-m-d');
-        $phase = (string) Settings::get('phase');
+        $phase = (string) $profile->phase;
         $tg = app(TelegramClient::class);
+        $tg->profileId = $profile->id;
 
         if ($this->dryRun) {
             $this->line("DRY-RUN nutrition:tick @ {$now->format('Y-m-d H:i')} (Europe/Moscow), фаза: {$phase}");
@@ -73,11 +83,11 @@ class NutritionTick extends Command
         }
 
         // 1. Гарантируем приёмы дня и закрываем просроченные.
-        Planner::ensureDay($now);
-        Planner::markMissed($now);
+        Planner::ensureDay($profile, $now);
+        Planner::markMissed($profile, $now);
 
         $greetingTime = $now
-            ->setTimeFromTimeString((string) Settings::get('wake_time'))
+            ->setTimeFromTimeString((string) $profile->setting('wake_time'))
             ->addMinutes(30);
 
         // 2. Взвешивание (чт/вс; в maintenance — только вс) и приветствие с планом дня.
@@ -91,7 +101,7 @@ class NutritionTick extends Command
                 $this->fire("{$d}:weight_request", $weightText, fn () => $tg->send($weightText, null, 'weight_request'));
             }
 
-            $greeting = $this->greetingText($now);
+            $greeting = $this->greetingText($profile, $now);
             $this->fire("{$d}:greeting", $greeting, fn () => $tg->send($greeting, null, 'greeting'));
         }
 
@@ -104,6 +114,7 @@ class NutritionTick extends Command
         $missedAfter = (int) config('nutrition.reminders.missed_after', 90);
 
         $meals = NutritionMeal::query()
+            ->where('profile_id', $profile->id)
             ->whereDate('date', $d)
             ->get()
             ->keyBy('type');
@@ -165,12 +176,12 @@ class NutritionTick extends Command
 
         // 5. Итог дня.
         if ($now->greaterThanOrEqualTo($now->setTime(22, 30))) {
-            $this->fireAction("{$d}:summary", 'итог дня', fn () => app(RunDaySummary::class)->handle($now));
+            $this->fireAction("{$d}:summary", 'итог дня', fn () => app(RunDaySummary::class)->handle($profile, $now));
         }
 
         // 6. Недельный чек-ап (вс вечером).
         if ($now->isSunday() && $now->greaterThanOrEqualTo($now->setTime(20, 0))) {
-            $this->fireAction("{$d}:checkup", 'недельный чек-ап', fn () => app(RunCheckup::class)->handle());
+            $this->fireAction("{$d}:checkup", 'недельный чек-ап', fn () => app(RunCheckup::class)->handle($profile));
         }
 
         // 7. Материал дня (только в фазе программы).
@@ -185,20 +196,20 @@ class NutritionTick extends Command
                 $this->fireAction(
                     "{$d}:topic:{$topic->id}",
                     "тема «{$topic->title}»",
-                    fn () => app(SendTopic::class)->handle($topic),
+                    fn () => app(SendTopic::class)->handle($profile, $topic),
                 );
             }
         }
 
         // 8. Переход в фазу поддержки после 70 дней программы.
-        $startedOn = Settings::get('program_started_on');
+        $startedOn = $profile->program_started_on;
         if ($phase === 'program' && $startedOn !== null) {
-            $start = CarbonImmutable::parse((string) $startedOn, 'Europe/Moscow')->startOfDay();
+            $start = CarbonImmutable::parse($startedOn->format('Y-m-d'), 'Europe/Moscow')->startOfDay();
             if ($start->addDays(70)->lessThanOrEqualTo($now->startOfDay())) {
                 $gtext = $this->graduationText();
-                $this->fire("{$d}:graduation", $gtext, function () use ($tg, $gtext) {
+                $this->fire("{$d}:graduation", $gtext, function () use ($tg, $gtext, $profile) {
                     $tg->send($gtext, null, 'graduation');
-                    Settings::set('phase', 'maintenance');
+                    $profile->update(['phase' => 'maintenance']);
                 });
             }
         }
@@ -240,9 +251,10 @@ class NutritionTick extends Command
         NutritionSentEvent::once($key, $action);
     }
 
-    private function greetingText(CarbonImmutable $now): string
+    private function greetingText(NutritionProfile $profile, CarbonImmutable $now): string
     {
         $meals = NutritionMeal::query()
+            ->where('profile_id', $profile->id)
             ->whereDate('date', $now->format('Y-m-d'))
             ->get()
             ->keyBy('type');
@@ -259,7 +271,7 @@ class NutritionTick extends Command
         }
 
         $lines[] = '';
-        $lines[] = 'Цель: шаги '.Settings::get('steps_target').', вода 2 л. Хорошего дня! 👌🏻';
+        $lines[] = 'Цель: шаги '.$profile->setting('steps_target').', вода 2 л. Хорошего дня! 👌🏻';
 
         return implode("\n", $lines);
     }

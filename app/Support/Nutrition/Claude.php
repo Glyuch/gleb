@@ -2,6 +2,7 @@
 
 namespace App\Support\Nutrition;
 
+use App\Models\NutritionProfile;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Throwable;
@@ -16,8 +17,9 @@ class Claude
      * исключения наружу не летят. Sampling-параметры (temperature/top_p/thinking) не передаются.
      *
      * @param  array<int, array<string, mixed>>  $userContent  содержимое user-сообщения (текст/изображения)
+     * @param  NutritionProfile|null  $profile  профиль клиента — его ai_profile добавляется в system-промпт
      */
-    public static function text(array $userContent, string $model, int $maxTokens = 1024): ?string
+    public static function text(array $userContent, string $model, int $maxTokens = 1024, ?NutritionProfile $profile = null): ?string
     {
         try {
             $response = Http::withHeaders([
@@ -30,7 +32,7 @@ class Claude
                 ->post(self::ENDPOINT, [
                     'model' => $model,
                     'max_tokens' => $maxTokens,
-                    'system' => PromptBuilder::system(),
+                    'system' => PromptBuilder::system($profile),
                     'messages' => [
                         ['role' => 'user', 'content' => $userContent],
                     ],
@@ -83,7 +85,7 @@ class Claude
      *
      * @param  array{media_type: string, data: string}  $image  base64-изображение
      */
-    public static function vision(array $image, string $prompt, int $maxTokens = 400): ?string
+    public static function vision(array $image, string $prompt, int $maxTokens = 400, ?NutritionProfile $profile = null): ?string
     {
         return self::text(
             [
@@ -99,6 +101,7 @@ class Claude
             ],
             (string) config('nutrition.models.vision'),
             $maxTokens,
+            $profile,
         );
     }
 }

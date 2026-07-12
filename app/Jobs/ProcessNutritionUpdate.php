@@ -7,9 +7,13 @@ use App\Actions\Nutrition\HandleCommand;
 use App\Actions\Nutrition\HandleNumbers;
 use App\Actions\Nutrition\HandlePhoto;
 use App\Actions\Nutrition\HandleQuestion;
+use App\Models\NutritionInvite;
 use App\Models\NutritionMessage;
+use App\Models\NutritionProfile;
+use App\Support\Nutrition\ProfileContext;
 use App\Support\Nutrition\TelegramClient;
 use App\Support\Nutrition\Tg;
+use Carbon\CarbonImmutable;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -29,12 +33,13 @@ class ProcessNutritionUpdate implements ShouldQueue
     public function handle(): void
     {
         try {
-            // Бота добавили в группу: приветствуем прямо в чат события
-            // (chat_id может быть ещё не настроен) и выходим.
+            // Бота добавили в группу: приветствуем прямо в чат события и выходим.
             if ($this->handleNewChatMembers()) {
                 return;
             }
 
+            $profile = ProfileContext::resolve($this->update);
+            $chatId = Tg::chatId($this->update);
             $fromId = $this->update['callback_query']['from']['id']
                 ?? $this->update['message']['from']['id']
                 ?? null;
@@ -43,44 +48,104 @@ class ProcessNutritionUpdate implements ShouldQueue
                 return;
             }
 
-            $configuredUserId = config('nutrition.user_id');
-            $configuredChatId = config('nutrition.chat_id');
-
-            // Ещё не настроенный бот: ни владельца, ни основного чата —
-            // фиксируем кандидата в логах и подсказываем, что делать.
-            if (blank($configuredUserId) && blank($configuredChatId)) {
-                Log::info('nutrition: chat candidate', ['id' => $fromId]);
-
-                app(TelegramClient::class)->api('sendMessage', [
-                    'chat_id' => $fromId,
-                    'text' => 'Привет! Твой ID зафиксирован в логах — координатор добавит его в настройки.',
-                ]);
-
-                return;
-            }
-
-            // Владелец — user_id, если задан; иначе обратная совместимость по chat_id (личка).
-            $ownerId = blank($configuredUserId) ? $configuredChatId : $configuredUserId;
-
-            // Чужой отправитель: в группе игнорируем молча, в личке — вежливый отказ.
-            if ((int) $fromId !== (int) $ownerId) {
+            // Неизвестный отправитель: в группе молчим, в личке — инвайт-подсказка
+            // (с попыткой погасить инвайт-код, если прислан).
+            if ($profile === null) {
                 if (! $this->isGroup()) {
-                    app(TelegramClient::class)->api('sendMessage', [
-                        'chat_id' => $fromId,
-                        'text' => 'Это персональный бот 🙂',
-                    ]);
+                    $this->handleUnknownPrivate((int) $fromId, $chatId);
                 }
 
                 return;
             }
 
-            $this->logIncoming();
-            $this->route();
+            // Профиль на паузе — короткое уведомление, без обработки.
+            if ($profile->status === 'paused') {
+                app(TelegramClient::class)->api('sendMessage', [
+                    'chat_id' => $chatId ?? $fromId,
+                    'text' => 'Профиль на паузе 💤',
+                ]);
+
+                return;
+            }
+
+            $tg = app(TelegramClient::class);
+            $tg->profileId = $profile->id;
+
+            $this->logIncoming($profile);
+            $this->route($profile);
         } catch (Throwable $e) {
             Log::error('nutrition: ProcessNutritionUpdate failed', [
                 'message' => $e->getMessage(),
             ]);
         }
+    }
+
+    /**
+     * Личка от неизвестного: если прислан похожий на инвайт-код — пробуем погасить
+     * (валидный → создаём onboarding-профиль, заглушка про онбординг; невалидный —
+     * вежливый отказ). Иначе — подсказка про инвайт-код.
+     */
+    private function handleUnknownPrivate(int $fromId, ?int $chatId): void
+    {
+        $target = $chatId ?? $fromId;
+        $text = trim((string) ($this->update['message']['text'] ?? ''));
+
+        if (preg_match('/^[A-Za-z0-9]{6}$/', $text)) {
+            $this->redeemInvite(strtoupper($text), $fromId, $target);
+
+            return;
+        }
+
+        app(TelegramClient::class)->api('sendMessage', [
+            'chat_id' => $target,
+            'text' => 'Это персональный бот. Есть инвайт-код? Пришли его 🙂',
+        ]);
+    }
+
+    /**
+     * Гасит инвайт-код: при валидном (существующий, ещё не использованный) создаёт
+     * onboarding-профиль отправителя, помечает инвайт использованным и отвечает
+     * заглушкой. Анкету онбординга подключит Task 5. Невалидный — вежливый отказ.
+     */
+    private function redeemInvite(string $code, int $fromId, int $target): void
+    {
+        $tg = app(TelegramClient::class);
+
+        $invite = NutritionInvite::query()
+            ->where('code', $code)
+            ->whereNull('used_by_profile_id')
+            ->first();
+
+        if ($invite === null) {
+            $tg->api('sendMessage', [
+                'chat_id' => $target,
+                'text' => 'Код не подошёл 🙈 Проверь его или попроси новый.',
+            ]);
+
+            return;
+        }
+
+        $from = $this->update['message']['from'] ?? [];
+
+        $profile = NutritionProfile::query()->create([
+            'telegram_user_id' => $fromId,
+            'name' => (string) ($from['first_name'] ?? 'Друг'),
+            'username' => $from['username'] ?? null,
+            'main_chat_id' => $target,
+            'status' => 'onboarding',
+        ]);
+
+        $invite->update([
+            'used_by_profile_id' => $profile->id,
+            'used_at' => CarbonImmutable::now('Europe/Moscow'),
+        ]);
+
+        $tg->api('sendMessage', [
+            'chat_id' => $target,
+            'text' => 'Код принят! 🎉 Онбординг скоро — я задам пару вопросов и мы начнём.',
+        ]);
+
+        Log::info('nutrition: invite redeemed', ['profile_id' => $profile->id]);
     }
 
     /**
@@ -100,20 +165,38 @@ class ProcessNutritionUpdate implements ShouldQueue
 
         foreach ($members as $member) {
             if ($botId !== 0 && (int) ($member['id'] ?? 0) === $botId) {
-                // Приветствуем только если бот ещё не настроен (bootstrap)
-                // или бота добавил владелец. Чужие добавления — молча.
-                if (! $this->greetingAllowed()) {
+                $adder = ProfileContext::resolve($this->update);
+
+                // Приветствуем, если бота добавил владелец профиля ЛИБО инстанс ещё
+                // не настроен (bootstrap: профилей нет). Чужие добавления — молча.
+                $bootstrap = NutritionProfile::query()->doesntExist();
+                if ($adder === null && ! $bootstrap) {
                     return true;
                 }
 
-                app(TelegramClient::class)->api('sendMessage', [
+                $tg = app(TelegramClient::class);
+                $tg->profileId = $adder?->id;
+
+                $tg->api('sendMessage', [
                     'chat_id' => $chatId,
-                    'text' => "Привет! Я — персональный нутрициолог Глеба 🙌🏼\n\n"
-                        ."Разбираю приёмы пищи по фото, веду вес, шаги и воду, отвечаю на вопросы по питанию.\n\n"
+                    'text' => "Привет! Я — персональный нутрициолог 🙌🏼\n\n"
+                        .'Разбираю приёмы пищи по фото, веду вес, шаги и воду, отвечаю на вопросы по питанию.'."\n\n"
                         .'Чтобы начать — отправьте /start.',
                 ]);
 
                 Log::info('nutrition: added to chat', ['chat_id' => $chatId]);
+
+                // Владельцу предлагаем сделать этот чат основным (callback — Task 4).
+                if ($adder !== null && $chatId !== null) {
+                    $tg->send(
+                        'Сделать этот чат основным?',
+                        [[
+                            ['text' => 'Да', 'callback_data' => 'chatmain:yes'],
+                            ['text' => 'Нет', 'callback_data' => 'chatmain:no'],
+                        ]],
+                        chatId: (int) $chatId,
+                    );
+                }
 
                 return true;
             }
@@ -121,26 +204,6 @@ class ProcessNutritionUpdate implements ShouldQueue
 
         // Вход участников без бота — служебное событие, молча игнорируем.
         return true;
-    }
-
-    /**
-     * Разрешено ли приветствие при добавлении бота: bootstrap-режим
-     * (владелец не настроен) либо бота добавил сам владелец.
-     */
-    private function greetingAllowed(): bool
-    {
-        $configuredUserId = config('nutrition.user_id');
-        $configuredChatId = config('nutrition.chat_id');
-
-        // Bootstrap: ни владельца, ни основного чата — приветствуем любого.
-        if (blank($configuredUserId) && blank($configuredChatId)) {
-            return true;
-        }
-
-        $ownerId = blank($configuredUserId) ? $configuredChatId : $configuredUserId;
-        $fromId = $this->update['message']['from']['id'] ?? null;
-
-        return $fromId !== null && (int) $fromId === (int) $ownerId;
     }
 
     /**
@@ -163,7 +226,7 @@ class ProcessNutritionUpdate implements ShouldQueue
         return in_array($type, ['group', 'supergroup'], true);
     }
 
-    private function logIncoming(): void
+    private function logIncoming(NutritionProfile $profile): void
     {
         $message = $this->update['message'] ?? null;
         $callback = $this->update['callback_query'] ?? null;
@@ -187,6 +250,7 @@ class ProcessNutritionUpdate implements ShouldQueue
         }
 
         NutritionMessage::query()->create([
+            'profile_id' => $profile->id,
             'direction' => 'in',
             'kind' => $kind,
             'content' => $content,
@@ -199,12 +263,12 @@ class ProcessNutritionUpdate implements ShouldQueue
         ]);
     }
 
-    private function route(): void
+    private function route(NutritionProfile $profile): void
     {
         $update = $this->update;
 
         if (isset($update['callback_query'])) {
-            app(HandleCallback::class)->handle($update);
+            app(HandleCallback::class)->handle($update, $profile);
 
             return;
         }
@@ -212,7 +276,7 @@ class ProcessNutritionUpdate implements ShouldQueue
         $message = $update['message'] ?? [];
 
         if (isset($message['photo'])) {
-            app(HandlePhoto::class)->handle($update);
+            app(HandlePhoto::class)->handle($update, $profile);
 
             return;
         }
@@ -220,17 +284,17 @@ class ProcessNutritionUpdate implements ShouldQueue
         $text = $message['text'] ?? '';
 
         if (str_starts_with($text, '/')) {
-            app(HandleCommand::class)->handle($update);
+            app(HandleCommand::class)->handle($update, $profile);
 
             return;
         }
 
         if ($text !== '' && preg_match('/\d/', $text) && preg_match('/^[\d\s,.]+$/', $text)) {
-            app(HandleNumbers::class)->handle($update);
+            app(HandleNumbers::class)->handle($update, $profile);
 
             return;
         }
 
-        app(HandleQuestion::class)->handle($update);
+        app(HandleQuestion::class)->handle($update, $profile);
     }
 }

@@ -4,12 +4,11 @@ namespace App\Actions\Nutrition;
 
 use App\Models\NutritionMeal;
 use App\Models\NutritionMetric;
-use App\Models\NutritionSetting;
+use App\Models\NutritionProfile;
 use App\Support\Nutrition\Fmt;
 use App\Support\Nutrition\MealPlan;
 use App\Support\Nutrition\Planner;
 use App\Support\Nutrition\ProgramStatus;
-use App\Support\Nutrition\Settings;
 use App\Support\Nutrition\TelegramClient;
 use App\Support\Nutrition\Tg;
 use Carbon\CarbonImmutable;
@@ -23,12 +22,14 @@ class HandleCommand
         'missed' => '❌',
     ];
 
-    public function handle(array $update): void
+    public function handle(array $update, NutritionProfile $profile): void
     {
         // Любая команда выводит из режима ожидания значения настройки и времени приёма.
-        NutritionSetting::query()->whereIn('key', ['awaiting_setting', 'awaiting_meal_time'])->delete();
+        $profile->clearWaiting('setting');
+        $profile->clearWaiting('meal_time');
 
         $tg = app(TelegramClient::class);
+        $tg->profileId = $profile->id;
         $chatId = Tg::chatId($update);
 
         $text = trim((string) ($update['message']['text'] ?? ''));
@@ -37,21 +38,21 @@ class HandleCommand
         $arg = trim($parts[1] ?? '');
 
         match ($command) {
-            '/start' => $this->start($tg, $chatId),
+            '/start' => $this->start($tg, $profile, $chatId),
             '/help' => $this->help($tg, $chatId),
-            '/today' => $this->today($tg, $chatId),
-            '/stats' => $this->stats($tg, $chatId),
-            '/weight' => $this->metric($tg, 'weight', $arg, $chatId),
-            '/steps' => $this->metric($tg, 'steps', $arg, $chatId),
-            '/water' => $this->metric($tg, 'water', $arg, $chatId),
-            '/skip' => $this->skip($tg, $chatId),
-            '/checkup' => $this->checkup($tg, $chatId),
-            '/settings' => $this->settings($tg, $chatId),
+            '/today' => $this->today($tg, $profile, $chatId),
+            '/stats' => $this->stats($tg, $profile, $chatId),
+            '/weight' => $this->metric($tg, $profile, 'weight', $arg, $chatId),
+            '/steps' => $this->metric($tg, $profile, 'steps', $arg, $chatId),
+            '/water' => $this->metric($tg, $profile, 'water', $arg, $chatId),
+            '/skip' => $this->skip($tg, $profile, $chatId),
+            '/checkup' => $this->checkup($tg, $profile, $chatId),
+            '/settings' => $this->settings($tg, $profile, $chatId),
             default => $tg->send('Не знаю такой команды. /help — список команд.', chatId: $chatId),
         };
     }
 
-    private function start(TelegramClient $tg, ?int $chatId = null): void
+    private function start(TelegramClient $tg, NutritionProfile $profile, ?int $chatId = null): void
     {
         $lines = [
             'Привет! Я твой нутрициолог 🙌🏼',
@@ -65,16 +66,15 @@ class HandleCommand
             '',
         ];
 
-        $startedOn = Settings::get('program_started_on');
         $keyboard = null;
 
-        if ($startedOn === null) {
+        if ($profile->program_started_on === null) {
             $lines[] = '📍 Программа ещё не запущена.';
             $keyboard = [[['text' => '🚀 Начать программу 10 недель', 'callback_data' => 'program:start']]];
-        } elseif (Settings::get('phase') === 'maintenance') {
+        } elseif ($profile->phase === 'maintenance') {
             $lines[] = '📍 Режим поддержки.';
         } else {
-            $lines[] = '📍 Идёт день '.ProgramStatus::day().' программы.';
+            $lines[] = '📍 Идёт день '.ProgramStatus::day($profile).' программы.';
         }
 
         $lines[] = '';
@@ -111,12 +111,13 @@ class HandleCommand
         $tg->send(implode("\n", $lines), chatId: $chatId);
     }
 
-    private function today(TelegramClient $tg, ?int $chatId = null): void
+    private function today(TelegramClient $tg, NutritionProfile $profile, ?int $chatId = null): void
     {
         $now = CarbonImmutable::now('Europe/Moscow');
-        Planner::ensureDay($now);
+        Planner::ensureDay($profile, $now);
 
         $meals = NutritionMeal::query()
+            ->where('profile_id', $profile->id)
             ->whereDate('date', $now->format('Y-m-d'))
             ->get()
             ->keyBy('type');
@@ -143,12 +144,12 @@ class HandleCommand
         }
 
         $lines[] = '';
-        $lines[] = 'Цели: шаги '.Settings::get('steps_target').', вода 2 л, отбой '.Settings::get('sleep_time').'.';
+        $lines[] = 'Цели: шаги '.$profile->setting('steps_target').', вода 2 л, отбой '.$profile->setting('sleep_time').'.';
 
         $tg->send(implode("\n", $lines), chatId: $chatId);
     }
 
-    private function stats(TelegramClient $tg, ?int $chatId = null): void
+    private function stats(TelegramClient $tg, NutritionProfile $profile, ?int $chatId = null): void
     {
         $now = CarbonImmutable::now('Europe/Moscow');
         $from = $now->subDays(6)->format('Y-m-d');
@@ -156,6 +157,7 @@ class HandleCommand
 
         $lines = ['<b>Вес</b>'];
         $weights = NutritionMetric::query()
+            ->where('profile_id', $profile->id)
             ->where('type', 'weight')
             ->orderByDesc('date')
             ->limit(8)
@@ -177,17 +179,19 @@ class HandleCommand
         $lines[] = '';
         $lines[] = '<b>Шаги (7 дней)</b>';
         $steps = NutritionMetric::query()
+            ->where('profile_id', $profile->id)
             ->where('type', 'steps')
             ->whereDate('date', '>=', $from)
             ->whereDate('date', '<=', $to)
             ->get();
         $lines[] = $steps->isEmpty()
             ? '— нет данных'
-            : 'Среднее: '.(int) round((float) $steps->avg('value')).' / цель '.Settings::get('steps_target');
+            : 'Среднее: '.(int) round((float) $steps->avg('value')).' / цель '.$profile->setting('steps_target');
 
         $lines[] = '';
         $lines[] = '<b>Вода (7 дней)</b>';
         $water = NutritionMetric::query()
+            ->where('profile_id', $profile->id)
             ->where('type', 'water')
             ->whereDate('date', '>=', $from)
             ->whereDate('date', '<=', $to)
@@ -199,7 +203,7 @@ class HandleCommand
         $tg->send(implode("\n", $lines), chatId: $chatId);
     }
 
-    private function metric(TelegramClient $tg, string $type, string $arg, ?int $chatId = null): void
+    private function metric(TelegramClient $tg, NutritionProfile $profile, string $type, string $arg, ?int $chatId = null): void
     {
         $raw = str_replace(',', '.', trim($arg));
 
@@ -220,19 +224,19 @@ class HandleCommand
         $today = CarbonImmutable::now('Europe/Moscow')->format('Y-m-d');
 
         NutritionMetric::query()->updateOrCreate(
-            ['date' => $today, 'type' => $type],
+            ['profile_id' => $profile->id, 'date' => $today, 'type' => $type],
             ['value' => $value],
         );
 
         $tg->send('Записал: '.$this->metricConfirm($type, $value).' 👌🏻', chatId: $chatId);
     }
 
-    private function skip(TelegramClient $tg, ?int $chatId = null): void
+    private function skip(TelegramClient $tg, NutritionProfile $profile, ?int $chatId = null): void
     {
         $now = CarbonImmutable::now('Europe/Moscow');
-        Planner::ensureDay($now);
+        Planner::ensureDay($profile, $now);
 
-        $meal = Planner::currentMeal($now);
+        $meal = Planner::currentMeal($profile, $now);
         if ($meal === null) {
             $tg->send('Нет ближайшего приёма для пропуска 👌🏻', chatId: $chatId);
 
@@ -241,10 +245,11 @@ class HandleCommand
 
         $label = MealPlan::LABELS[$meal->type];
         $meal->update(['status' => 'skipped']);
-        Planner::recalculate($now->startOfDay());
+        Planner::recalculate($profile, $now->startOfDay());
 
         $lines = [$label.' пропущен ⏭', '', 'Остаток дня:'];
         $rest = NutritionMeal::query()
+            ->where('profile_id', $profile->id)
             ->whereDate('date', $now->format('Y-m-d'))
             ->where('status', 'pending')
             ->orderBy('window_start')
@@ -262,14 +267,14 @@ class HandleCommand
         $tg->send(implode("\n", $lines), chatId: $chatId);
     }
 
-    private function checkup(TelegramClient $tg, ?int $chatId = null): void
+    private function checkup(TelegramClient $tg, NutritionProfile $profile, ?int $chatId = null): void
     {
-        app(RunCheckup::class)->handle(onDemand: true, chatId: $chatId);
+        app(RunCheckup::class)->handle($profile, onDemand: true, chatId: $chatId);
     }
 
-    private function settings(TelegramClient $tg, ?int $chatId = null): void
+    private function settings(TelegramClient $tg, NutritionProfile $profile, ?int $chatId = null): void
     {
-        $windows = Settings::get('default_windows');
+        $windows = $profile->setting('default_windows');
         $windowStrings = [];
         foreach (MealPlan::TYPES as $type) {
             if (isset($windows[$type])) {
@@ -277,17 +282,17 @@ class HandleCommand
             }
         }
 
-        $portion = (int) Settings::get('portion_adjustment');
+        $portion = (int) $profile->setting('portion_adjustment');
         $portionStr = ($portion > 0 ? '+' : '').$portion.'%';
-        $phase = Settings::get('phase') === 'program' ? 'Программа TriDaily' : 'Поддержка';
-        $day = Settings::get('program_started_on') === null ? '—' : (string) ProgramStatus::day();
+        $phase = $profile->phase === 'program' ? 'Программа TriDaily' : 'Поддержка';
+        $day = $profile->program_started_on === null ? '—' : (string) ProgramStatus::day($profile);
 
         $lines = [
             '<b>Настройки</b>',
-            'Подъём: '.Settings::get('wake_time'),
-            'Отбой: '.Settings::get('sleep_time'),
+            'Подъём: '.$profile->setting('wake_time'),
+            'Отбой: '.$profile->setting('sleep_time'),
             'Окна: '.implode(', ', $windowStrings),
-            'Цель шагов: '.Settings::get('steps_target'),
+            'Цель шагов: '.$profile->setting('steps_target'),
             'Поправка порций: '.$portionStr,
             'Фаза: '.$phase,
             'День программы: '.$day,

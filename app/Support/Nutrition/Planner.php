@@ -3,21 +3,22 @@
 namespace App\Support\Nutrition;
 
 use App\Models\NutritionMeal;
+use App\Models\NutritionProfile;
 use Carbon\CarbonImmutable;
 
 class Planner
 {
     /**
-     * Создаёт 4 строки nutrition_meals на дату с дефолтными окнами (идемпотентно).
+     * Создаёт 4 строки nutrition_meals профиля на дату с дефолтными окнами (идемпотентно).
      */
-    public static function ensureDay(CarbonImmutable $date): void
+    public static function ensureDay(NutritionProfile $profile, CarbonImmutable $date): void
     {
-        $defaultWindows = Settings::get('default_windows');
+        $defaultWindows = $profile->setting('default_windows');
         $day = $date->startOfDay();
 
         foreach (MealPlan::TYPES as $type) {
             NutritionMeal::query()->firstOrCreate(
-                ['date' => $day, 'type' => $type],
+                ['profile_id' => $profile->id, 'date' => $day, 'type' => $type],
                 [
                     'window_start' => $date->setTimeFromTimeString($defaultWindows[$type]['start'])->format('Y-m-d H:i:s'),
                     'window_end' => $date->setTimeFromTimeString($defaultWindows[$type]['end'])->format('Y-m-d H:i:s'),
@@ -28,11 +29,11 @@ class Planner
     }
 
     /**
-     * Перечитывает факты из БД и обновляет окна pending-приёмов на дату.
+     * Перечитывает факты из БД и обновляет окна pending-приёмов профиля на дату.
      */
-    public static function recalculate(CarbonImmutable $date): void
+    public static function recalculate(NutritionProfile $profile, CarbonImmutable $date): void
     {
-        $meals = self::mealsForDate($date);
+        $meals = self::mealsForDate($profile, $date);
 
         $facts = [];
         foreach (MealPlan::TYPES as $type) {
@@ -45,9 +46,9 @@ class Planner
 
         $windows = MealPlan::windows(
             $date,
-            Settings::get('default_windows'),
+            $profile->setting('default_windows'),
             $facts,
-            Settings::get('sleep_time'),
+            $profile->setting('sleep_time'),
         );
 
         foreach ($windows as $type => $window) {
@@ -66,7 +67,7 @@ class Planner
     /**
      * Отмечает приём съеденным и пересчитывает окна оставшихся.
      */
-    public static function markEaten(NutritionMeal $meal, CarbonImmutable $at, ?string $photoFileId, ?string $feedback): void
+    public static function markEaten(NutritionProfile $profile, NutritionMeal $meal, CarbonImmutable $at, ?string $photoFileId, ?string $feedback): void
     {
         $meal->update([
             'status' => 'eaten',
@@ -75,15 +76,16 @@ class Planner
             'ai_feedback' => $feedback,
         ]);
 
-        self::recalculate(self::dateOf($meal));
+        self::recalculate($profile, self::dateOf($meal));
     }
 
     /**
-     * Первый pending-приём, чьё окно ещё не закрыто (window_end >= now), иначе null.
+     * Первый pending-приём профиля, чьё окно ещё не закрыто (window_end >= now), иначе null.
      */
-    public static function currentMeal(CarbonImmutable $now): ?NutritionMeal
+    public static function currentMeal(NutritionProfile $profile, CarbonImmutable $now): ?NutritionMeal
     {
         return NutritionMeal::query()
+            ->where('profile_id', $profile->id)
             ->whereDate('date', $now->format('Y-m-d'))
             ->where('status', 'pending')
             ->where('window_end', '>=', $now->format('Y-m-d H:i:s'))
@@ -92,14 +94,15 @@ class Planner
     }
 
     /**
-     * Переводит просроченные pending-приёмы (window_end < now - missed_after) в missed и пересчитывает.
+     * Переводит просроченные pending-приёмы профиля (window_end < now - missed_after) в missed и пересчитывает.
      */
-    public static function markMissed(CarbonImmutable $now): void
+    public static function markMissed(NutritionProfile $profile, CarbonImmutable $now): void
     {
         $missedAfter = (int) config('nutrition.reminders.missed_after', 90);
         $threshold = $now->subMinutes($missedAfter)->format('Y-m-d H:i:s');
 
         $overdue = NutritionMeal::query()
+            ->where('profile_id', $profile->id)
             ->whereDate('date', $now->format('Y-m-d'))
             ->where('status', 'pending')
             ->where('window_end', '<', $threshold)
@@ -113,15 +116,16 @@ class Planner
             $meal->update(['status' => 'missed']);
         }
 
-        self::recalculate($now->startOfDay());
+        self::recalculate($profile, $now->startOfDay());
     }
 
     /**
      * @return array<string, NutritionMeal>
      */
-    private static function mealsForDate(CarbonImmutable $date): array
+    private static function mealsForDate(NutritionProfile $profile, CarbonImmutable $date): array
     {
         return NutritionMeal::query()
+            ->where('profile_id', $profile->id)
             ->whereDate('date', $date->format('Y-m-d'))
             ->get()
             ->keyBy('type')

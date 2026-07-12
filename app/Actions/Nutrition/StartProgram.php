@@ -2,8 +2,8 @@
 
 namespace App\Actions\Nutrition;
 
+use App\Models\NutritionProfile;
 use App\Models\NutritionTopic;
-use App\Support\Nutrition\Settings;
 use Carbon\CarbonImmutable;
 
 class StartProgram
@@ -14,19 +14,25 @@ class StartProgram
     private const FIRST_OFFSET = 3;
 
     /**
-     * Стартует программу: фиксирует дату старта, переводит в фазу program и
-     * раскладывает scheduled_on тем (позиция 1 → день 3, каждая следующая +5 дней,
-     * позиция 12 → день 58). Идемпотентно: повторный запуск пересчитывает даты.
+     * Стартует программу профиля: фиксирует дату старта на профиле, переводит в
+     * фазу program и раскладывает scheduled_on тем (позиция 1 → день 3, каждая
+     * следующая +5 дней, позиция 12 → день 58). Идемпотентно: повторный запуск
+     * пересчитывает даты.
+     *
+     * Раскладка тем остаётся глобальной (NutritionTopic.scheduled_on) — перевод
+     * на per-profile NutritionTopicSend делает Task 3.
      *
      * @return string человекочитаемое резюме (дата старта, сколько тем запланировано)
      */
-    public function handle(?CarbonImmutable $date = null): string
+    public function handle(NutritionProfile $profile, ?CarbonImmutable $date = null): string
     {
         $date = $date?->setTimezone('Europe/Moscow');
         $start = ($date ?? CarbonImmutable::now('Europe/Moscow'))->startOfDay();
 
-        Settings::set('program_started_on', $start->format('Y-m-d'));
-        Settings::set('phase', 'program');
+        $profile->update([
+            'program_started_on' => $start->format('Y-m-d'),
+            'phase' => 'program',
+        ]);
 
         $topics = NutritionTopic::query()->orderBy('position')->get();
 

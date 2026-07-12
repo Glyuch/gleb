@@ -3,22 +3,22 @@
 namespace App\Actions\Nutrition;
 
 use App\Models\NutritionMeal;
-use App\Models\NutritionSetting;
+use App\Models\NutritionProfile;
 use App\Support\Nutrition\Claude;
 use App\Support\Nutrition\MealLogger;
 use App\Support\Nutrition\MealPlan;
 use App\Support\Nutrition\Planner;
 use App\Support\Nutrition\ProgramStatus;
-use App\Support\Nutrition\Settings;
 use App\Support\Nutrition\TelegramClient;
 use App\Support\Nutrition\Tg;
 use Carbon\CarbonImmutable;
 
 class HandleCallback
 {
-    public function handle(array $update): void
+    public function handle(array $update, NutritionProfile $profile): void
     {
         $tg = app(TelegramClient::class);
+        $tg->profileId = $profile->id;
         $chatId = Tg::chatId($update);
         $callback = $update['callback_query'] ?? [];
         $data = (string) ($callback['data'] ?? '');
@@ -27,13 +27,13 @@ class HandleCallback
         [$action, $arg] = array_pad(explode(':', $data, 2), 2, '');
 
         match ($action) {
-            'ate' => $this->ate($tg, $arg, $chatId),
-            'skip' => $this->skip($tg, $arg, $chatId),
-            'mealphoto' => $this->mealPhoto($tg, $arg, $chatId),
-            'atepast' => $this->atePast($tg, $arg, $chatId),
-            'adj' => $this->adjust($tg, $arg, $chatId),
-            'program' => $this->programStart($tg, $chatId),
-            'set' => $this->setSetting($tg, $arg, $chatId),
+            'ate' => $this->ate($tg, $profile, $arg, $chatId),
+            'skip' => $this->skip($tg, $profile, $arg, $chatId),
+            'mealphoto' => $this->mealPhoto($tg, $profile, $arg, $chatId),
+            'atepast' => $this->atePast($tg, $profile, $arg, $chatId),
+            'adj' => $this->adjust($tg, $profile, $arg, $chatId),
+            'program' => $this->programStart($tg, $profile, $chatId),
+            'set' => $this->setSetting($tg, $profile, $arg, $chatId),
             default => $tg->send('Не понял действие 🤔', chatId: $chatId),
         };
 
@@ -42,9 +42,9 @@ class HandleCallback
         }
     }
 
-    private function ate(TelegramClient $tg, string $type, ?int $chatId = null): void
+    private function ate(TelegramClient $tg, NutritionProfile $profile, string $type, ?int $chatId = null): void
     {
-        $meal = $this->meal($type);
+        $meal = $this->meal($profile, $type);
         if ($meal === null) {
             $tg->send('Не нашёл такой приём на сегодня 🤔', chatId: $chatId);
 
@@ -58,13 +58,13 @@ class HandleCallback
             return;
         }
 
-        Planner::markEaten($meal, CarbonImmutable::now('Europe/Moscow'), null, null);
+        Planner::markEaten($profile, $meal, CarbonImmutable::now('Europe/Moscow'), null, null);
         $tg->send(MealPlan::LABELS[$type].' отмечен ✅', chatId: $chatId);
     }
 
-    private function skip(TelegramClient $tg, string $type, ?int $chatId = null): void
+    private function skip(TelegramClient $tg, NutritionProfile $profile, string $type, ?int $chatId = null): void
     {
-        $meal = $this->meal($type);
+        $meal = $this->meal($profile, $type);
         if ($meal === null) {
             $tg->send('Не нашёл такой приём на сегодня 🤔', chatId: $chatId);
 
@@ -79,7 +79,7 @@ class HandleCallback
         }
 
         $meal->update(['status' => 'skipped']);
-        Planner::recalculate(CarbonImmutable::now('Europe/Moscow')->startOfDay());
+        Planner::recalculate($profile, CarbonImmutable::now('Europe/Moscow')->startOfDay());
         $tg->send(MealPlan::LABELS[$type].' пропущен ⏭', chatId: $chatId);
     }
 
@@ -87,20 +87,20 @@ class HandleCallback
      * Выбор приёма для отложенного фото: берём сохранённый file_id, распознаём,
      * помечаем приём съеденным и очищаем ожидание.
      */
-    private function mealPhoto(TelegramClient $tg, string $type, ?int $chatId = null): void
+    private function mealPhoto(TelegramClient $tg, NutritionProfile $profile, string $type, ?int $chatId = null): void
     {
         if (! in_array($type, MealPlan::TYPES, true)) {
             return;
         }
 
-        $fileId = Settings::get('awaiting_meal_photo');
+        $fileId = $profile->waiting('meal_photo');
         if (! is_string($fileId) || $fileId === '') {
             $tg->send('Фото не найдено, пришли ещё раз 🙏', chatId: $chatId);
 
             return;
         }
 
-        $meal = $this->meal($type);
+        $meal = $this->meal($profile, $type);
         if ($meal === null) {
             $tg->send('Не нашёл такой приём на сегодня 🤔', chatId: $chatId);
 
@@ -111,14 +111,14 @@ class HandleCallback
 
         $image = $tg->downloadPhotoBase64($fileId);
         $feedback = $image !== null
-            ? Claude::vision($image, MealLogger::foodPrompt($type))
+            ? Claude::vision($image, MealLogger::foodPrompt($profile, $type), 400, $profile)
             : null;
 
-        Planner::markEaten($meal, $now, $fileId, $feedback);
-        $this->clearKey('awaiting_meal_photo');
+        Planner::markEaten($profile, $meal, $now, $fileId, $feedback);
+        $profile->clearWaiting('meal_photo');
 
         $lines = [$feedback ?? 'Записал приём 👌🏻 Разбор пришлю позже'];
-        $tail = MealLogger::windowsTail($now);
+        $tail = MealLogger::windowsTail($profile, $now);
         if ($tail !== '') {
             $lines[] = '';
             $lines[] = $tail;
@@ -132,38 +132,38 @@ class HandleCallback
     /**
      * «Поел раньше»: ждём время ЧЧ:ММ следующим сообщением (перехватит SettingInput).
      */
-    private function atePast(TelegramClient $tg, string $type, ?int $chatId = null): void
+    private function atePast(TelegramClient $tg, NutritionProfile $profile, string $type, ?int $chatId = null): void
     {
         if (! in_array($type, MealPlan::TYPES, true)) {
             return;
         }
 
-        Settings::set('awaiting_meal_time', $type);
+        $profile->setWaiting('meal_time', $type);
         // Взаимоисключаем с ожиданием настройки.
-        $this->clearKey('awaiting_setting');
+        $profile->clearWaiting('setting');
 
         // kind=meal_time_request — staleness-guard в SettingInput::interceptMealTime.
         $tg->send('Во сколько поел? Пришли время ЧЧ:ММ, например 10:00', null, 'meal_time_request', $chatId);
     }
 
-    private function adjust(TelegramClient $tg, string $decision, ?int $chatId = null): void
+    private function adjust(TelegramClient $tg, NutritionProfile $profile, string $decision, ?int $chatId = null): void
     {
         if ($decision === 'yes') {
-            $pending = Settings::get('pending_adjustments');
+            $pending = $profile->waiting('pending_adjustments');
             if (is_array($pending)) {
                 foreach (['steps_target', 'portion_adjustment', 'sleep_time'] as $key) {
                     if (array_key_exists($key, $pending)) {
-                        Settings::set($key, $pending[$key]);
+                        $profile->setSetting($key, $pending[$key]);
                     }
                 }
             }
-            $this->clearPending();
+            $profile->clearWaiting('pending_adjustments');
             $tg->send('Готово, обновил настройки 👌🏻', chatId: $chatId);
 
             return;
         }
 
-        $this->clearPending();
+        $profile->clearWaiting('pending_adjustments');
         $tg->send('Ок, оставляем как есть 👌🏻', chatId: $chatId);
     }
 
@@ -171,15 +171,15 @@ class HandleCallback
      * Запуск программы по кнопке онбординга. Идемпотентно: если уже идёт —
      * сообщаем текущий день и ничего не меняем.
      */
-    private function programStart(TelegramClient $tg, ?int $chatId = null): void
+    private function programStart(TelegramClient $tg, NutritionProfile $profile, ?int $chatId = null): void
     {
-        if (Settings::get('program_started_on') !== null) {
-            $tg->send('Программа уже идёт (день '.ProgramStatus::day().') 👌🏻', chatId: $chatId);
+        if ($profile->program_started_on !== null) {
+            $tg->send('Программа уже идёт (день '.ProgramStatus::day($profile).') 👌🏻', chatId: $chatId);
 
             return;
         }
 
-        app(StartProgram::class)->handle();
+        app(StartProgram::class)->handle($profile);
 
         $lines = [
             'Отлично, старт зафиксирован! 🚀',
@@ -197,7 +197,7 @@ class HandleCallback
      * Кнопка настройки: запоминаем ожидаемый ключ и просим значение.
      * Обрабатываем только три ключа; прочее игнорируем (answerCallback всё равно сработает).
      */
-    private function setSetting(TelegramClient $tg, string $key, ?int $chatId = null): void
+    private function setSetting(TelegramClient $tg, NutritionProfile $profile, string $key, ?int $chatId = null): void
     {
         $prompts = [
             'wake_time' => 'Пришли время подъёма в формате ЧЧ:ММ, например 07:00',
@@ -209,40 +209,24 @@ class HandleCallback
             return;
         }
 
-        Settings::set('awaiting_setting', $key);
+        $profile->setWaiting('setting', $key);
         // Взаимоисключаем с ожиданием времени приёма.
-        $this->clearKey('awaiting_meal_time');
+        $profile->clearWaiting('meal_time');
 
         $tg->send($prompts[$key], null, 'setting_request', $chatId);
     }
 
-    /**
-     * Очищает pending_adjustments. Столбец value NOT NULL, поэтому «пусто»
-     * выражается отсутствием строки — тогда Settings::get вернёт дефолт null.
-     */
-    private function clearPending(): void
-    {
-        NutritionSetting::query()->where('key', 'pending_adjustments')->delete();
-    }
-
-    /**
-     * Сбрасывает ключ настройки удалением строки (value NOT NULL → «пусто» = нет строки).
-     */
-    private function clearKey(string $key): void
-    {
-        NutritionSetting::query()->where('key', $key)->delete();
-    }
-
-    private function meal(string $type): ?NutritionMeal
+    private function meal(NutritionProfile $profile, string $type): ?NutritionMeal
     {
         if (! in_array($type, MealPlan::TYPES, true)) {
             return null;
         }
 
         $now = CarbonImmutable::now('Europe/Moscow');
-        Planner::ensureDay($now);
+        Planner::ensureDay($profile, $now);
 
         return NutritionMeal::query()
+            ->where('profile_id', $profile->id)
             ->whereDate('date', $now->format('Y-m-d'))
             ->where('type', $type)
             ->first();

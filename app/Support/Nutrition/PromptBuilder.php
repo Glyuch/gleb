@@ -5,6 +5,7 @@ namespace App\Support\Nutrition;
 use App\Models\NutritionMeal;
 use App\Models\NutritionMessage;
 use App\Models\NutritionMetric;
+use App\Models\NutritionProfile;
 use Carbon\CarbonImmutable;
 
 class PromptBuilder
@@ -22,10 +23,12 @@ class PromptBuilder
         TXT;
 
     /**
-     * Собирает system-промпт: персона + содержимое всех resources/nutrition/knowledge/*.md
-     * (в сортировке имён). Нечитаемые файлы пропускаются молча.
+     * Собирает system-промпт: персона + содержимое resources/nutrition/knowledge/*.md
+     * (в сортировке имён; файлы 04-* — legacy-профиль Глеба — исключены, профиль
+     * клиента теперь приходит из БД) + персональный ai_profile переданного профиля.
+     * Нечитаемые файлы пропускаются молча.
      */
-    public static function system(): string
+    public static function system(?NutritionProfile $profile = null): string
     {
         $parts = [self::PERSONA];
 
@@ -33,12 +36,20 @@ class PromptBuilder
         sort($files);
 
         foreach ($files as $file) {
+            if (str_starts_with(basename($file), '04-')) {
+                continue;
+            }
+
             $content = @file_get_contents($file);
             if ($content === false) {
                 continue;
             }
 
             $parts[] = trim($content);
+        }
+
+        if ($profile !== null && filled($profile->ai_profile)) {
+            $parts[] = "# Профиль клиента\n".trim((string) $profile->ai_profile);
         }
 
         return implode("\n\n", $parts);
@@ -48,28 +59,26 @@ class PromptBuilder
      * Текстовый контекст дня для промптов чата/саммари: фаза и день программы,
      * настройки, приёмы за дату, метрики за 7 дней и последние 30 сообщений.
      */
-    public static function dayContext(CarbonImmutable $date): string
+    public static function dayContext(NutritionProfile $profile, CarbonImmutable $date): string
     {
         $lines = [];
 
         // Фаза и день программы. Номер дня — единый источник: ProgramStatus::day().
-        $phase = Settings::get('phase');
-        $startedOn = Settings::get('program_started_on');
-        if ($phase === 'program' && $startedOn !== null) {
-            $lines[] = 'Фаза: День '.ProgramStatus::day().' программы TriDaily.';
+        if ($profile->phase === 'program' && $profile->program_started_on !== null) {
+            $lines[] = 'Фаза: День '.ProgramStatus::day($profile).' программы TriDaily.';
         } else {
             $lines[] = 'Фаза: Режим поддержки.';
         }
 
         // Настройки.
-        $portion = (int) Settings::get('portion_adjustment');
+        $portion = (int) $profile->setting('portion_adjustment');
         $portionStr = ($portion > 0 ? '+' : '').$portion.'%';
-        $lines[] = 'Настройки: цель шагов '.Settings::get('steps_target')
+        $lines[] = 'Настройки: цель шагов '.$profile->setting('steps_target')
             .'; поправка порций '.$portionStr
-            .'; подъём '.Settings::get('wake_time')
-            .', отбой '.Settings::get('sleep_time').'.';
+            .'; подъём '.$profile->setting('wake_time')
+            .', отбой '.$profile->setting('sleep_time').'.';
 
-        $windows = Settings::get('default_windows');
+        $windows = $profile->setting('default_windows');
         $windowStrings = [];
         foreach (MealPlan::TYPES as $type) {
             if (isset($windows[$type])) {
@@ -82,6 +91,7 @@ class PromptBuilder
         $lines[] = '';
         $lines[] = 'Приёмы за '.$date->format('d.m.Y').':';
         $meals = NutritionMeal::query()
+            ->where('profile_id', $profile->id)
             ->whereDate('date', $date->format('Y-m-d'))
             ->get()
             ->keyBy('type');
@@ -115,6 +125,7 @@ class PromptBuilder
         $lines[] = '';
         $lines[] = 'Метрики за последние 7 дней:';
         $metrics = NutritionMetric::query()
+            ->where('profile_id', $profile->id)
             ->whereDate('date', '>=', $date->subDays(6)->format('Y-m-d'))
             ->whereDate('date', '<=', $date->format('Y-m-d'))
             ->orderBy('date')
@@ -134,6 +145,7 @@ class PromptBuilder
         $lines[] = '';
         $lines[] = 'Последние сообщения:';
         $messages = NutritionMessage::query()
+            ->where('profile_id', $profile->id)
             ->orderByDesc('id')
             ->limit(30)
             ->get()

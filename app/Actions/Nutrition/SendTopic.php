@@ -2,6 +2,7 @@
 
 namespace App\Actions\Nutrition;
 
+use App\Models\NutritionProfile;
 use App\Models\NutritionTopic;
 use App\Support\Nutrition\TelegramClient;
 use Carbon\CarbonImmutable;
@@ -14,9 +15,10 @@ class SendTopic
      * caption только у первого; отсутствующие файлы пропускаются). Если ни одного
      * файла нет на диске — intro уходит текстом. sent_at проставляется в любом случае.
      */
-    public function handle(NutritionTopic $topic): void
+    public function handle(NutritionProfile $profile, NutritionTopic $topic): void
     {
         $tg = app(TelegramClient::class);
+        $tg->profileId = $profile->id;
 
         $paths = collect(explode('|', (string) $topic->file_path))
             ->filter(fn (string $name): bool => $name !== '')

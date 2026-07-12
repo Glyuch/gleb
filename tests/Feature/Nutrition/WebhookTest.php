@@ -2,9 +2,10 @@
 
 use App\Actions\Nutrition\HandleCommand;
 use App\Jobs\ProcessNutritionUpdate;
+use App\Models\NutritionInvite;
 use App\Models\NutritionMessage;
+use App\Models\NutritionProfile;
 use Illuminate\Support\Facades\Http;
-use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Queue;
 
 beforeEach(function () {
@@ -38,7 +39,9 @@ it('accepts the webhook with the secret header and dispatches the job', function
     Queue::assertPushed(ProcessNutritionUpdate::class);
 });
 
-it('replies with the personal-bot notice for a foreign sender and stores nothing inbound', function () {
+it('sends the invite prompt to a foreign sender and stores nothing inbound', function () {
+    nutritionProfile(['telegram_user_id' => 777]);
+
     Http::preventStrayRequests();
     Http::fake([
         'api.telegram.org/*' => Http::response(['ok' => true, 'result' => ['message_id' => 1]]),
@@ -55,35 +58,80 @@ it('replies with the personal-bot notice for a foreign sender and stores nothing
     expect(NutritionMessage::count())->toBe(0);
 });
 
-it('logs a chat candidate and stores nothing when chat_id is not configured', function () {
-    config(['nutrition.user_id' => null, 'nutrition.chat_id' => null]);
+it('redeems a valid invite code into an onboarding profile and marks it used', function () {
+    $admin = nutritionProfile(['telegram_user_id' => 777]);
+    $invite = NutritionInvite::generate($admin);
 
     Http::preventStrayRequests();
-    Http::fake([
-        'api.telegram.org/*' => Http::response(['ok' => true, 'result' => ['message_id' => 1]]),
-    ]);
-    Log::spy();
+    Http::fake(['api.telegram.org/*' => Http::response(['ok' => true, 'result' => ['message_id' => 1]])]);
 
-    (new ProcessNutritionUpdate(['message' => ['from' => ['id' => 555], 'text' => 'hi']]))->handle();
+    (new ProcessNutritionUpdate(['message' => [
+        'from' => ['id' => 555, 'first_name' => 'Аня', 'username' => 'anya'],
+        'chat' => ['id' => 555, 'type' => 'private'],
+        'text' => $invite->code,
+    ]]))->handle();
 
-    Log::shouldHaveReceived('info')->withArgs(fn ($message) => $message === 'nutrition: chat candidate')->once();
+    $newProfile = NutritionProfile::query()->where('telegram_user_id', 555)->first();
+    expect($newProfile)->not->toBeNull()
+        ->and($newProfile->status)->toBe('onboarding')
+        ->and($newProfile->name)->toBe('Аня');
+
+    expect($invite->fresh()->used_by_profile_id)->toBe($newProfile->id)
+        ->and($invite->fresh()->used_at)->not->toBeNull();
+
+    Http::assertSent(fn ($request) => str_contains($request->url(), '/sendMessage')
+        && str_contains($request['text'], 'Код принят'));
+});
+
+it('politely refuses an unknown invite code and creates no profile', function () {
+    nutritionProfile(['telegram_user_id' => 777]);
+
+    Http::preventStrayRequests();
+    Http::fake(['api.telegram.org/*' => Http::response(['ok' => true, 'result' => ['message_id' => 1]])]);
+
+    (new ProcessNutritionUpdate(['message' => [
+        'from' => ['id' => 556],
+        'chat' => ['id' => 556, 'type' => 'private'],
+        'text' => 'ABC234',
+    ]]))->handle();
+
+    expect(NutritionProfile::query()->where('telegram_user_id', 556)->exists())->toBeFalse();
+    Http::assertSent(fn ($request) => str_contains($request->url(), '/sendMessage')
+        && str_contains($request['text'], 'не подошёл'));
+});
+
+it('tells a paused profile it is on hold and does not route', function () {
+    nutritionProfile(['telegram_user_id' => 558, 'status' => 'paused', 'is_admin' => false]);
+
+    Http::preventStrayRequests();
+    Http::fake(['api.telegram.org/*' => Http::response(['ok' => true, 'result' => ['message_id' => 1]])]);
+
+    (new ProcessNutritionUpdate(['message' => [
+        'from' => ['id' => 558],
+        'chat' => ['id' => 558, 'type' => 'private'],
+        'text' => '/today',
+    ]]))->handle();
+
+    Http::assertSent(fn ($request) => str_contains($request->url(), '/sendMessage')
+        && str_contains($request['text'], 'на паузе'));
     expect(NutritionMessage::count())->toBe(0);
 });
 
 it('routes a slash command from the owner to HandleCommand and logs it inbound', function () {
-    config(['nutrition.user_id' => 123]);
+    $profile = nutritionProfile(['telegram_user_id' => 123]);
 
     $update = ['message' => ['from' => ['id' => 123], 'message_id' => 42, 'text' => '/today']];
 
     $this->mock(HandleCommand::class)
         ->shouldReceive('handle')
         ->once()
-        ->with($update);
+        ->with($update, Mockery::type(NutritionProfile::class));
 
     (new ProcessNutritionUpdate($update))->handle();
 
     $msg = NutritionMessage::where('direction', 'in')->first();
     expect($msg)->not->toBeNull()
         ->and($msg->kind)->toBe('command')
-        ->and($msg->content)->toBe('/today');
+        ->and($msg->content)->toBe('/today')
+        ->and($msg->profile_id)->toBe($profile->id);
 });

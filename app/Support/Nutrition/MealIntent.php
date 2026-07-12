@@ -2,6 +2,7 @@
 
 namespace App\Support\Nutrition;
 
+use App\Models\NutritionProfile;
 use Carbon\CarbonImmutable;
 
 /**
@@ -31,14 +32,15 @@ class MealIntent
     /**
      * @return array{intent: string, reports: array<int, array{meal: ?string, time: ?string, food: string}>, reply: string}|null
      */
-    public static function classify(string $text, CarbonImmutable $now): ?array
+    public static function classify(NutritionProfile $profile, string $text, CarbonImmutable $now): ?array
     {
-        $prompt = PromptBuilder::dayContext($now)."\n\n".self::INSTRUCTION."\n\nСообщение Глеба: ".$text;
+        $prompt = PromptBuilder::dayContext($profile, $now)."\n\n".self::INSTRUCTION."\n\nСообщение Глеба: ".$text;
 
         $raw = Claude::text(
             [['type' => 'text', 'text' => $prompt]],
             (string) config('nutrition.models.chat'),
             500,
+            $profile,
         );
 
         if ($raw === null) {

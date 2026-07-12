@@ -3,10 +3,10 @@
 use App\Actions\Nutrition\SendTopic;
 use App\Models\NutritionMeal;
 use App\Models\NutritionMessage;
+use App\Models\NutritionProfile;
 use App\Models\NutritionSentEvent;
 use App\Models\NutritionTopic;
 use App\Support\Nutrition\Planner;
-use App\Support\Nutrition\Settings;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Http;
@@ -19,6 +19,8 @@ beforeEach(function () {
         'nutrition.models.vision' => 'claude-haiku-4-5',
         'nutrition.models.chat' => 'claude-sonnet-5',
     ]);
+
+    $this->profile = nutritionProfile();
 
     Http::preventStrayRequests();
     Http::fake([
@@ -59,9 +61,9 @@ it('sends weight_request and greeting on Thursday morning and is idempotent', fu
  * Готовит день так, чтобы обед был единственным «горячим» приёмом с окном 13:00–14:00:
  * завтрак отмечен eaten (иначе он уйдёт в missed и пересчитает окна), обед — pending.
  */
-function prepareLunchWindow(string $start = '2026-07-16 13:00:00', string $end = '2026-07-16 14:00:00'): NutritionMeal
+function prepareLunchWindow(NutritionProfile $profile, string $start = '2026-07-16 13:00:00', string $end = '2026-07-16 14:00:00'): NutritionMeal
 {
-    Planner::ensureDay(CarbonImmutable::now('Europe/Moscow'));
+    Planner::ensureDay($profile, CarbonImmutable::now('Europe/Moscow'));
     NutritionMeal::query()->where('type', 'breakfast')->first()->update([
         'status' => 'eaten',
         'eaten_at' => '2026-07-16 08:00:00',
@@ -74,7 +76,7 @@ function prepareLunchWindow(string $start = '2026-07-16 13:00:00', string $end =
 
 it('sends the lunch pre-reminder 30 minutes before the window and only once', function () {
     $this->travelTo(CarbonImmutable::create(2026, 7, 16, 12, 30, 0, 'Europe/Moscow'));
-    prepareLunchWindow();
+    prepareLunchWindow($this->profile);
 
     $this->artisan('nutrition:tick')->assertExitCode(0);
 
@@ -94,7 +96,7 @@ it('sends the lunch pre-reminder 30 minutes before the window and only once', fu
 
 it('sends the full lunch reminder with composition and buttons at the window start', function () {
     $this->travelTo(CarbonImmutable::create(2026, 7, 16, 13, 0, 0, 'Europe/Moscow'));
-    prepareLunchWindow();
+    prepareLunchWindow($this->profile);
 
     $this->artisan('nutrition:tick')->assertExitCode(0);
 
@@ -114,7 +116,7 @@ it('sends the full lunch reminder with composition and buttons at the window sta
 
 it('sends a lunch nudge every 30 minutes while pending but not once eaten', function () {
     $this->travelTo(CarbonImmutable::create(2026, 7, 16, 13, 30, 0, 'Europe/Moscow'));
-    prepareLunchWindow();
+    prepareLunchWindow($this->profile);
 
     $this->artisan('nutrition:tick')->assertExitCode(0);
 
@@ -140,7 +142,7 @@ it('sends a lunch nudge every 30 minutes while pending but not once eaten', func
 it('regenerates the reminder when the meal window is moved to a later time', function () {
     $this->travelTo(CarbonImmutable::create(2026, 7, 16, 13, 0, 0, 'Europe/Moscow'));
     // Окно обеда уже пересчитано на 13:00–14:00.
-    prepareLunchWindow();
+    prepareLunchWindow($this->profile);
     // По СТАРОМУ окну (11:30) напоминание уже уходило — ключ израсходован.
     NutritionSentEvent::query()->create([
         'event_key' => '2026-07-16:meal:lunch:11:30',
@@ -158,7 +160,7 @@ it('regenerates the reminder when the meal window is moved to a later time', fun
 
 it('does not duplicate a slot reminder within the same 30-minute bucket', function () {
     $this->travelTo(CarbonImmutable::create(2026, 7, 16, 13, 0, 0, 'Europe/Moscow'));
-    prepareLunchWindow();
+    prepareLunchWindow($this->profile);
 
     $this->artisan('nutrition:tick')->assertExitCode(0);
     $this->artisan('nutrition:tick')->assertExitCode(0);
@@ -172,7 +174,7 @@ it('does not duplicate a slot reminder within the same 30-minute bucket', functi
 it('does not burst-backfill missed slots when the worker was down (first tick at 14:20)', function () {
     // Симуляция простоя воркера: до 14:20 тик не запускался, слот-события пусты.
     $this->travelTo(CarbonImmutable::create(2026, 7, 16, 14, 20, 0, 'Europe/Moscow'));
-    prepareLunchWindow();
+    prepareLunchWindow($this->profile);
 
     $this->artisan('nutrition:tick')->assertExitCode(0);
 
@@ -188,11 +190,11 @@ it('does not burst-backfill missed slots when the worker was down (first tick at
 });
 
 it('in maintenance sends only the start reminder, no pre and no nudges', function () {
-    Settings::set('phase', 'maintenance');
+    $this->profile->update(['phase' => 'maintenance']);
 
     // Пре-напоминание в 12:30 — не уходит.
     $this->travelTo(CarbonImmutable::create(2026, 7, 16, 12, 30, 0, 'Europe/Moscow'));
-    prepareLunchWindow();
+    prepareLunchWindow($this->profile);
     $this->artisan('nutrition:tick')->assertExitCode(0);
     expect(NutritionMessage::query()->where('content', 'like', '%Через полчаса%')->count())->toBe(0);
 
@@ -209,7 +211,7 @@ it('in maintenance sends only the start reminder, no pre and no nudges', functio
 
 it('does not persist slot reminders in dry-run mode', function () {
     $this->travelTo(CarbonImmutable::create(2026, 7, 16, 13, 0, 0, 'Europe/Moscow'));
-    prepareLunchWindow();
+    prepareLunchWindow($this->profile);
 
     $beforeEvents = NutritionSentEvent::query()->count();
     $beforeMessages = NutritionMessage::query()->count();
@@ -236,7 +238,7 @@ it('runs the Sunday checkup at 20:05 and stores pending adjustments', function (
 
     $this->artisan('nutrition:tick')->assertExitCode(0);
 
-    expect(Settings::get('pending_adjustments'))->toBe(['steps_target' => 9000]);
+    expect($this->profile->fresh()->waiting('pending_adjustments'))->toBe(['steps_target' => 9000]);
 
     $checkup = NutritionMessage::query()->where('kind', 'checkup')->first();
     expect($checkup)->not->toBeNull()
@@ -257,7 +259,7 @@ it('sends every existing file of a multi-file topic with intro caption only on t
             'position' => 1,
         ]);
 
-        app(SendTopic::class)->handle($topic);
+        app(SendTopic::class)->handle($this->profile, $topic);
     } finally {
         File::delete([$dir.'/__test_first.pdf', $dir.'/__test_second.pdf']);
     }
@@ -282,7 +284,7 @@ it('falls back to intro text when none of the topic files exist on disk', functi
         'position' => 2,
     ]);
 
-    app(SendTopic::class)->handle($topic);
+    app(SendTopic::class)->handle($this->profile, $topic);
 
     Http::assertNotSent(fn ($request) => str_contains($request->url(), 'sendDocument'));
 

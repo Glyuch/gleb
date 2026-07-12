@@ -3,6 +3,7 @@
 namespace App\Console\Commands;
 
 use App\Actions\Nutrition\StartProgram;
+use App\Models\NutritionProfile;
 use Carbon\CarbonImmutable;
 use Illuminate\Console\Command;
 
@@ -14,10 +15,18 @@ class NutritionStart extends Command
 
     public function handle(): int
     {
+        $profile = NutritionProfile::admin();
+        if ($profile === null) {
+            $this->error('Нет admin-профиля — сначала настрой владельца инстанса.');
+
+            return self::FAILURE;
+        }
+
         $date = $this->argument('date');
 
         // Дефолт «сегодня, Europe/Moscow» живёт в самом Action.
         $summary = app(StartProgram::class)->handle(
+            $profile,
             $date !== null ? CarbonImmutable::parse((string) $date, 'Europe/Moscow') : null,
         );
 

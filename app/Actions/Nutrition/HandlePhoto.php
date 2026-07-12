@@ -5,25 +5,26 @@ namespace App\Actions\Nutrition;
 use App\Models\NutritionMeal;
 use App\Models\NutritionMessage;
 use App\Models\NutritionMetric;
+use App\Models\NutritionProfile;
 use App\Support\Nutrition\Claude;
 use App\Support\Nutrition\MealLogger;
 use App\Support\Nutrition\MealPlan;
 use App\Support\Nutrition\PendingRequest;
 use App\Support\Nutrition\Planner;
-use App\Support\Nutrition\Settings;
 use App\Support\Nutrition\TelegramClient;
 use App\Support\Nutrition\Tg;
 use Carbon\CarbonImmutable;
 
 class HandlePhoto
 {
-    public function handle(array $update): void
+    public function handle(array $update, NutritionProfile $profile): void
     {
         $tg = app(TelegramClient::class);
+        $tg->profileId = $profile->id;
         $chatId = Tg::chatId($update);
         $now = CarbonImmutable::now('Europe/Moscow');
 
-        Planner::ensureDay($now);
+        Planner::ensureDay($profile, $now);
 
         $photos = $update['message']['photo'] ?? [];
         if ($photos === []) {
@@ -38,22 +39,24 @@ class HandlePhoto
 
         // 2. Скрин шагомера в ответ на запрос метрик (если шаги ещё не записаны).
         $lastOutKind = NutritionMessage::query()
+            ->where('profile_id', $profile->id)
             ->where('direction', 'out')
             ->orderByDesc('id')
             ->value('kind');
         $hasSteps = NutritionMetric::query()
+            ->where('profile_id', $profile->id)
             ->whereDate('date', $now->format('Y-m-d'))
             ->where('type', 'steps')
             ->exists();
 
-        if (($lastOutKind === 'metrics_request' || PendingRequest::expectsMetrics($now)) && ! $hasSteps) {
-            $this->pedometer($tg, $fileId, $now, $chatId);
+        if (($lastOutKind === 'metrics_request' || PendingRequest::expectsMetrics($profile, $now)) && ! $hasSteps) {
+            $this->pedometer($tg, $profile, $fileId, $now, $chatId);
 
             return;
         }
 
         // 3. Фото еды: кандидаты = пропущенные приёмы до текущего + текущий приём.
-        $candidates = $this->foodCandidates($now);
+        $candidates = $this->foodCandidates($profile, $now);
 
         if ($candidates === []) {
             $tg->send('Перекусов на программе нет 👌🏻 До следующего приёма — вода/чай/кофе без всего', chatId: $chatId);
@@ -63,7 +66,7 @@ class HandlePhoto
 
         // Есть пропущенные приёмы до текущего — не пишем разбор молча, уточняем приём.
         if (count($candidates) > 1) {
-            Settings::set('awaiting_meal_photo', $fileId);
+            $profile->setWaiting('meal_photo', $fileId);
 
             $buttons = [];
             foreach ($candidates as $candidate) {
@@ -76,14 +79,14 @@ class HandlePhoto
         }
 
         $meal = $candidates[0];
-        $warning = $this->tooSoonWarning($now);
+        $warning = $this->tooSoonWarning($profile, $now);
 
         $image = $tg->downloadPhotoBase64($fileId);
         $feedback = $image !== null
-            ? Claude::vision($image, MealLogger::foodPrompt($meal->type))
+            ? Claude::vision($image, MealLogger::foodPrompt($profile, $meal->type), 400, $profile)
             : null;
 
-        Planner::markEaten($meal, $now, $fileId, $feedback);
+        Planner::markEaten($profile, $meal, $now, $fileId, $feedback);
 
         // 4. Fallback: если ИИ не ответил — всё равно фиксируем приём.
         $reply = $feedback ?? 'Записал приём 👌🏻 Разбор пришлю позже';
@@ -102,9 +105,10 @@ class HandlePhoto
      *
      * @return array<int, NutritionMeal>
      */
-    private function foodCandidates(CarbonImmutable $now): array
+    private function foodCandidates(NutritionProfile $profile, CarbonImmutable $now): array
     {
         return NutritionMeal::query()
+            ->where('profile_id', $profile->id)
             ->whereDate('date', $now->format('Y-m-d'))
             ->whereIn('status', ['pending', 'missed'])
             ->where('window_start', '<=', $now->format('Y-m-d H:i:s'))
@@ -113,7 +117,7 @@ class HandlePhoto
             ->all();
     }
 
-    private function pedometer(TelegramClient $tg, string $fileId, CarbonImmutable $now, ?int $chatId = null): void
+    private function pedometer(TelegramClient $tg, NutritionProfile $profile, string $fileId, CarbonImmutable $now, ?int $chatId = null): void
     {
         $image = $tg->downloadPhotoBase64($fileId);
         if ($image === null) {
@@ -125,6 +129,8 @@ class HandlePhoto
         $answer = Claude::vision(
             $image,
             'На скриншоте трекер активности. Извлеки число шагов за день. Ответь ТОЛЬКО числом, без текста. Если шагов нет — ответь 0.',
+            400,
+            $profile,
         );
 
         if ($answer === null || ! preg_match('/\d[\d\s]*/u', $answer, $m)) {
@@ -136,16 +142,17 @@ class HandlePhoto
         $steps = (int) preg_replace('/\D/', '', $m[0]);
 
         NutritionMetric::query()->updateOrCreate(
-            ['date' => $now->format('Y-m-d'), 'type' => 'steps'],
+            ['profile_id' => $profile->id, 'date' => $now->format('Y-m-d'), 'type' => 'steps'],
             ['value' => $steps],
         );
 
         $tg->send('Записал шаги: '.$steps.' 👌🏻', chatId: $chatId);
     }
 
-    private function tooSoonWarning(CarbonImmutable $now): ?string
+    private function tooSoonWarning(NutritionProfile $profile, CarbonImmutable $now): ?string
     {
         $prev = NutritionMeal::query()
+            ->where('profile_id', $profile->id)
             ->whereDate('date', $now->format('Y-m-d'))
             ->where('status', 'eaten')
             ->whereNotNull('eaten_at')

@@ -4,7 +4,7 @@ namespace App\Support\Nutrition;
 
 use App\Models\NutritionMeal;
 use App\Models\NutritionMessage;
-use App\Models\NutritionSetting;
+use App\Models\NutritionProfile;
 use Carbon\CarbonImmutable;
 
 /**
@@ -12,8 +12,8 @@ use Carbon\CarbonImmutable;
  * приёма.
  *
  * Когда пользователь нажал кнопку в /settings, ключ настройки лежит в
- * awaiting_setting. После кнопки «🕐 Поел раньше» тип приёма лежит в
- * awaiting_meal_time. Ближайшее текстовое/числовое сообщение трактуется как
+ * awaiting['setting'] профиля. После кнопки «🕐 Поел раньше» тип приёма лежит в
+ * awaiting['meal_time']. Ближайшее текстовое/числовое сообщение трактуется как
  * значение и обрабатывается здесь — до обычной логики HandleNumbers/HandleQuestion.
  */
 class SettingInput
@@ -22,14 +22,14 @@ class SettingInput
      * @param  array<string, mixed>  $update
      * @return bool true, если сообщение поглощено как значение настройки/времени приёма
      */
-    public static function intercept(array $update): bool
+    public static function intercept(array $update, NutritionProfile $profile): bool
     {
         // Ожидание времени приёма — раньше настройки (ключи взаимоисключающи).
-        if (self::interceptMealTime($update)) {
+        if (self::interceptMealTime($update, $profile)) {
             return true;
         }
 
-        $key = Settings::get('awaiting_setting');
+        $key = $profile->waiting('setting');
         if (! is_string($key) || $key === '') {
             return false;
         }
@@ -38,13 +38,8 @@ class SettingInput
         // Если после него бот успел спросить что-то ещё (вес, шаги), число юзера
         // относится к тому запросу: сбрасываем устаревший awaiting и отдаём
         // сообщение обычной обработке.
-        $lastOutKind = NutritionMessage::query()
-            ->where('direction', 'out')
-            ->orderByDesc('id')
-            ->value('kind');
-
-        if ($lastOutKind !== 'setting_request') {
-            self::clear();
+        if (self::lastOutKind($profile) !== 'setting_request') {
+            $profile->clearWaiting('setting');
 
             return false;
         }
@@ -55,12 +50,12 @@ class SettingInput
 
         return match ($key) {
             // Подъём: 04:00–12:00.
-            'wake_time' => self::applyTime($tg, $chatId, 'wake_time', $text, 240, 720, 'подъём', '☀️'),
+            'wake_time' => self::applyTime($tg, $profile, $chatId, 'wake_time', $text, 240, 720, 'подъём', '☀️'),
             // Отбой: 20:00–23:59.
-            'sleep_time' => self::applyTime($tg, $chatId, 'sleep_time', $text, 1200, 1439, 'отбой', '🌙'),
-            'steps_target' => self::applySteps($tg, $chatId, $text),
+            'sleep_time' => self::applyTime($tg, $profile, $chatId, 'sleep_time', $text, 1200, 1439, 'отбой', '🌙'),
+            'steps_target' => self::applySteps($tg, $profile, $chatId, $text),
             // Неизвестный ключ — сбрасываем и отдаём сообщение обычной обработке.
-            default => self::abandon(),
+            default => self::abandon($profile),
         };
     }
 
@@ -73,20 +68,15 @@ class SettingInput
      *
      * @param  array<string, mixed>  $update
      */
-    private static function interceptMealTime(array $update): bool
+    private static function interceptMealTime(array $update, NutritionProfile $profile): bool
     {
-        $type = Settings::get('awaiting_meal_time');
+        $type = $profile->waiting('meal_time');
         if (! is_string($type) || ! in_array($type, MealPlan::TYPES, true)) {
             return false;
         }
 
-        $lastOutKind = NutritionMessage::query()
-            ->where('direction', 'out')
-            ->orderByDesc('id')
-            ->value('kind');
-
-        if ($lastOutKind !== 'meal_time_request') {
-            self::clearMealTime();
+        if (self::lastOutKind($profile) !== 'meal_time_request') {
+            $profile->clearWaiting('meal_time');
 
             return false;
         }
@@ -111,29 +101,30 @@ class SettingInput
         }
 
         $now = CarbonImmutable::now('Europe/Moscow');
-        Planner::ensureDay($now);
+        Planner::ensureDay($profile, $now);
 
         $meal = NutritionMeal::query()
+            ->where('profile_id', $profile->id)
             ->whereDate('date', $now->format('Y-m-d'))
             ->where('type', $type)
             ->first();
 
         // Уже отмеченный приём не перезаписываем (иначе затрём eaten_at/фото/фидбек).
         if ($meal !== null && $meal->status === 'eaten') {
-            self::clearMealTime();
+            $profile->clearWaiting('meal_time');
             $tg->send(MealPlan::LABELS[$type].' уже отмечен 👌🏻', chatId: $chatId);
 
             return true;
         }
 
         if ($meal !== null) {
-            Planner::markEaten($meal, $now->setTime($hours, $minutes), null, null);
+            Planner::markEaten($profile, $meal, $now->setTime($hours, $minutes), null, null);
         }
 
-        self::clearMealTime();
+        $profile->clearWaiting('meal_time');
 
         $reply = 'Записал '.MealPlan::LABELS[$type].' в '.sprintf('%02d:%02d', $hours, $minutes).' 👌🏻';
-        $tail = MealLogger::windowsTail($now);
+        $tail = MealLogger::windowsTail($profile, $now);
         if ($tail !== '') {
             $reply .= "\n\n".$tail;
         }
@@ -143,7 +134,7 @@ class SettingInput
         return true;
     }
 
-    private static function applyTime(TelegramClient $tg, ?int $chatId, string $key, string $text, int $min, int $max, string $label, string $emoji): bool
+    private static function applyTime(TelegramClient $tg, NutritionProfile $profile, ?int $chatId, string $key, string $text, int $min, int $max, string $label, string $emoji): bool
     {
         if (! preg_match('/^(\d{1,2}):(\d{2})$/', $text, $m)) {
             $tg->send('Не понял время. Пришли в формате ЧЧ:ММ, например 07:30', null, 'setting_request', $chatId);
@@ -169,12 +160,12 @@ class SettingInput
         }
 
         $value = sprintf('%02d:%02d', $hours, $minutes);
-        Settings::set($key, $value);
-        self::clear();
+        $profile->setSetting($key, $value);
+        $profile->clearWaiting('setting');
 
         if ($key === 'sleep_time') {
             // Окна сегодняшних приёмов зависят от отбоя; на пустом дне отработает вхолостую.
-            Planner::recalculate(CarbonImmutable::now('Europe/Moscow')->startOfDay());
+            Planner::recalculate($profile, CarbonImmutable::now('Europe/Moscow')->startOfDay());
         }
 
         $tg->send('Готово, '.$label.' теперь '.$value.' '.$emoji, chatId: $chatId);
@@ -182,7 +173,7 @@ class SettingInput
         return true;
     }
 
-    private static function applySteps(TelegramClient $tg, ?int $chatId, string $text): bool
+    private static function applySteps(TelegramClient $tg, NutritionProfile $profile, ?int $chatId, string $text): bool
     {
         if (! preg_match('/^\d+$/', $text)) {
             $tg->send('Пришли число шагов в день (3000–30000)', null, 'setting_request', $chatId);
@@ -197,31 +188,29 @@ class SettingInput
             return true;
         }
 
-        Settings::set('steps_target', $steps);
-        self::clear();
+        $profile->setSetting('steps_target', $steps);
+        $profile->clearWaiting('setting');
         $tg->send('Новая цель: '.$steps.' шагов 👣', chatId: $chatId);
 
         return true;
     }
 
-    private static function abandon(): bool
+    private static function abandon(NutritionProfile $profile): bool
     {
-        self::clear();
+        $profile->clearWaiting('setting');
 
         return false;
     }
 
     /**
-     * Сбрасывает awaiting_setting. Столбец value NOT NULL, поэтому «пусто» —
-     * это отсутствие строки (Settings::get вернёт дефолт null).
+     * Последний kind исходящего сообщения именно этого профиля (staleness-guard).
      */
-    private static function clear(): void
+    private static function lastOutKind(NutritionProfile $profile): ?string
     {
-        NutritionSetting::query()->where('key', 'awaiting_setting')->delete();
-    }
-
-    private static function clearMealTime(): void
-    {
-        NutritionSetting::query()->where('key', 'awaiting_meal_time')->delete();
+        return NutritionMessage::query()
+            ->where('profile_id', $profile->id)
+            ->where('direction', 'out')
+            ->orderByDesc('id')
+            ->value('kind');
     }
 }

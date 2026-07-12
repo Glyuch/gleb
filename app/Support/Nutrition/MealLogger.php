@@ -3,6 +3,7 @@
 namespace App\Support\Nutrition;
 
 use App\Models\NutritionMeal;
+use App\Models\NutritionProfile;
 use Carbon\CarbonImmutable;
 
 /**
@@ -21,19 +22,19 @@ class MealLogger
      * @param  array<string, mixed>  $update
      * @param  array<int, array{meal: ?string, time: ?string, food: string}>  $reports
      */
-    public static function logReports(array $update, CarbonImmutable $now, array $reports, string $reply): void
+    public static function logReports(array $update, NutritionProfile $profile, CarbonImmutable $now, array $reports, string $reply): void
     {
         $tg = app(TelegramClient::class);
         $chatId = Tg::chatId($update);
 
-        Planner::ensureDay($now);
+        Planner::ensureDay($profile, $now);
 
         $resolved = [];
         $alreadyEaten = [];
         $hasAmbiguous = false;
 
         foreach ($reports as $report) {
-            $meal = self::resolve($now, $report['meal'] ?? null, $report['time'] ?? null);
+            $meal = self::resolve($profile, $now, $report['meal'] ?? null, $report['time'] ?? null);
             if ($meal === null) {
                 $hasAmbiguous = true;
 
@@ -54,11 +55,11 @@ class MealLogger
         usort($resolved, fn ($a, $b) => $a['at']->getTimestamp() <=> $b['at']->getTimestamp());
 
         foreach ($resolved as $item) {
-            Planner::markEaten($item['meal'], $item['at'], null, null);
+            Planner::markEaten($profile, $item['meal'], $item['at'], null, null);
         }
 
         if ($resolved !== []) {
-            Planner::recalculate($now->startOfDay());
+            Planner::recalculate($profile, $now->startOfDay());
         }
 
         $parts = [];
@@ -68,7 +69,7 @@ class MealLogger
         foreach ($alreadyEaten as $type) {
             $parts[] = MealPlan::LABELS[$type].' уже отмечен 👌🏻';
         }
-        $tail = self::windowsTail($now);
+        $tail = self::windowsTail($profile, $now);
         if ($tail !== '') {
             $parts[] = $tail;
         }
@@ -77,7 +78,7 @@ class MealLogger
         // подтверждаем в том же сообщении (не теряем записанные приёмы смешанного отчёта).
         if ($hasAmbiguous) {
             $parts[] = 'Какой это приём?';
-            $tg->send(implode("\n\n", $parts), self::mealButtons($now), chatId: $chatId);
+            $tg->send(implode("\n\n", $parts), self::mealButtons($profile, $now), chatId: $chatId);
 
             return;
         }
@@ -92,9 +93,9 @@ class MealLogger
     /**
      * Резолвит отчёт в конкретный приём за сегодня, либо null (неоднозначно).
      */
-    public static function resolve(CarbonImmutable $now, ?string $mealType, ?string $time): ?NutritionMeal
+    public static function resolve(NutritionProfile $profile, CarbonImmutable $now, ?string $mealType, ?string $time): ?NutritionMeal
     {
-        $meals = self::todayMeals($now);
+        $meals = self::todayMeals($profile, $now);
 
         if ($mealType !== null && in_array($mealType, MealPlan::TYPES, true)) {
             return $meals[$mealType] ?? null;
@@ -104,7 +105,7 @@ class MealLogger
 
         if ($time !== null) {
             $target = self::minutes($time);
-            $defaults = Settings::get('default_windows');
+            $defaults = $profile->setting('default_windows');
             $best = null;
             $bestDiff = null;
 
@@ -129,9 +130,9 @@ class MealLogger
     /**
      * Промпт vision для оценки фото приёма (единый источник для HandlePhoto и колбэков).
      */
-    public static function foodPrompt(string $type): string
+    public static function foodPrompt(NutritionProfile $profile, string $type): string
     {
-        $portion = (int) Settings::get('portion_adjustment');
+        $portion = (int) $profile->setting('portion_adjustment');
         $portionStr = ($portion > 0 ? '+' : '').$portion.'%';
 
         return 'На фото приём: '.MealPlan::LABELS[$type].".\n"
@@ -145,10 +146,10 @@ class MealLogger
      * Детерминированный хвост: перечисляет pending-приёмы, чьё окно отличается от
      * дефолтного (т.е. сдвинуто пересчётом). Пустая строка, если ничего не сдвинулось.
      */
-    public static function windowsTail(CarbonImmutable $now): string
+    public static function windowsTail(NutritionProfile $profile, CarbonImmutable $now): string
     {
-        $meals = self::todayMeals($now);
-        $defaults = Settings::get('default_windows');
+        $meals = self::todayMeals($profile, $now);
+        $defaults = $profile->setting('default_windows');
         $lines = [];
 
         foreach (MealPlan::TYPES as $type) {
@@ -177,9 +178,9 @@ class MealLogger
      *
      * @return array<int, array<int, array<string, string>>>|null
      */
-    private static function mealButtons(CarbonImmutable $now): ?array
+    private static function mealButtons(NutritionProfile $profile, CarbonImmutable $now): ?array
     {
-        $meals = self::todayMeals($now);
+        $meals = self::todayMeals($profile, $now);
         $buttons = [];
 
         foreach (MealPlan::TYPES as $type) {
@@ -204,9 +205,10 @@ class MealLogger
     /**
      * @return array<string, NutritionMeal>
      */
-    private static function todayMeals(CarbonImmutable $now): array
+    private static function todayMeals(NutritionProfile $profile, CarbonImmutable $now): array
     {
         return NutritionMeal::query()
+            ->where('profile_id', $profile->id)
             ->whereDate('date', $now->format('Y-m-d'))
             ->get()
             ->keyBy('type')
