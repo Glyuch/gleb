@@ -8,7 +8,7 @@ use App\Actions\Nutrition\SendTopic;
 use App\Models\NutritionMeal;
 use App\Models\NutritionProfile;
 use App\Models\NutritionSentEvent;
-use App\Models\NutritionTopic;
+use App\Models\NutritionTopicSend;
 use App\Support\Nutrition\MealPlan;
 use App\Support\Nutrition\Planner;
 use App\Support\Nutrition\TelegramClient;
@@ -55,30 +55,49 @@ class NutritionTick extends Command
 
     private function tick(CarbonImmutable $now): void
     {
-        // Боевой режим без настроенного chat_id не шлёт и не пишет ничего.
-        // Симуляция (dry-run) работает и без настройки.
-        if (! $this->dryRun && blank(config('nutrition.chat_id'))) {
-            Log::info('nutrition: tick skipped, chat_id not configured');
+        // Персональный тик каждого активного профиля: свои окна/фаза/настройки,
+        // отправка строго в его main_chat_id, ключи sent_events с префиксом p{id}.
+        $profiles = NutritionProfile::query()
+            ->where('status', 'active')
+            ->orderBy('id')
+            ->get();
 
-            return;
+        if ($this->dryRun) {
+            $this->line("DRY-RUN nutrition:tick @ {$now->format('Y-m-d H:i')} (Europe/Moscow)");
+            $this->line('');
         }
 
-        // Task 2: тик работает от admin-профиля (владельца инстанса). Персональный
-        // тик остальных профилей — Task 3; sent_events тика пока без профиль-префикса.
-        $profile = NutritionProfile::admin();
-        if ($profile === null) {
-            Log::info('nutrition: tick skipped, no admin profile');
-
-            return;
+        foreach ($profiles as $profile) {
+            $this->tickProfile($profile, $now);
         }
+    }
 
+    private function tickProfile(NutritionProfile $profile, CarbonImmutable $now): void
+    {
         $d = $now->format('Y-m-d');
+
+        // Guard: профилю без main_chat_id слать некуда — пропускаем.
+        // В бою — once-лог раз в день, чтобы не засорять журнал.
+        if (blank($profile->main_chat_id)) {
+            if ($this->dryRun) {
+                $this->line("[{$profile->name}] пропуск: не задан main_chat_id");
+                $this->line('');
+            } else {
+                NutritionSentEvent::once("p{$profile->id}:{$d}:no-chat", function () use ($profile) {
+                    Log::info('nutrition: tick skipped profile without main_chat_id', ['profile_id' => $profile->id]);
+                });
+            }
+
+            return;
+        }
+
         $phase = (string) $profile->phase;
+        $chat = (int) $profile->main_chat_id;
         $tg = app(TelegramClient::class);
         $tg->profileId = $profile->id;
 
         if ($this->dryRun) {
-            $this->line("DRY-RUN nutrition:tick @ {$now->format('Y-m-d H:i')} (Europe/Moscow), фаза: {$phase}");
+            $this->line("— профиль #{$profile->id} {$profile->name} (фаза {$phase}, чат {$chat}) —");
             $this->line('');
         }
 
@@ -98,11 +117,11 @@ class NutritionTick extends Command
 
             if ($weightDay) {
                 $weightText = 'Утреннее взвешивание натощак ⚖️ Пришли вес числом';
-                $this->fire("{$d}:weight_request", $weightText, fn () => $tg->send($weightText, null, 'weight_request'));
+                $this->fire($profile, "{$d}:weight_request", $weightText, fn () => $tg->send($weightText, null, 'weight_request', $chat));
             }
 
             $greeting = $this->greetingText($profile, $now);
-            $this->fire("{$d}:greeting", $greeting, fn () => $tg->send($greeting, null, 'greeting'));
+            $this->fire($profile, "{$d}:greeting", $greeting, fn () => $tg->send($greeting, null, 'greeting', $chat));
         }
 
         // 3. Слот-привязанные напоминания по каждому pending-приёму.
@@ -137,8 +156,8 @@ class NutritionTick extends Command
                 && $now->lessThan($ws)) {
                 $pretext = 'Через полчаса '.MealPlan::LABELS[$type].' 🙌🏼 Окно '
                     .$ws->format('H:i').'–'.$we->format('H:i');
-                $this->fire("{$d}:pre:{$type}:{$ws->format('H:i')}", $pretext,
-                    fn () => $tg->send($pretext, null, 'reminder'));
+                $this->fire($profile, "{$d}:pre:{$type}:{$ws->format('H:i')}", $pretext,
+                    fn () => $tg->send($pretext, null, 'reminder', $chat));
             }
 
             // (2) Активный 30-мин слот от ws: максимальный s <= now при now < s+step.
@@ -160,43 +179,50 @@ class NutritionTick extends Command
                 $text = '⏰ '.MealPlan::LABELS[$type].' '
                     .$ws->format('H:i').'–'.$we->format('H:i')
                     .'. '.MealPlan::COMPOSITION[$type];
-                $this->fire($slotKey, $text, fn () => $tg->send($text, $this->mealButtons($type), 'reminder'));
+                $this->fire($profile, $slotKey, $text, fn () => $tg->send($text, $this->mealButtons($type), 'reminder', $chat));
             } elseif ($phase !== 'maintenance') {
                 // Надж внутри окна/грейса. В maintenance — мягкий режим, без пингов.
                 $ntext = 'Поели '.mb_strtolower(MealPlan::LABELS[$type]).'? ☺️';
-                $this->fire($slotKey, $ntext, fn () => $tg->send($ntext, $this->mealButtons($type), 'followup'));
+                $this->fire($profile, $slotKey, $ntext, fn () => $tg->send($ntext, $this->mealButtons($type), 'followup', $chat));
             }
         }
 
         // 4. Запрос метрик вечером.
         if ($now->greaterThanOrEqualTo($now->setTime(21, 30))) {
             $mtext = 'Сколько шагов сегодня? Пришли число или скрин шагомера 🙌🏼 И сколько воды (л)?';
-            $this->fire("{$d}:metrics_request", $mtext, fn () => $tg->send($mtext, null, 'metrics_request'));
+            $this->fire($profile, "{$d}:metrics_request", $mtext, fn () => $tg->send($mtext, null, 'metrics_request', $chat));
         }
 
         // 5. Итог дня.
         if ($now->greaterThanOrEqualTo($now->setTime(22, 30))) {
-            $this->fireAction("{$d}:summary", 'итог дня', fn () => app(RunDaySummary::class)->handle($profile, $now));
+            $this->fireAction($profile, "{$d}:summary", 'итог дня', fn () => app(RunDaySummary::class)->handle($profile, $now, $chat));
         }
 
         // 6. Недельный чек-ап (вс вечером).
         if ($now->isSunday() && $now->greaterThanOrEqualTo($now->setTime(20, 0))) {
-            $this->fireAction("{$d}:checkup", 'недельный чек-ап', fn () => app(RunCheckup::class)->handle($profile));
+            $this->fireAction($profile, "{$d}:checkup", 'недельный чек-ап', fn () => app(RunCheckup::class)->handle($profile, false, $chat));
         }
 
-        // 7. Материал дня (только в фазе программы).
+        // 7. Материал дня (только в фазе программы) — из per-profile topic_sends.
         if ($phase === 'program' && $now->greaterThanOrEqualTo($now->setTime(10, 30))) {
-            $topics = NutritionTopic::query()
+            $sends = NutritionTopicSend::query()
+                ->where('profile_id', $profile->id)
                 ->whereDate('scheduled_on', $d)
                 ->whereNull('sent_at')
-                ->orderBy('position')
-                ->get();
+                ->with('topic')
+                ->get()
+                ->sortBy(fn (NutritionTopicSend $s) => $s->topic?->position ?? PHP_INT_MAX);
 
-            foreach ($topics as $topic) {
+            foreach ($sends as $send) {
+                $topic = $send->topic;
+                if ($topic === null) {
+                    continue;
+                }
                 $this->fireAction(
+                    $profile,
                     "{$d}:topic:{$topic->id}",
                     "тема «{$topic->title}»",
-                    fn () => app(SendTopic::class)->handle($profile, $topic),
+                    fn () => app(SendTopic::class)->handle($profile, $send, $chat),
                 );
             }
         }
@@ -207,8 +233,8 @@ class NutritionTick extends Command
             $start = CarbonImmutable::parse($startedOn->format('Y-m-d'), 'Europe/Moscow')->startOfDay();
             if ($start->addDays(70)->lessThanOrEqualTo($now->startOfDay())) {
                 $gtext = $this->graduationText();
-                $this->fire("{$d}:graduation", $gtext, function () use ($tg, $gtext, $profile) {
-                    $tg->send($gtext, null, 'graduation');
+                $this->fire($profile, "{$d}:graduation", $gtext, function () use ($tg, $gtext, $profile, $chat) {
+                    $tg->send($gtext, null, 'graduation', $chat);
                     $profile->update(['phase' => 'maintenance']);
                 });
             }
@@ -216,20 +242,30 @@ class NutritionTick extends Command
     }
 
     /**
-     * Идемпотентно выполнить событие; в dry-run — только напечатать план.
+     * Идемпотентно выполнить событие профиля; в dry-run — только напечатать план.
+     * $bareKey — ключ без префикса ({d}:...); фактический ключ пишется с префиксом
+     * p{id}:. Для admin-профиля переходно засчитывается и legacy-ключ без префикса
+     * (события, отправленные до перехода на префиксы) — так деплой Task 3 не
+     * дублирует уже отправленное сегодня. Можно удалить legacy-ветку после 2026-07-14.
      */
-    private function fire(string $key, string $description, Closure $action): void
+    private function fire(NutritionProfile $profile, string $bareKey, string $description, Closure $action): void
     {
+        $key = "p{$profile->id}:{$bareKey}";
+
         if ($this->dryRun) {
-            if (NutritionSentEvent::query()->where('event_key', $key)->exists()) {
-                $this->line("— уже отправлено ранее: {$key}");
+            if ($this->alreadyFired($profile, $bareKey)) {
+                $this->line("[{$profile->name}] — уже отправлено ранее: {$key}");
 
                 return;
             }
-            $this->line("[{$key}]");
+            $this->line("[{$profile->name}] [{$key}]");
             $this->line($description);
             $this->line('');
 
+            return;
+        }
+
+        if ($this->firedLegacy($profile, $bareKey)) {
             return;
         }
 
@@ -237,18 +273,45 @@ class NutritionTick extends Command
     }
 
     /**
-     * Идемпотентное действие (саммари/чек-ап); в dry-run — только пометка.
+     * Идемпотентное действие (саммари/чек-ап/тема); в dry-run — только пометка.
      */
-    private function fireAction(string $key, string $label, Closure $action): void
+    private function fireAction(NutritionProfile $profile, string $bareKey, string $label, Closure $action): void
     {
+        $key = "p{$profile->id}:{$bareKey}";
+
         if ($this->dryRun) {
-            $done = NutritionSentEvent::query()->where('event_key', $key)->exists();
-            $this->line($done ? "— уже выполнено ранее: {$key}" : "[{$key}] {$label}");
+            $done = $this->alreadyFired($profile, $bareKey);
+            $this->line($done
+                ? "[{$profile->name}] — уже выполнено ранее: {$key}"
+                : "[{$profile->name}] [{$key}] {$label}");
 
             return;
         }
 
+        if ($this->firedLegacy($profile, $bareKey)) {
+            return;
+        }
+
         NutritionSentEvent::once($key, $action);
+    }
+
+    /** Событие уже выполнено (префиксный ключ, либо legacy-ключ только для admin). */
+    private function alreadyFired(NutritionProfile $profile, string $bareKey): bool
+    {
+        $keys = ["p{$profile->id}:{$bareKey}"];
+        if ($profile->is_admin) {
+            $keys[] = $bareKey; // переходно; удалить после 2026-07-14
+        }
+
+        return NutritionSentEvent::query()->whereIn('event_key', $keys)->exists();
+    }
+
+    /** Переходно: admin уже выполнил событие сегодня под legacy-ключом без префикса. */
+    private function firedLegacy(NutritionProfile $profile, string $bareKey): bool
+    {
+        // Удалить после 2026-07-14: сегодняшние legacy-ключи к тому времени мертвы.
+        return $profile->is_admin
+            && NutritionSentEvent::query()->where('event_key', $bareKey)->exists();
     }
 
     private function greetingText(NutritionProfile $profile, CarbonImmutable $now): string

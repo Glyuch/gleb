@@ -20,9 +20,10 @@ class RunDaySummary
         TXT;
 
     /**
-     * Формирует и отправляет итог дня. При недоступности модели — детерминированный fallback.
+     * Формирует и отправляет итог дня в чат профиля. При недоступности модели —
+     * детерминированный fallback.
      */
-    public function handle(NutritionProfile $profile, ?CarbonImmutable $now = null): void
+    public function handle(NutritionProfile $profile, ?CarbonImmutable $now = null, ?int $chatId = null): void
     {
         $now ??= CarbonImmutable::now('Europe/Moscow');
         $tg = app(TelegramClient::class);
@@ -37,7 +38,7 @@ class RunDaySummary
             $profile,
         );
 
-        $tg->send($text ?? $this->fallback($profile, $now), null, 'summary');
+        $tg->send($text ?? $this->fallback($profile, $now), null, 'summary', $chatId);
     }
 
     private function fallback(NutritionProfile $profile, CarbonImmutable $now): string

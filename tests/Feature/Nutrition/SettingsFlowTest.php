@@ -7,7 +7,7 @@ use App\Actions\Nutrition\HandleQuestion;
 use App\Models\NutritionMeal;
 use App\Models\NutritionMessage;
 use App\Models\NutritionMetric;
-use App\Models\NutritionTopic;
+use App\Models\NutritionTopicSend;
 use App\Support\Nutrition\Planner;
 use Carbon\CarbonImmutable;
 use Database\Seeders\NutritionTopicSeeder;
@@ -69,7 +69,7 @@ it('starts the program on the program:start callback and asks for weight', funct
     ]], $this->profile);
 
     expect($this->profile->fresh()->program_started_on->format('Y-m-d'))->toBe('2026-07-13');
-    expect(NutritionTopic::query()->whereNotNull('scheduled_on')->count())->toBe(12);
+    expect(NutritionTopicSend::query()->where('profile_id', $this->profile->id)->count())->toBe(12);
     expect(sentContains('вес'))->toBeTrue();
     Http::assertSent(fn ($request) => str_contains($request->url(), '/answerCallbackQuery'));
 

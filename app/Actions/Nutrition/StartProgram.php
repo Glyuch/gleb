@@ -4,6 +4,7 @@ namespace App\Actions\Nutrition;
 
 use App\Models\NutritionProfile;
 use App\Models\NutritionTopic;
+use App\Models\NutritionTopicSend;
 use Carbon\CarbonImmutable;
 
 class StartProgram
@@ -15,12 +16,10 @@ class StartProgram
 
     /**
      * Стартует программу профиля: фиксирует дату старта на профиле, переводит в
-     * фазу program и раскладывает scheduled_on тем (позиция 1 → день 3, каждая
-     * следующая +5 дней, позиция 12 → день 58). Идемпотентно: повторный запуск
-     * пересчитывает даты.
-     *
-     * Раскладка тем остаётся глобальной (NutritionTopic.scheduled_on) — перевод
-     * на per-profile NutritionTopicSend делает Task 3.
+     * фазу program и раскладывает per-profile строки выдачи тем (NutritionTopicSend):
+     * позиция 1 → день 3, каждая следующая +5 дней, позиция 12 → день 58.
+     * Идемпотентно: повторный запуск пересчитывает scheduled_on, но НЕ сбрасывает
+     * уже проставленный sent_at.
      *
      * @return string человекочитаемое резюме (дата старта, сколько тем запланировано)
      */
@@ -38,7 +37,10 @@ class StartProgram
 
         foreach ($topics as $topic) {
             $offset = self::FIRST_OFFSET + ($topic->position - 1) * self::OFFSET_STEP;
-            $topic->update(['scheduled_on' => $start->addDays($offset)->format('Y-m-d')]);
+            NutritionTopicSend::query()->updateOrCreate(
+                ['profile_id' => $profile->id, 'topic_id' => $topic->id],
+                ['scheduled_on' => $start->addDays($offset)->format('Y-m-d')],
+            );
         }
 
         $first = $topics->first();

@@ -6,6 +6,7 @@ use App\Models\NutritionMessage;
 use App\Models\NutritionProfile;
 use App\Models\NutritionSentEvent;
 use App\Models\NutritionTopic;
+use App\Models\NutritionTopicSend;
 use App\Support\Nutrition\Planner;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\File;
@@ -20,6 +21,7 @@ beforeEach(function () {
         'nutrition.models.chat' => 'claude-sonnet-5',
     ]);
 
+    // Активный admin-профиль владельца с main_chat_id=123.
     $this->profile = nutritionProfile();
 
     Http::preventStrayRequests();
@@ -39,6 +41,12 @@ beforeEach(function () {
 function outCount(): int
 {
     return NutritionMessage::query()->where('direction', 'out')->count();
+}
+
+/** Ключ sent_events с профиль-префиксом. */
+function pkey(NutritionProfile $profile, string $bare): string
+{
+    return 'p'.$profile->id.':'.$bare;
 }
 
 it('sends weight_request and greeting on Thursday morning and is idempotent', function () {
@@ -64,11 +72,11 @@ it('sends weight_request and greeting on Thursday morning and is idempotent', fu
 function prepareLunchWindow(NutritionProfile $profile, string $start = '2026-07-16 13:00:00', string $end = '2026-07-16 14:00:00'): NutritionMeal
 {
     Planner::ensureDay($profile, CarbonImmutable::now('Europe/Moscow'));
-    NutritionMeal::query()->where('type', 'breakfast')->first()->update([
+    NutritionMeal::query()->where('profile_id', $profile->id)->where('type', 'breakfast')->first()->update([
         'status' => 'eaten',
         'eaten_at' => '2026-07-16 08:00:00',
     ]);
-    $lunch = NutritionMeal::query()->where('type', 'lunch')->first();
+    $lunch = NutritionMeal::query()->where('profile_id', $profile->id)->where('type', 'lunch')->first();
     $lunch->update(['window_start' => $start, 'window_end' => $end]);
 
     return $lunch->fresh();
@@ -86,7 +94,7 @@ it('sends the lunch pre-reminder 30 minutes before the window and only once', fu
         ->get();
     expect($pre)->toHaveCount(1);
     expect($pre->first()->content)->toContain('13:00–14:00');
-    expect(NutritionSentEvent::query()->where('event_key', '2026-07-16:pre:lunch:13:00')->count())->toBe(1);
+    expect(NutritionSentEvent::query()->where('event_key', pkey($this->profile, '2026-07-16:pre:lunch:13:00'))->count())->toBe(1);
 
     // Повторный тик в 12:31 (то же пред-окно) не дублирует.
     $this->travelTo(CarbonImmutable::create(2026, 7, 16, 12, 31, 0, 'Europe/Moscow'));
@@ -106,7 +114,7 @@ it('sends the full lunch reminder with composition and buttons at the window sta
         ->first();
     expect($reminder)->not->toBeNull()
         ->and($reminder->content)->toContain('Правило тарелки'); // состав обеда
-    expect(NutritionSentEvent::query()->where('event_key', '2026-07-16:meal:lunch:13:00')->count())->toBe(1);
+    expect(NutritionSentEvent::query()->where('event_key', pkey($this->profile, '2026-07-16:meal:lunch:13:00'))->count())->toBe(1);
 
     // Кнопки «Поел раньше» приложены к старт-напоминанию.
     $withButtons = Http::recorded(fn ($request) => str_contains($request->url(), 'sendMessage')
@@ -122,7 +130,7 @@ it('sends a lunch nudge every 30 minutes while pending but not once eaten', func
 
     $nudge = NutritionMessage::query()->where('kind', 'followup')->where('content', 'like', '%Поели обед%')->get();
     expect($nudge)->toHaveCount(1);
-    expect(NutritionSentEvent::query()->where('event_key', '2026-07-16:meal:lunch:13:30')->count())->toBe(1);
+    expect(NutritionSentEvent::query()->where('event_key', pkey($this->profile, '2026-07-16:meal:lunch:13:30'))->count())->toBe(1);
 
     // Тот же 30-мин слот — без дублей.
     $this->travelTo(CarbonImmutable::create(2026, 7, 16, 13, 31, 0, 'Europe/Moscow'));
@@ -130,7 +138,7 @@ it('sends a lunch nudge every 30 minutes while pending but not once eaten', func
     expect(NutritionMessage::query()->where('content', 'like', '%Поели обед%')->count())->toBe(1);
 
     // Приём отмечен eaten → следующий слот (14:00) не пингует.
-    NutritionMeal::query()->where('type', 'lunch')->first()->update([
+    NutritionMeal::query()->where('profile_id', $this->profile->id)->where('type', 'lunch')->first()->update([
         'status' => 'eaten',
         'eaten_at' => '2026-07-16 13:45:00',
     ]);
@@ -145,14 +153,14 @@ it('regenerates the reminder when the meal window is moved to a later time', fun
     prepareLunchWindow($this->profile);
     // По СТАРОМУ окну (11:30) напоминание уже уходило — ключ израсходован.
     NutritionSentEvent::query()->create([
-        'event_key' => '2026-07-16:meal:lunch:11:30',
+        'event_key' => pkey($this->profile, '2026-07-16:meal:lunch:11:30'),
         'sent_at' => '2026-07-16 11:30:00',
     ]);
 
     $this->artisan('nutrition:tick')->assertExitCode(0);
 
     // Сдвиг окна дал новый ключ 13:00 → напоминание УХОДИТ повторно.
-    expect(NutritionSentEvent::query()->where('event_key', '2026-07-16:meal:lunch:13:00')->count())->toBe(1);
+    expect(NutritionSentEvent::query()->where('event_key', pkey($this->profile, '2026-07-16:meal:lunch:13:00'))->count())->toBe(1);
     expect(
         NutritionMessage::query()->where('content', 'like', '%Обед 13:00–14:00%')->first()
     )->not->toBeNull();
@@ -168,7 +176,7 @@ it('does not duplicate a slot reminder within the same 30-minute bucket', functi
     $this->artisan('nutrition:tick')->assertExitCode(0);
 
     expect(NutritionMessage::query()->where('kind', 'reminder')->where('content', 'like', '%Обед 13:00%')->count())->toBe(1);
-    expect(NutritionSentEvent::query()->where('event_key', 'like', '2026-07-16:meal:lunch:%')->count())->toBe(1);
+    expect(NutritionSentEvent::query()->where('event_key', 'like', pkey($this->profile, '2026-07-16:meal:lunch:%'))->count())->toBe(1);
 });
 
 it('does not burst-backfill missed slots when the worker was down (first tick at 14:20)', function () {
@@ -181,12 +189,12 @@ it('does not burst-backfill missed slots when the worker was down (first tick at
     // Уходит РОВНО одно напоминание по обеду — наджа текущего 30-мин ведра (14:00),
     // а не пачка за пропущенные слоты 13:00/13:30.
     expect(NutritionMessage::query()->where('content', 'like', '%Поели обед%')->count())->toBe(1);
-    expect(NutritionSentEvent::query()->where('event_key', 'like', '2026-07-16:meal:lunch:%')->count())->toBe(1);
-    expect(NutritionSentEvent::query()->where('event_key', '2026-07-16:meal:lunch:14:00')->count())->toBe(1);
+    expect(NutritionSentEvent::query()->where('event_key', 'like', pkey($this->profile, '2026-07-16:meal:lunch:%'))->count())->toBe(1);
+    expect(NutritionSentEvent::query()->where('event_key', pkey($this->profile, '2026-07-16:meal:lunch:14:00'))->count())->toBe(1);
 
     // Пропущенные слоты НЕ материализованы.
-    expect(NutritionSentEvent::query()->where('event_key', '2026-07-16:meal:lunch:13:00')->exists())->toBeFalse()
-        ->and(NutritionSentEvent::query()->where('event_key', '2026-07-16:meal:lunch:13:30')->exists())->toBeFalse();
+    expect(NutritionSentEvent::query()->where('event_key', pkey($this->profile, '2026-07-16:meal:lunch:13:00'))->exists())->toBeFalse()
+        ->and(NutritionSentEvent::query()->where('event_key', pkey($this->profile, '2026-07-16:meal:lunch:13:30'))->exists())->toBeFalse();
 });
 
 it('in maintenance sends only the start reminder, no pre and no nudges', function () {
@@ -223,6 +231,12 @@ it('does not persist slot reminders in dry-run mode', function () {
     Http::assertNothingSent();
 });
 
+it('prints the profile name prefix in dry-run output', function () {
+    $this->artisan('nutrition:tick', ['--at' => '2026-07-16 13:00'])
+        ->expectsOutputToContain('Глеб')
+        ->assertExitCode(0);
+});
+
 it('creates a day summary at 22:35 from the chat model', function () {
     $this->travelTo(CarbonImmutable::create(2026, 7, 16, 22, 35, 0, 'Europe/Moscow'));
 
@@ -245,6 +259,100 @@ it('runs the Sunday checkup at 20:05 and stores pending adjustments', function (
         ->and($checkup->content)->toContain('Разбор недели');
 });
 
+it('routes each active profile reminders and topics to its own chat', function () {
+    $this->travelTo(CarbonImmutable::create(2026, 7, 16, 13, 0, 0, 'Europe/Moscow'));
+
+    $a = $this->profile; // admin, чат 123
+    $b = nutritionProfile(['telegram_user_id' => 222, 'is_admin' => false, 'main_chat_id' => 222]);
+
+    // Обоим — свои приёмы; завтрак eaten, обед с РАЗНЫМИ окнами.
+    foreach ([$a, $b] as $p) {
+        Planner::ensureDay($p, CarbonImmutable::now('Europe/Moscow'));
+        NutritionMeal::query()->where('profile_id', $p->id)->where('type', 'breakfast')->first()
+            ->update(['status' => 'eaten', 'eaten_at' => '2026-07-16 08:00:00']);
+    }
+    NutritionMeal::query()->where('profile_id', $a->id)->where('type', 'lunch')->first()
+        ->update(['window_start' => '2026-07-16 13:00:00', 'window_end' => '2026-07-16 14:00:00']);
+    NutritionMeal::query()->where('profile_id', $b->id)->where('type', 'lunch')->first()
+        ->update(['window_start' => '2026-07-16 16:00:00', 'window_end' => '2026-07-16 17:00:00']);
+
+    $this->artisan('nutrition:tick')->assertExitCode(0);
+
+    // Состав обеда «Правило тарелки» есть только в старт-напоминании (не в приветствии).
+    $reminderTo = fn (int $chat) => Http::recorded(fn ($req) => str_contains($req->url(), 'sendMessage')
+        && ($req->data()['chat_id'] ?? null) === $chat
+        && str_contains((string) ($req->data()['text'] ?? ''), 'Правило тарелки'));
+
+    // Обед A (13:00) ушёл в чат A и НЕ утёк в чат B.
+    expect($reminderTo(123))->toHaveCount(1)
+        ->and($reminderTo(222))->toBeEmpty();
+
+    // Событие обеда есть только у A; у B обед в 16:00 ещё не наступил.
+    expect(NutritionSentEvent::query()->where('event_key', pkey($a, '2026-07-16:meal:lunch:13:00'))->exists())->toBeTrue()
+        ->and(NutritionSentEvent::query()->where('event_key', pkey($b, '2026-07-16:meal:lunch:16:00'))->exists())->toBeFalse();
+
+    // Приветствие ушло в оба чата — каждому своё.
+    $greetingTo = fn (int $chat) => Http::recorded(fn ($req) => str_contains($req->url(), 'sendMessage')
+        && ($req->data()['chat_id'] ?? null) === $chat
+        && str_contains((string) ($req->data()['text'] ?? ''), 'План на сегодня'));
+    expect($greetingTo(123))->toHaveCount(1)
+        ->and($greetingTo(222))->toHaveCount(1);
+});
+
+it('sends a scheduled topic only to the profile it belongs to', function () {
+    $this->travelTo(CarbonImmutable::create(2026, 7, 16, 10, 30, 0, 'Europe/Moscow'));
+
+    $a = $this->profile; // чат 123
+    $b = nutritionProfile(['telegram_user_id' => 444, 'is_admin' => false, 'main_chat_id' => 444]);
+
+    $topic = NutritionTopic::query()->create(['title' => 'Тема дня', 'position' => 1, 'intro' => 'Интро темы дня', 'file_path' => '']);
+    // Запланировано ТОЛЬКО для A на сегодня.
+    NutritionTopicSend::query()->create(['profile_id' => $a->id, 'topic_id' => $topic->id, 'scheduled_on' => '2026-07-16']);
+
+    $this->artisan('nutrition:tick')->assertExitCode(0);
+
+    $topicTo = fn (int $chat) => Http::recorded(fn ($req) => str_contains($req->url(), 'sendMessage')
+        && ($req->data()['chat_id'] ?? null) === $chat
+        && str_contains((string) ($req->data()['text'] ?? ''), 'Интро темы дня'));
+
+    expect($topicTo(123))->toHaveCount(1)
+        ->and($topicTo(444))->toBeEmpty();
+
+    // Строка выдачи A помечена sent; у B этой темы нет вовсе.
+    expect(NutritionTopicSend::query()->where('profile_id', $a->id)->where('topic_id', $topic->id)->first()->sent_at)->not->toBeNull();
+    expect(NutritionTopicSend::query()->where('profile_id', $b->id)->count())->toBe(0);
+});
+
+it('skips a paused profile entirely', function () {
+    $this->travelTo(CarbonImmutable::create(2026, 7, 16, 13, 0, 0, 'Europe/Moscow'));
+
+    $paused = nutritionProfile(['telegram_user_id' => 333, 'is_admin' => false, 'main_chat_id' => 333, 'status' => 'paused']);
+
+    $this->artisan('nutrition:tick')->assertExitCode(0);
+
+    // Ни приёмов, ни сообщений для paused-профиля.
+    expect(NutritionMeal::query()->where('profile_id', $paused->id)->count())->toBe(0);
+    expect(Http::recorded(fn ($req) => ($req->data()['chat_id'] ?? null) === 333))->toBeEmpty();
+});
+
+it('skips a profile without main_chat_id and logs it once', function () {
+    $this->travelTo(CarbonImmutable::create(2026, 7, 16, 7, 35, 0, 'Europe/Moscow'));
+    $this->profile->update(['main_chat_id' => null]);
+
+    $this->artisan('nutrition:tick')->assertExitCode(0);
+
+    expect(NutritionMeal::query()->count())->toBe(0)
+        ->and(NutritionMessage::query()->where('direction', 'out')->count())->toBe(0);
+    Http::assertNothingSent();
+
+    // Пропуск залогирован once-событием p{id}:{d}:no-chat.
+    expect(NutritionSentEvent::query()->where('event_key', pkey($this->profile, '2026-07-16:no-chat'))->exists())->toBeTrue();
+
+    // Повторный тик не плодит дублей события.
+    $this->artisan('nutrition:tick')->assertExitCode(0);
+    expect(NutritionSentEvent::query()->where('event_key', pkey($this->profile, '2026-07-16:no-chat'))->count())->toBe(1);
+});
+
 it('sends every existing file of a multi-file topic with intro caption only on the first', function () {
     $dir = storage_path('app/nutrition/materials');
     File::ensureDirectoryExists($dir);
@@ -258,8 +366,13 @@ it('sends every existing file of a multi-file topic with intro caption only on t
             'intro' => 'Интро составной темы',
             'position' => 1,
         ]);
+        $send = NutritionTopicSend::query()->create([
+            'profile_id' => $this->profile->id,
+            'topic_id' => $topic->id,
+            'scheduled_on' => '2026-07-16',
+        ]);
 
-        app(SendTopic::class)->handle($this->profile, $topic);
+        app(SendTopic::class)->handle($this->profile, $send);
     } finally {
         File::delete([$dir.'/__test_first.pdf', $dir.'/__test_second.pdf']);
     }
@@ -273,7 +386,7 @@ it('sends every existing file of a multi-file topic with intro caption only on t
         ->and(str_contains($docs[1][0]->body(), 'Интро составной темы'))->toBeFalse();
 
     expect(NutritionMessage::query()->where('kind', 'topic')->count())->toBe(2)
-        ->and($topic->fresh()->sent_at)->not->toBeNull();
+        ->and($send->fresh()->sent_at)->not->toBeNull();
 });
 
 it('falls back to intro text when none of the topic files exist on disk', function () {
@@ -283,8 +396,13 @@ it('falls back to intro text when none of the topic files exist on disk', functi
         'intro' => 'Интро без файлов',
         'position' => 2,
     ]);
+    $send = NutritionTopicSend::query()->create([
+        'profile_id' => $this->profile->id,
+        'topic_id' => $topic->id,
+        'scheduled_on' => '2026-07-16',
+    ]);
 
-    app(SendTopic::class)->handle($this->profile, $topic);
+    app(SendTopic::class)->handle($this->profile, $send);
 
     Http::assertNotSent(fn ($request) => str_contains($request->url(), 'sendDocument'));
 
@@ -292,16 +410,5 @@ it('falls back to intro text when none of the topic files exist on disk', functi
     expect($message)->not->toBeNull()
         ->and($message->content)->toBe('Интро без файлов');
 
-    expect($topic->fresh()->sent_at)->not->toBeNull();
-});
-it('does nothing on a live tick when chat_id is not configured', function () {
-    config(['nutrition.chat_id' => null]);
-    $this->travelTo(CarbonImmutable::create(2026, 7, 16, 7, 35, 0, 'Europe/Moscow'));
-
-    $this->artisan('nutrition:tick')->assertExitCode(0);
-
-    expect(NutritionMeal::query()->count())->toBe(0)
-        ->and(NutritionSentEvent::query()->count())->toBe(0)
-        ->and(NutritionMessage::query()->count())->toBe(0);
-    Http::assertNothingSent();
+    expect($send->fresh()->sent_at)->not->toBeNull();
 });

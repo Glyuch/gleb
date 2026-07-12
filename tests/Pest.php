@@ -51,9 +51,11 @@ function something()
 }
 
 /**
- * Сеет профиль нутрициолога для фикстур. По умолчанию — активный
- * admin-профиль (владелец инстанса), что покрывает и маршрутизацию входящих
- * (резолвинг по telegram_user_id), и тик (NutritionProfile::admin()).
+ * Сеет профиль нутрициолога для фикстур. По умолчанию — активный admin-профиль
+ * (владелец инстанса) с заданным main_chat_id, что покрывает и маршрутизацию
+ * входящих (резолвинг по telegram_user_id), и тик (цикл по active-профилям с
+ * отправкой в main_chat_id). Для сценариев «профиль без чата» переопредели
+ * main_chat_id => null.
  *
  * @param  array<string, mixed>  $attrs
  */
@@ -62,6 +64,7 @@ function nutritionProfile(array $attrs = []): NutritionProfile
     return NutritionProfile::query()->create(array_merge([
         'telegram_user_id' => 49465703,
         'name' => 'Глеб',
+        'main_chat_id' => 123,
         'status' => 'active',
         'is_admin' => true,
     ], $attrs));

@@ -45,3 +45,21 @@ it('isolates meals, metrics and pending-request context between two profiles', f
     expect(PendingRequest::expectsWeight($b, $now))->toBeTrue()
         ->and(PendingRequest::expectsWeight($a, $now))->toBeFalse();
 });
+
+it('matches a legacy (unprefixed) request key only for the admin profile', function () {
+    $now = CarbonImmutable::create(2026, 7, 13, 21, 40, 0, 'Europe/Moscow');
+    $this->travelTo($now);
+
+    $admin = nutritionProfile(['telegram_user_id' => 111]);                     // is_admin true
+    $other = nutritionProfile(['telegram_user_id' => 222, 'is_admin' => false]);
+
+    // Legacy-ключ без префикса — созданный тиком до перехода на p{id}-префиксы.
+    NutritionSentEvent::create([
+        'event_key' => $now->format('Y-m-d').':metrics_request',
+        'sent_at' => now(),
+    ]);
+
+    // Admin переходно видит legacy-запрос → ждёт метрики; второй профиль — НЕТ.
+    expect(PendingRequest::expectsMetrics($admin, $now))->toBeTrue()
+        ->and(PendingRequest::expectsMetrics($other, $now))->toBeFalse();
+});

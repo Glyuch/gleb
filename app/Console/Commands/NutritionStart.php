@@ -9,15 +9,24 @@ use Illuminate\Console\Command;
 
 class NutritionStart extends Command
 {
-    protected $signature = 'nutrition:start-program {date? : Дата старта (Y-m-d, Europe/Moscow); по умолчанию сегодня}';
+    protected $signature = 'nutrition:start-program
+        {date? : Дата старта (Y-m-d, Europe/Moscow); по умолчанию сегодня}
+        {--profile= : ID профиля; по умолчанию admin-профиль владельца инстанса}';
 
     protected $description = 'Стартует программу нутрициолога: фиксирует дату старта и раскладывает даты выдачи тем';
 
     public function handle(): int
     {
-        $profile = NutritionProfile::admin();
+        $profileOpt = $this->option('profile');
+
+        $profile = ($profileOpt !== null && $profileOpt !== '')
+            ? NutritionProfile::query()->find((int) $profileOpt)
+            : NutritionProfile::admin();
+
         if ($profile === null) {
-            $this->error('Нет admin-профиля — сначала настрой владельца инстанса.');
+            $this->error(($profileOpt !== null && $profileOpt !== '')
+                ? "Профиль #{$profileOpt} не найден."
+                : 'Нет admin-профиля — сначала настрой владельца инстанса.');
 
             return self::FAILURE;
         }

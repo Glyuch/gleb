@@ -2,6 +2,7 @@
 
 use App\Actions\Nutrition\StartProgram;
 use App\Models\NutritionTopic;
+use App\Models\NutritionTopicSend;
 use Carbon\CarbonImmutable;
 use Database\Seeders\NutritionTopicSeeder;
 use Illuminate\Support\Facades\Http;
@@ -29,30 +30,21 @@ it('seeds exactly 12 topics with unique positions 1..12', function () {
         ->and($walking->file_path)->toBe('ХОДЬБА Файл Марина.pdf|Окно жиросжигания.pdf');
 });
 
-it('is idempotent and refreshes title/file_path/intro without touching scheduled_on/sent_at', function () {
+it('is idempotent and refreshes title/file_path/intro on re-seed', function () {
     $this->seed(NutritionTopicSeeder::class);
 
-    // Симулируем «раскладку» дат и отправку темы.
     $topic = NutritionTopic::query()->where('position', 1)->first();
-    $topic->update([
-        'scheduled_on' => '2026-08-01',
-        'sent_at' => '2026-08-01 10:30:00',
-        'title' => 'Изменено вручную',
-    ]);
+    $topic->update(['title' => 'Изменено вручную']);
 
     $this->seed(NutritionTopicSeeder::class);
 
     expect(NutritionTopic::query()->count())->toBe(12);
 
-    $topic->refresh();
-    // title восстановлен из сидера…
-    expect($topic->title)->toBe('Про метаболизм')
-        // …а scheduled_on / sent_at остались нетронутыми.
-        ->and($topic->scheduled_on->format('Y-m-d'))->toBe('2026-08-01')
-        ->and($topic->sent_at->format('Y-m-d H:i:s'))->toBe('2026-08-01 10:30:00');
+    // title восстановлен из сидера.
+    expect($topic->fresh()->title)->toBe('Про метаболизм');
 });
 
-it('start-program command lays out topic dates: position 1 → day +3', function () {
+it('start-program command lays out per-profile topic sends: position 1 -> day +3', function () {
     $profile = nutritionProfile();
     $this->seed(NutritionTopicSeeder::class);
 
@@ -65,21 +57,48 @@ it('start-program command lays out topic dates: position 1 → day +3', function
     $topic1 = NutritionTopic::query()->where('position', 1)->first();
     $topic12 = NutritionTopic::query()->where('position', 12)->first();
 
-    expect($topic1->scheduled_on->format('Y-m-d'))->toBe('2026-07-17')  // +3
-        ->and($topic12->scheduled_on->format('Y-m-d'))->toBe('2026-09-10'); // +58
+    $send1 = NutritionTopicSend::query()->where('profile_id', $profile->id)->where('topic_id', $topic1->id)->first();
+    $send12 = NutritionTopicSend::query()->where('profile_id', $profile->id)->where('topic_id', $topic12->id)->first();
+
+    expect(NutritionTopicSend::query()->where('profile_id', $profile->id)->count())->toBe(12)
+        ->and($send1->scheduled_on->format('Y-m-d'))->toBe('2026-07-17')   // +3
+        ->and($send12->scheduled_on->format('Y-m-d'))->toBe('2026-09-10'); // +58
 });
 
-it('recomputes dates on re-run of start-program', function () {
+it('recomputes topic-send dates on re-run without resetting sent_at', function () {
     $profile = nutritionProfile();
     $this->seed(NutritionTopicSeeder::class);
 
     $this->artisan('nutrition:start-program', ['date' => '2026-07-14'])->assertExitCode(0);
+
+    $topic1 = NutritionTopic::query()->where('position', 1)->first();
+    $send1 = NutritionTopicSend::query()->where('profile_id', $profile->id)->where('topic_id', $topic1->id)->first();
+    // Тема уже была отправлена.
+    $send1->update(['sent_at' => '2026-07-17 10:30:00']);
+
     $this->artisan('nutrition:start-program', ['date' => '2026-07-21'])->assertExitCode(0);
 
     expect($profile->fresh()->program_started_on->format('Y-m-d'))->toBe('2026-07-21');
 
-    $topic1 = NutritionTopic::query()->where('position', 1)->first();
-    expect($topic1->scheduled_on->format('Y-m-d'))->toBe('2026-07-24'); // 2026-07-21 +3
+    $send1->refresh();
+    // scheduled_on пересчитан, а sent_at сохранён.
+    expect($send1->scheduled_on->format('Y-m-d'))->toBe('2026-07-24') // 2026-07-21 +3
+        ->and($send1->sent_at->format('Y-m-d H:i:s'))->toBe('2026-07-17 10:30:00');
+});
+
+it('start-program targets a specific profile via --profile', function () {
+    $admin = nutritionProfile();
+    $other = nutritionProfile(['telegram_user_id' => 999, 'is_admin' => false, 'main_chat_id' => 999]);
+    $this->seed(NutritionTopicSeeder::class);
+
+    $this->artisan('nutrition:start-program', ['date' => '2026-07-14', '--profile' => $other->id])
+        ->assertExitCode(0);
+
+    // Раскладка ушла второму профилю, admin не тронут.
+    expect(NutritionTopicSend::query()->where('profile_id', $other->id)->count())->toBe(12)
+        ->and(NutritionTopicSend::query()->where('profile_id', $admin->id)->count())->toBe(0)
+        ->and($other->fresh()->program_started_on->format('Y-m-d'))->toBe('2026-07-14')
+        ->and($admin->fresh()->program_started_on)->toBeNull();
 });
 
 it('StartProgram action returns a human-readable summary', function () {
