@@ -11,6 +11,7 @@ use App\Support\Nutrition\Planner;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 
 beforeEach(function () {
     config([
@@ -439,6 +440,8 @@ it('isolates a failing profile so the tick still reminds the others', function (
 
     expect($broken->id)->toBeLessThan($healthy->id);
 
+    Log::spy();
+
     $this->artisan('nutrition:tick')->assertExitCode(0);
 
     $greeting = NutritionMessage::query()
@@ -447,4 +450,10 @@ it('isolates a failing profile so the tick still reminds the others', function (
         ->exists();
 
     expect($greeting)->toBeTrue();
+
+    // Сбой залогирован с id битого профиля.
+    Log::shouldHaveReceived('error')
+        ->withArgs(fn ($message, $context) => $message === 'nutrition: tick profile failed'
+            && ($context['profile_id'] ?? null) === $broken->id)
+        ->once();
 });

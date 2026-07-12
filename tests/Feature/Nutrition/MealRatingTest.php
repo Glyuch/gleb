@@ -1,5 +1,6 @@
 <?php
 
+use App\Actions\Nutrition\HandleCallback;
 use App\Actions\Nutrition\HandlePhoto;
 use App\Actions\Nutrition\HandleQuestion;
 use App\Actions\Nutrition\RunDaySummary;
@@ -225,4 +226,89 @@ it('includes the average day score in the summary prompt', function () {
 
     Http::assertSent(fn ($r) => str_contains($r->url(), 'api.anthropic.com')
         && str_contains(json_encode($r->data(), JSON_UNESCAPED_UNICODE), 'Средний балл'));
+});
+
+it('sends the feedback text and keeps extra when the vision score is out of range', function () {
+    $this->travelTo(CarbonImmutable::create(2026, 7, 13, 11, 30, 0, 'Europe/Moscow'));
+    Planner::ensureDay($this->profile, CarbonImmutable::now('Europe/Moscow'));
+    NutritionMeal::query()->where('type', 'breakfast')->update(['status' => 'eaten', 'eaten_at' => '2026-07-13 08:00:00']);
+
+    fakeVision(json_encode([
+        'feedback' => 'Хороший обед, но десерт лишний 👌🏻',
+        'score' => 15,
+        'composition_ok' => false,
+        'forbidden' => ['сахар'],
+        'comment' => 'десерт',
+    ], JSON_UNESCAPED_UNICODE));
+
+    app(HandlePhoto::class)->handle(['message' => [
+        'photo' => [['file_id' => 'small'], ['file_id' => 'big']],
+    ]], $this->profile);
+
+    $lunch = NutritionMeal::query()->where('type', 'lunch')->first();
+    expect($lunch->status)->toBe('eaten')
+        ->and($lunch->score)->toBeNull()
+        ->and($lunch->ai_feedback)->toBe('Хороший обед, но десерт лишний 👌🏻')
+        ->and($lunch->rating['composition_ok'])->toBeFalse()
+        ->and($lunch->rating['forbidden'])->toBe(['сахар']);
+
+    // Пользователю уходит текст из feedback-поля, НЕ сырой JSON.
+    expect(lastOut())->toContain('десерт лишний')
+        ->not->toContain('"score"')
+        ->not->toContain('composition_ok');
+});
+
+it('sends the feedback text when the vision JSON has no score at all', function () {
+    $this->travelTo(CarbonImmutable::create(2026, 7, 13, 11, 30, 0, 'Europe/Moscow'));
+    Planner::ensureDay($this->profile, CarbonImmutable::now('Europe/Moscow'));
+    NutritionMeal::query()->where('type', 'breakfast')->update(['status' => 'eaten', 'eaten_at' => '2026-07-13 08:00:00']);
+
+    fakeVision(json_encode([
+        'feedback' => 'Отличный обед по тарелке! 🙌🏼',
+        'composition_ok' => true,
+        'forbidden' => [],
+    ], JSON_UNESCAPED_UNICODE));
+
+    app(HandlePhoto::class)->handle(['message' => [
+        'photo' => [['file_id' => 'small'], ['file_id' => 'big']],
+    ]], $this->profile);
+
+    $lunch = NutritionMeal::query()->where('type', 'lunch')->first();
+    expect($lunch->score)->toBeNull()
+        ->and($lunch->ai_feedback)->toBe('Отличный обед по тарелке! 🙌🏼')
+        ->and($lunch->rating['composition_ok'])->toBeTrue();
+
+    expect(lastOut())->toContain('по тарелке')->not->toContain('{');
+});
+
+it('saves score and rating from a mealphoto callback with strict JSON', function () {
+    $this->travelTo(CarbonImmutable::create(2026, 7, 13, 12, 0, 0, 'Europe/Moscow'));
+    Planner::ensureDay($this->profile, CarbonImmutable::now('Europe/Moscow'));
+    NutritionMeal::query()->where('type', 'breakfast')->update(['status' => 'missed']);
+    $this->profile->setWaiting('meal_photo', 'big');
+
+    fakeVision(json_encode([
+        'feedback' => 'Поздний завтрак, но состав отличный! 🙌🏼',
+        'score' => 9,
+        'composition_ok' => true,
+        'forbidden' => [],
+        'comment' => 'овсянка с ягодами',
+    ], JSON_UNESCAPED_UNICODE));
+
+    app(HandleCallback::class)->handle(['callback_query' => [
+        'id' => 'cbr',
+        'data' => 'mealphoto:breakfast',
+    ]], $this->profile);
+
+    $breakfast = NutritionMeal::query()->where('type', 'breakfast')->first();
+    expect($breakfast->status)->toBe('eaten')
+        ->and($breakfast->score)->toBe(9)
+        ->and($breakfast->ai_feedback)->toBe('Поздний завтрак, но состав отличный! 🙌🏼')
+        ->and($breakfast->rating['composition_ok'])->toBeTrue()
+        ->and($breakfast->rating['comment'])->toBe('овсянка с ягодами')
+        ->and($breakfast->rating)->toHaveKey('interval_ok')
+        ->and($breakfast->rating)->toHaveKey('window_ok');
+
+    expect($this->profile->fresh()->waiting('meal_photo'))->toBeNull();
+    expect(lastOut())->toContain('состав отличный')->not->toContain('"score"');
 });

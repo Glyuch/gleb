@@ -157,9 +157,12 @@ class MealLogger
     }
 
     /**
-     * Разбирает ответ vision на фидбек + структуру рейтинга. Валидный JSON с
-     * целым score 1..10 → полная структура; иначе (не-JSON/битый score) —
-     * fallback: feedback = сырой текст, score null, без ИИ-составляющих рейтинга.
+     * Разбирает ответ vision на фидбек + структуру рейтинга.
+     * Не-JSON → feedback = сырой текст, score null, extra null.
+     * Валидный JSON → feedback СТРОГО из поля feedback (сырой JSON пользователю
+     * не уходит; пустое поле → нейтральная фраза), score = validScore (битый/
+     * отсутствующий → null), extra сохраняется всегда — консистентно с MealIntent:
+     * невалидный score нулит только score, composition_ok/forbidden/comment остаются.
      *
      * @return array{feedback: ?string, score: ?int, extra: array{composition_ok: ?bool, forbidden: array<int, string>, comment: ?string}|null}
      */
@@ -170,16 +173,17 @@ class MealLogger
         }
 
         $data = json_decode(self::stripFences($raw), true);
-        $score = is_array($data) ? self::validScore($data['score'] ?? null) : null;
 
-        // Не-JSON или невалидный score → вся структура null, фидбек = сырой текст.
-        if (! is_array($data) || $score === null) {
+        // Не-JSON (или JSON-скаляр) → фидбек = сырой текст, без структуры.
+        if (! is_array($data)) {
             return ['feedback' => trim($raw), 'score' => null, 'extra' => null];
         }
 
+        $feedback = trim((string) ($data['feedback'] ?? ''));
+
         return [
-            'feedback' => isset($data['feedback']) ? (string) $data['feedback'] : trim($raw),
-            'score' => $score,
+            'feedback' => $feedback !== '' ? $feedback : 'Записал приём 👌🏻',
+            'score' => self::validScore($data['score'] ?? null),
             'extra' => self::ratingExtra($data),
         ];
     }
