@@ -13,6 +13,13 @@ class TelegramClient
 
     private mixed $chatId;
 
+    /**
+     * Профиль-контекст исходящих сообщений. Устанавливается обработчиком (Job/тик)
+     * перед отправкой, чтобы каждое out-сообщение в nutrition_messages несло
+     * profile_id (нужно для staleness-guard'ов, считающих lastOutKind по профилю).
+     */
+    public ?int $profileId = null;
+
     public function __construct()
     {
         $this->token = config('nutrition.bot_token');
@@ -48,6 +55,7 @@ class TelegramClient
         $result = $this->api('sendMessage', $params);
 
         NutritionMessage::query()->create([
+            'profile_id' => $this->profileId,
             'direction' => 'out',
             'kind' => $kind,
             'content' => $text,
@@ -95,6 +103,7 @@ class TelegramClient
         }
 
         NutritionMessage::query()->create([
+            'profile_id' => $this->profileId,
             'direction' => 'out',
             'kind' => 'topic',
             'content' => $caption,

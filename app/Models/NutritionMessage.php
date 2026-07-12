@@ -7,6 +7,7 @@ use Illuminate\Support\Carbon;
 
 /**
  * @property int $id
+ * @property int|null $profile_id
  * @property string $direction
  * @property string|null $kind
  * @property string|null $content
@@ -18,6 +19,7 @@ use Illuminate\Support\Carbon;
 class NutritionMessage extends Model
 {
     protected $fillable = [
+        'profile_id',
         'direction',
         'kind',
         'content',
@@ -28,6 +30,7 @@ class NutritionMessage extends Model
     protected function casts(): array
     {
         return [
+            'profile_id' => 'integer',
             'meta' => 'array',
         ];
     }

@@ -2,6 +2,7 @@
 
 namespace App\Providers;
 
+use App\Support\Nutrition\TelegramClient;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\DB;
@@ -15,7 +16,10 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        //
+        // Singleton: обработчик выставляет $profileId один раз, и все вложенные
+        // app(TelegramClient::class) в рамках одного апдейта тегируют out-сообщения
+        // тем же профилем.
+        $this->app->singleton(TelegramClient::class);
     }
 
     /**

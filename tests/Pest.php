@@ -1,5 +1,6 @@
 <?php
 
+use App\Models\NutritionProfile;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -47,4 +48,21 @@ expect()->extend('toBeOne', function () {
 function something()
 {
     // ..
+}
+
+/**
+ * Сеет профиль нутрициолога для фикстур. По умолчанию — активный
+ * admin-профиль (владелец инстанса), что покрывает и маршрутизацию входящих
+ * (резолвинг по telegram_user_id), и тик (NutritionProfile::admin()).
+ *
+ * @param  array<string, mixed>  $attrs
+ */
+function nutritionProfile(array $attrs = []): NutritionProfile
+{
+    return NutritionProfile::query()->create(array_merge([
+        'telegram_user_id' => 49465703,
+        'name' => 'Глеб',
+        'status' => 'active',
+        'is_admin' => true,
+    ], $attrs));
 }

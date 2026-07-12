@@ -7,6 +7,7 @@ use Illuminate\Support\Carbon;
 
 /**
  * @property int $id
+ * @property int|null $profile_id
  * @property Carbon $date
  * @property string $type
  * @property float $value
@@ -16,6 +17,7 @@ use Illuminate\Support\Carbon;
 class NutritionMetric extends Model
 {
     protected $fillable = [
+        'profile_id',
         'date',
         'type',
         'value',
@@ -24,6 +26,7 @@ class NutritionMetric extends Model
     protected function casts(): array
     {
         return [
+            'profile_id' => 'integer',
             'date' => 'date',
             'value' => 'float',
         ];
