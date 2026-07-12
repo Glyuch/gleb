@@ -56,7 +56,7 @@ it('replies with the personal-bot notice for a foreign sender and stores nothing
 });
 
 it('logs a chat candidate and stores nothing when chat_id is not configured', function () {
-    config(['nutrition.chat_id' => null]);
+    config(['nutrition.user_id' => null, 'nutrition.chat_id' => null]);
 
     Http::preventStrayRequests();
     Http::fake([
@@ -71,6 +71,8 @@ it('logs a chat candidate and stores nothing when chat_id is not configured', fu
 });
 
 it('routes a slash command from the owner to HandleCommand and logs it inbound', function () {
+    config(['nutrition.user_id' => 123]);
+
     $update = ['message' => ['from' => ['id' => 123], 'message_id' => 42, 'text' => '/today']];
 
     $this->mock(HandleCommand::class)

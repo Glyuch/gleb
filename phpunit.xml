@@ -32,5 +32,10 @@
         <env name="PULSE_ENABLED" value="false"/>
         <env name="TELESCOPE_ENABLED" value="false"/>
         <env name="NIGHTWATCH_ENABLED" value="false"/>
+        <env name="NUTRITION_BOT_TOKEN" value=""/>
+        <env name="NUTRITION_USER_ID" value=""/>
+        <env name="NUTRITION_CHAT_ID" value=""/>
+        <env name="NUTRITION_WEBHOOK_SECRET" value=""/>
+        <env name="ANTHROPIC_API_KEY" value=""/>
     </php>
 </phpunit>
