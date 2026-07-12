@@ -4,6 +4,7 @@ use App\Http\Controllers\Admin\GameContentController;
 use App\Http\Controllers\Admin\GameResultsDashboardController;
 use App\Http\Controllers\Admin\GameReturnsController;
 use App\Http\Controllers\Admin\GameSurveyController;
+use App\Http\Controllers\Admin\NutritionAdminController;
 use App\Http\Controllers\Admin\SiteDashboardController;
 use App\Http\Controllers\GameController;
 use App\Http\Controllers\NutritionBotController;
@@ -43,6 +44,14 @@ Route::middleware(['auth', 'admin'])->prefix('admin')->name('admin.')->group(fun
         Route::get('/returns', [GameReturnsController::class, 'edit'])->name('returns');
         Route::put('/returns', [GameReturnsController::class, 'update'])->name('returns.update');
         Route::redirect('/stats', '/admin/dashboards/gameresults');
+    });
+
+    Route::prefix('nutrition')->name('nutrition.')->group(function () {
+        Route::get('/', [NutritionAdminController::class, 'index'])->name('index');
+        Route::post('/invite', [NutritionAdminController::class, 'invite'])->name('invite');
+        Route::get('/{profile}', [NutritionAdminController::class, 'show'])->name('show');
+        Route::put('/{profile}', [NutritionAdminController::class, 'update'])->name('update');
+        Route::post('/{profile}/pause', [NutritionAdminController::class, 'pause'])->name('pause');
     });
 });
 

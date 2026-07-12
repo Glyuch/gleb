@@ -132,6 +132,12 @@
       <a href="{{ url('/game') }}" target="_blank">
         <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>Открыть игру<span class="ext">↗</span></a>
     </nav>
+
+    <div class="nav-group">Нутрициолог</div>
+    <nav class="nav">
+      <a href="{{ route('admin.nutrition.index') }}" class="{{ request()->routeIs('admin.nutrition.*') ? 'active' : '' }}">
+        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M3 2v7c0 1.1.9 2 2 2h0a2 2 0 0 0 2-2V2"/><path d="M5 2v20"/><path d="M17 2v20"/><path d="M17 11a4 4 0 0 0 4-4V2"/></svg>Клиенты</a>
+    </nav>
   </aside>
 
   <main class="main">
