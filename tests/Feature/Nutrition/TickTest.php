@@ -412,3 +412,39 @@ it('falls back to intro text when none of the topic files exist on disk', functi
 
     expect($send->fresh()->sent_at)->not->toBeNull();
 });
+
+it('isolates a failing profile so the tick still reminds the others', function () {
+    // Битый профиль обрабатывается первым (меньший id) и роняет tickProfile;
+    // здоровый профиль всё равно должен получить утреннее приветствие.
+    NutritionProfile::query()->delete();
+
+    $this->travelTo(CarbonImmutable::create(2026, 7, 15, 8, 0, 0, 'Europe/Moscow'));
+
+    $broken = nutritionProfile([
+        'telegram_user_id' => 111,
+        'is_admin' => false,
+        'main_chat_id' => 999,
+    ]);
+    // default_windows со строками вместо массивов → TypeError в Planner::ensureDay.
+    $broken->settings = ['default_windows' => [
+        'breakfast' => 'x', 'lunch' => 'x', 'snack' => 'x', 'dinner' => 'x',
+    ]];
+    $broken->save();
+
+    $healthy = nutritionProfile([
+        'telegram_user_id' => 222,
+        'is_admin' => false,
+        'main_chat_id' => 555,
+    ]);
+
+    expect($broken->id)->toBeLessThan($healthy->id);
+
+    $this->artisan('nutrition:tick')->assertExitCode(0);
+
+    $greeting = NutritionMessage::query()
+        ->where('profile_id', $healthy->id)
+        ->where('kind', 'greeting')
+        ->exists();
+
+    expect($greeting)->toBeTrue();
+});

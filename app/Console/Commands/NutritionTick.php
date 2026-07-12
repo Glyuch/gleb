@@ -17,6 +17,7 @@ use Closure;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Throwable;
 
 class NutritionTick extends Command
 {
@@ -68,7 +69,20 @@ class NutritionTick extends Command
         }
 
         foreach ($profiles as $profile) {
-            $this->tickProfile($profile, $now);
+            // Сбой одного профиля не должен прерывать тик остальных.
+            try {
+                $this->tickProfile($profile, $now);
+            } catch (Throwable $e) {
+                if ($this->dryRun) {
+                    $this->line("[{$profile->name}] ОШИБКА тика: {$e->getMessage()}");
+                    $this->line('');
+                } else {
+                    Log::error('nutrition: tick profile failed', [
+                        'profile_id' => $profile->id,
+                        'message' => $e->getMessage(),
+                    ]);
+                }
+            }
         }
     }
 
