@@ -28,6 +28,7 @@ class HandleCallback
 
         match ($action) {
             'ate' => $this->ate($tg, $profile, $arg, $chatId),
+            'reeval' => $this->reeval($tg, $profile, $arg, $chatId),
             'skip' => $this->skip($tg, $profile, $arg, $chatId),
             'mealphoto' => $this->mealPhoto($tg, $profile, $arg, $chatId),
             'atepast' => $this->atePast($tg, $profile, $arg, $chatId),
@@ -68,7 +69,45 @@ class HandleCallback
         if ($tail !== '') {
             $parts[] = $tail;
         }
-        $tg->send(implode("\n\n", $parts), chatId: $chatId);
+        // Кнопка переоценки: клиент может уточнить состав и пересчитать балл.
+        $tg->send(implode("\n\n", $parts), MealLogger::reevalButton($meal), chatId: $chatId);
+    }
+
+    /**
+     * Кнопка «🔄 Переоценить» под разбором приёма: ставим ожидание reeval на этот
+     * приём и просим уточнить состав. Следующий текст клиента уйдёт в переоценку
+     * ИМЕННО этого приёма (HandleQuestion::interceptReeval). Приём должен
+     * существовать и быть разобран (СЪЕДЕН) сегодня.
+     */
+    private function reeval(TelegramClient $tg, NutritionProfile $profile, string $arg, ?int $chatId = null): void
+    {
+        if (! ctype_digit($arg)) {
+            return;
+        }
+
+        $now = $profile->now();
+        Planner::ensureDay($profile, $now);
+
+        $meal = NutritionMeal::query()
+            ->where('profile_id', $profile->id)
+            ->whereDate('date', $now->format('Y-m-d'))
+            ->where('id', (int) $arg)
+            ->where('status', 'eaten')
+            ->first();
+
+        if ($meal === null) {
+            $tg->send('Не нашёл этот приём на сегодня 🤔', chatId: $chatId);
+
+            return;
+        }
+
+        $profile->setWaiting('reeval', (int) $arg);
+        // Взаимоисключаем с прочими ожиданиями ввода.
+        $profile->clearWaiting('meal_time');
+        $profile->clearWaiting('setting');
+
+        // kind=reeval_request — staleness-guard в HandleQuestion::interceptReeval.
+        $tg->send('Что там на самом деле? Напиши состав и способ готовки — пересчитаю 🙌🏼', null, 'reeval_request', $chatId);
     }
 
     private function skip(TelegramClient $tg, NutritionProfile $profile, string $type, ?int $chatId = null): void
@@ -143,7 +182,7 @@ class HandleCallback
         $lines[] = '';
         $lines[] = 'Поел раньше? Напиши время, например «в 10:00» — поправлю.';
 
-        $tg->send(implode("\n", $lines), chatId: $chatId);
+        $tg->send(implode("\n", $lines), MealLogger::reevalButton($meal), chatId: $chatId);
     }
 
     /**

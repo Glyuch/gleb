@@ -2,6 +2,7 @@
 
 namespace App\Support\Nutrition;
 
+use App\Models\NutritionMeal;
 use App\Models\NutritionProfile;
 use Carbon\CarbonImmutable;
 
@@ -36,11 +37,36 @@ class MealIntent
         TXT;
 
     /**
-     * @return array{intent: string, reports: array<int, array{meal: ?string, time: ?string, food: string, score: ?int, composition_ok: ?bool, forbidden: array<int, string>, comment: ?string}>, reply: string}|null
+     * Доп-инструкция про intent=correct_meal. Подмешивается ТОЛЬКО когда за сегодня
+     * есть разобранный (СЪЕДЕН) приём — иначе переоценивать нечего, и обычный
+     * вопрос/болтовня не должны триггерить переоценку.
+     */
+    private const CORRECT_MEAL_HINT = <<<'TXT'
+        ДОПОЛНИТЕЛЬНО: сегодня уже есть разобранный (СЪЕДЕН) приём, поэтому допустим ещё intent="correct_meal":
+        - "correct_meal" — клиент УТОЧНЯЕТ или ОСПАРИВАЕТ состав/оценку уже разобранного СЕГОДНЯ приёма («это не паштет, а куриная грудка су-вид», «там была гречка, а не рис») ИЛИ прямо просит пересчитать оценку («переоцени ужин», «пересчитай оценку», «а балл?»). reports = [].
+        Для correct_meal добавь в объект поле "target": "breakfast|lunch|snack|dinner|null" — тип приёма, если он ЯВНО назван клиентом; иначе null (возьмём последний разобранный).
+        correct_meal — это КОРРЕКЦИЯ уже съеденного приёма. Новый отчёт о ещё не записанной еде — это meal_report, а общий вопрос по питанию — question. Сообщение о будущем/намерении — по-прежнему question.
+        TXT;
+
+    /**
+     * @return array{intent: string, reports: array<int, array{meal: ?string, time: ?string, food: string, score: ?int, composition_ok: ?bool, forbidden: array<int, string>, comment: ?string}>, reply: string, target: ?string}|null
      */
     public static function classify(NutritionProfile $profile, string $text, CarbonImmutable $now): ?array
     {
-        $prompt = PromptBuilder::dayContext($profile, $now)."\n\n".self::INSTRUCTION
+        // Гейт correct_meal: активен только при наличии разобранного приёма сегодня.
+        $hasEvaluated = NutritionMeal::query()
+            ->where('profile_id', $profile->id)
+            ->whereDate('date', $now->format('Y-m-d'))
+            ->where('status', 'eaten')
+            ->whereNotNull('eaten_at')
+            ->exists();
+
+        $instruction = self::INSTRUCTION;
+        if ($hasEvaluated) {
+            $instruction .= "\n\n".self::CORRECT_MEAL_HINT;
+        }
+
+        $prompt = PromptBuilder::dayContext($profile, $now)."\n\n".$instruction
             ."\n\nВ поле reply начни с обращения к клиенту по имени ".$profile->displayName().' (звательно, по-русски естественно).'
             ."\n\nСообщение клиента: ".$text;
 
@@ -61,9 +87,23 @@ class MealIntent
             return null;
         }
 
+        $allowed = ['meal_report', 'question', 'other'];
+        if ($hasEvaluated) {
+            $allowed[] = 'correct_meal';
+        }
+
         $intent = (string) $data['intent'];
-        if (! in_array($intent, ['meal_report', 'question', 'other'], true)) {
+        if (! in_array($intent, $allowed, true)) {
             return null;
+        }
+
+        // Тип-цель для переоценки (опц., только для correct_meal).
+        $target = null;
+        if ($intent === 'correct_meal') {
+            $candidate = $data['target'] ?? null;
+            if (in_array($candidate, MealPlan::TYPES, true)) {
+                $target = $candidate;
+            }
         }
 
         $reports = [];
@@ -101,6 +141,7 @@ class MealIntent
             'intent' => $intent,
             'reports' => $reports,
             'reply' => (string) ($data['reply'] ?? ''),
+            'target' => $target,
         ];
     }
 

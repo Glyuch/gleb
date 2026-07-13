@@ -130,7 +130,8 @@ class HandlePhoto
             $parts[] = $warning;
         }
 
-        $tg->send(implode("\n\n", $parts), chatId: $chatId);
+        // Кнопка переоценки: если vision ошибся с составом, клиент поправит текстом.
+        $tg->send(implode("\n\n", $parts), MealLogger::reevalButton($meal), chatId: $chatId);
     }
 
     /**

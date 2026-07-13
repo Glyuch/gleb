@@ -96,7 +96,103 @@ class MealLogger
             $parts[] = 'Записал приём 👌🏻';
         }
 
-        $tg->send(implode("\n\n", $parts), chatId: $chatId);
+        // Кнопка переоценки под текст-разбором: цепляем к последнему записанному
+        // приёму (resolved уже отсортирован по времени), чтобы клиент мог поправить
+        // состав. Ничего не записали (только «уже отмечен») — без кнопки.
+        $keyboard = null;
+        if ($resolved !== []) {
+            $keyboard = self::reevalButton(end($resolved)['meal']);
+        }
+
+        $tg->send(implode("\n\n", $parts), $keyboard, chatId: $chatId);
+    }
+
+    /**
+     * Переоценивает УЖЕ разобранный приём по авторитетному описанию клиента
+     * (текстовая модель, sonnet). Слова клиента важнее прошлого разбора: фото могло
+     * ввести в заблуждение, поэтому фото повторно НЕ гоняем. Выход — тот же формат,
+     * что у фото-разбора (parseFood): {feedback, score, extra}.
+     *
+     * @return array{feedback: ?string, score: ?int, extra: array{composition_ok: ?bool, forbidden: array<int, string>, comment: ?string}|null}
+     */
+    public static function reevaluate(NutritionProfile $profile, NutritionMeal $meal, string $userText): array
+    {
+        $raw = Claude::text(
+            [['type' => 'text', 'text' => self::reevalPrompt($profile, $meal, $userText)]],
+            (string) config('nutrition.models.chat'),
+            400,
+            $profile,
+        );
+
+        return self::parseFood($raw);
+    }
+
+    /**
+     * Текстовый промпт переоценки: тип приёма + правила состава/запрещёнка (как в
+     * фото-разборе), прошлый вердикт как контекст и авторитетное уточнение клиента.
+     * Приоритет — за словами клиента. Просит СТРОГИЙ JSON того же формата, что
+     * foodPrompt, НО без обращения по имени в feedback (обращение добавляет вызывающий
+     * код через Address::ensure — чтобы имя не дублировалось).
+     */
+    public static function reevalPrompt(NutritionProfile $profile, NutritionMeal $meal, string $userText): string
+    {
+        $type = $meal->type;
+        $portion = (int) $profile->setting('portion_adjustment');
+        $portionStr = ($portion > 0 ? '+' : '').$portion.'%';
+
+        $prior = '';
+        if ($meal->score !== null) {
+            $prior .= 'Ранее приёму поставлен балл '.$meal->score.'/10';
+            $prior .= filled($meal->ai_feedback) ? ' с фидбеком: '.$meal->ai_feedback."\n" : ".\n";
+        } elseif (filled($meal->ai_feedback)) {
+            $prior .= 'Ранее бот написал: '.$meal->ai_feedback."\n";
+        }
+
+        return 'Переоцени УЖЕ записанный приём по УТОЧНЕНИЮ клиента. Прошлый разбор мог быть по фото и ошибиться — словам клиента о составе и способе готовки верь БОЛЬШЕ, чем прежней оценке.'."\n"
+            .'Приём: '.MealPlan::LABELS[$type].".\n"
+            .'Ожидаемый состав: '.MealPlan::COMPOSITION[$type].".\n"
+            .'Запрещёнка (кратко): '.self::FORBIDDEN.".\n"
+            .'Поправка порций: '.$portionStr.".\n"
+            .$prior
+            .'Клиент уточняет: '.$userText."\n"
+            .'Пересчитай оценку по словам клиента и верни ОТВЕТ СТРОГО в формате JSON без пояснений и без markdown-заборов:'."\n"
+            .'{"feedback": "реакция нутрициолога — тепло и по делу, 1–3 предложения, без обращения по имени; при необходимости кратко «почему» через физиологию", '
+            .'"score": 8, "composition_ok": true, "forbidden": ["наименование запрещёнки, если есть"], "comment": "кратко для истории"}'."\n"
+            .'score — целое 1–10 (насколько уточнённый приём соответствует ожидаемому составу и без запрещёнки). '
+            .'composition_ok — соответствует ли состав схеме. forbidden — список найденной запрещёнки (пустой, если нет).';
+    }
+
+    /**
+     * Последний разобранный (СЪЕДЕН, с eaten_at) приём за сегодня — цель для
+     * переоценки по естественному тексту. $type задан → строго этот тип (иначе null).
+     */
+    public static function lastEvaluatedMeal(NutritionProfile $profile, CarbonImmutable $now, ?string $type = null): ?NutritionMeal
+    {
+        $query = NutritionMeal::query()
+            ->where('profile_id', $profile->id)
+            ->whereDate('date', $now->format('Y-m-d'))
+            ->where('status', 'eaten')
+            ->whereNotNull('eaten_at');
+
+        if ($type !== null) {
+            if (! in_array($type, MealPlan::TYPES, true)) {
+                return null;
+            }
+            $query->where('type', $type);
+        }
+
+        return $query->orderByDesc('eaten_at')->first();
+    }
+
+    /**
+     * Inline-кнопка «переоценить» под сообщением-разбором приёма: callback
+     * reeval:{meal_id}. Ряд из одной кнопки — формат reply_markup.inline_keyboard.
+     *
+     * @return array<int, array<int, array<string, string>>>
+     */
+    public static function reevalButton(NutritionMeal $meal): array
+    {
+        return [[['text' => '🔄 Состав другой / переоценить', 'callback_data' => 'reeval:'.$meal->id]]];
     }
 
     /**

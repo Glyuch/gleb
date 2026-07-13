@@ -118,6 +118,33 @@ class Planner
     }
 
     /**
+     * Переоценка УЖЕ съеденного приёма по уточнению клиента: перезаписывает
+     * score/rating/ai_feedback, НЕ трогая eaten_at, status, окна и photo_file_id
+     * (паттерн attachPhoto). Детерминированные interval_ok/window_ok пересчитываем
+     * от исходного eaten_at (окна не сдвигаются), в rating ставим reevaluated=true —
+     * пометка, что оценка правилась по словам клиента. recalculate не зовём: время
+     * приёма не изменилось.
+     *
+     * @param  array{feedback: ?string, score: ?int, extra: array{composition_ok?: ?bool, forbidden?: array<int, string>, comment?: ?string}|null}  $eval
+     */
+    public static function updateEvaluation(NutritionProfile $profile, NutritionMeal $meal, array $eval): void
+    {
+        $at = self::toLocal($meal->eaten_at, $profile->tz()) ?? $profile->now();
+
+        $rating = ($eval['extra'] ?? []) + [
+            'interval_ok' => self::intervalOk($profile, $meal, $at),
+            'window_ok' => self::windowOk($meal, $at, $profile->tz()),
+            'reevaluated' => true,
+        ];
+
+        $meal->update([
+            'ai_feedback' => $eval['feedback'] ?? null,
+            'score' => $eval['score'] ?? null,
+            'rating' => $rating,
+        ]);
+    }
+
+    /**
      * Запись фото приёма: приём ещё не съеден — помечаем съеденным (markEaten);
      * уже съеден (кнопкой) — только доклеиваем фото/разбор (attachPhoto),
      * сохраняя исходные eaten_at/окна.
