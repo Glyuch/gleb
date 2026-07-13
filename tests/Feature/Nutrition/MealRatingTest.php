@@ -116,7 +116,7 @@ it('records the meal with null score when the vision reply is not JSON', functio
         ->and($lunch->rating)->toHaveKey('interval_ok')
         ->and($lunch->rating)->toHaveKey('window_ok')
         ->and($lunch->rating)->not->toHaveKey('composition_ok');
-    expect(lastOut())->toContain('Идеально');
+    expect(lastOut())->toContain('Глеб, идеально');
 });
 
 it('rates the first meal of the day as interval_ok and window_ok true', function () {

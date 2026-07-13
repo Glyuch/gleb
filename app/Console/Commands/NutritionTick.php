@@ -9,6 +9,7 @@ use App\Models\NutritionMeal;
 use App\Models\NutritionProfile;
 use App\Models\NutritionSentEvent;
 use App\Models\NutritionTopicSend;
+use App\Support\Nutrition\Address;
 use App\Support\Nutrition\MealPlan;
 use App\Support\Nutrition\Planner;
 use App\Support\Nutrition\TelegramClient;
@@ -146,7 +147,7 @@ class NutritionTick extends Command
                 : ($now->isThursday() || $now->isSunday());
 
             if ($weightDay) {
-                $weightText = 'Утреннее взвешивание натощак ⚖️ Пришли вес числом';
+                $weightText = Address::ensure($profile, 'Утреннее взвешивание натощак ⚖️ Пришли вес числом');
                 $this->fire($profile, "{$d}:weight_request", $weightText, fn () => $tg->send($weightText, null, 'weight_request', $chat));
             }
 
@@ -184,8 +185,8 @@ class NutritionTick extends Command
             if ($phase !== 'maintenance'
                 && $now->greaterThanOrEqualTo($ws->copy()->subMinutes($lead))
                 && $now->lessThan($ws)) {
-                $pretext = 'Через полчаса '.MealPlan::LABELS[$type].' 🙌🏼 Окно '
-                    .$ws->format('H:i').'–'.$we->format('H:i');
+                $pretext = Address::ensure($profile, 'Через полчаса '.MealPlan::LABELS[$type].' 🙌🏼 Окно '
+                    .$ws->format('H:i').'–'.$we->format('H:i'));
                 $this->fire($profile, "{$d}:pre:{$type}:{$ws->format('H:i')}", $pretext,
                     fn () => $tg->send($pretext, null, 'reminder', $chat));
             }
@@ -206,20 +207,20 @@ class NutritionTick extends Command
 
             if ($slot->equalTo($ws)) {
                 // Старт окна: полное напоминание с составом + кнопки.
-                $text = '⏰ '.MealPlan::LABELS[$type].' '
+                $text = Address::ensure($profile, '⏰ '.MealPlan::LABELS[$type].' '
                     .$ws->format('H:i').'–'.$we->format('H:i')
-                    .'. '.MealPlan::COMPOSITION[$type];
+                    .'. '.MealPlan::COMPOSITION[$type]);
                 $this->fire($profile, $slotKey, $text, fn () => $tg->send($text, $this->mealButtons($type), 'reminder', $chat));
             } elseif ($phase !== 'maintenance') {
                 // Надж внутри окна/грейса. В maintenance — мягкий режим, без пингов.
-                $ntext = 'Поели '.mb_strtolower(MealPlan::LABELS[$type]).'? ☺️';
+                $ntext = Address::ensure($profile, 'Поели '.mb_strtolower(MealPlan::LABELS[$type]).'? ☺️');
                 $this->fire($profile, $slotKey, $ntext, fn () => $tg->send($ntext, $this->mealButtons($type), 'followup', $chat));
             }
         }
 
         // 4. Запрос метрик вечером.
         if ($now->greaterThanOrEqualTo($now->setTime(21, 30))) {
-            $mtext = 'Сколько шагов сегодня? Пришли число или скрин шагомера 🙌🏼 И сколько воды (л)?';
+            $mtext = Address::ensure($profile, 'Сколько шагов сегодня? Пришли число или скрин шагомера 🙌🏼 И сколько воды (л)?');
             $this->fire($profile, "{$d}:metrics_request", $mtext, fn () => $tg->send($mtext, null, 'metrics_request', $chat));
         }
 
@@ -262,7 +263,7 @@ class NutritionTick extends Command
         if ($phase === 'program' && $startedOn !== null) {
             $start = CarbonImmutable::parse($startedOn->format('Y-m-d'), 'Europe/Moscow')->startOfDay();
             if ($start->addDays(70)->lessThanOrEqualTo($now->startOfDay())) {
-                $gtext = $this->graduationText();
+                $gtext = Address::ensure($profile, $this->graduationText());
                 $this->fire($profile, "{$d}:graduation", $gtext, function () use ($tg, $gtext, $profile, $chat) {
                     $tg->send($gtext, null, 'graduation', $chat);
                     $profile->update(['phase' => 'maintenance']);
@@ -366,7 +367,7 @@ class NutritionTick extends Command
         $lines[] = '';
         $lines[] = 'Цель: шаги '.$profile->setting('steps_target').', вода 2 л. Хорошего дня! 👌🏻';
 
-        return implode("\n", $lines);
+        return Address::ensure($profile, implode("\n", $lines));
     }
 
     private function graduationText(): string

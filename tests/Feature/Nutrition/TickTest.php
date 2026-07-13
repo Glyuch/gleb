@@ -90,7 +90,7 @@ it('sends the lunch pre-reminder 30 minutes before the window and only once', fu
     $this->artisan('nutrition:tick')->assertExitCode(0);
 
     $pre = NutritionMessage::query()
-        ->where('content', 'like', '%Через полчаса%')
+        ->where('content', 'like', '%через полчаса%')
         ->where('content', 'like', '%Обед%')
         ->get();
     expect($pre)->toHaveCount(1);
@@ -100,7 +100,7 @@ it('sends the lunch pre-reminder 30 minutes before the window and only once', fu
     // Повторный тик в 12:31 (то же пред-окно) не дублирует.
     $this->travelTo(CarbonImmutable::create(2026, 7, 16, 12, 31, 0, 'Europe/Moscow'));
     $this->artisan('nutrition:tick')->assertExitCode(0);
-    expect(NutritionMessage::query()->where('content', 'like', '%Через полчаса%')->count())->toBe(1);
+    expect(NutritionMessage::query()->where('content', 'like', '%через полчаса%')->count())->toBe(1);
 });
 
 it('sends the full lunch reminder with composition and buttons at the window start', function () {
@@ -129,14 +129,14 @@ it('sends a lunch nudge every 30 minutes while pending but not once eaten', func
 
     $this->artisan('nutrition:tick')->assertExitCode(0);
 
-    $nudge = NutritionMessage::query()->where('kind', 'followup')->where('content', 'like', '%Поели обед%')->get();
+    $nudge = NutritionMessage::query()->where('kind', 'followup')->where('content', 'like', '%поели обед%')->get();
     expect($nudge)->toHaveCount(1);
     expect(NutritionSentEvent::query()->where('event_key', pkey($this->profile, '2026-07-16:meal:lunch:13:30'))->count())->toBe(1);
 
     // Тот же 30-мин слот — без дублей.
     $this->travelTo(CarbonImmutable::create(2026, 7, 16, 13, 31, 0, 'Europe/Moscow'));
     $this->artisan('nutrition:tick')->assertExitCode(0);
-    expect(NutritionMessage::query()->where('content', 'like', '%Поели обед%')->count())->toBe(1);
+    expect(NutritionMessage::query()->where('content', 'like', '%поели обед%')->count())->toBe(1);
 
     // Приём отмечен eaten → следующий слот (14:00) не пингует.
     NutritionMeal::query()->where('profile_id', $this->profile->id)->where('type', 'lunch')->first()->update([
@@ -145,7 +145,7 @@ it('sends a lunch nudge every 30 minutes while pending but not once eaten', func
     ]);
     $this->travelTo(CarbonImmutable::create(2026, 7, 16, 14, 0, 0, 'Europe/Moscow'));
     $this->artisan('nutrition:tick')->assertExitCode(0);
-    expect(NutritionMessage::query()->where('content', 'like', '%Поели обед%')->count())->toBe(1);
+    expect(NutritionMessage::query()->where('content', 'like', '%поели обед%')->count())->toBe(1);
 });
 
 it('regenerates the reminder when the meal window is moved to a later time', function () {
@@ -189,7 +189,7 @@ it('does not burst-backfill missed slots when the worker was down (first tick at
 
     // Уходит РОВНО одно напоминание по обеду — наджа текущего 30-мин ведра (14:00),
     // а не пачка за пропущенные слоты 13:00/13:30.
-    expect(NutritionMessage::query()->where('content', 'like', '%Поели обед%')->count())->toBe(1);
+    expect(NutritionMessage::query()->where('content', 'like', '%поели обед%')->count())->toBe(1);
     expect(NutritionSentEvent::query()->where('event_key', 'like', pkey($this->profile, '2026-07-16:meal:lunch:%'))->count())->toBe(1);
     expect(NutritionSentEvent::query()->where('event_key', pkey($this->profile, '2026-07-16:meal:lunch:14:00'))->count())->toBe(1);
 
@@ -205,7 +205,7 @@ it('in maintenance sends only the start reminder, no pre and no nudges', functio
     $this->travelTo(CarbonImmutable::create(2026, 7, 16, 12, 30, 0, 'Europe/Moscow'));
     prepareLunchWindow($this->profile);
     $this->artisan('nutrition:tick')->assertExitCode(0);
-    expect(NutritionMessage::query()->where('content', 'like', '%Через полчаса%')->count())->toBe(0);
+    expect(NutritionMessage::query()->where('content', 'like', '%через полчаса%')->count())->toBe(0);
 
     // Старт в 13:00 — уходит.
     $this->travelTo(CarbonImmutable::create(2026, 7, 16, 13, 0, 0, 'Europe/Moscow'));
@@ -215,7 +215,7 @@ it('in maintenance sends only the start reminder, no pre and no nudges', functio
     // Надж в 13:30 — не уходит (мягкий режим).
     $this->travelTo(CarbonImmutable::create(2026, 7, 16, 13, 30, 0, 'Europe/Moscow'));
     $this->artisan('nutrition:tick')->assertExitCode(0);
-    expect(NutritionMessage::query()->where('content', 'like', '%Поели обед%')->count())->toBe(0);
+    expect(NutritionMessage::query()->where('content', 'like', '%поели обед%')->count())->toBe(0);
 });
 
 it('does not persist slot reminders in dry-run mode', function () {
@@ -257,7 +257,7 @@ it('runs the Sunday checkup at 20:05 and stores pending adjustments', function (
 
     $checkup = NutritionMessage::query()->where('kind', 'checkup')->first();
     expect($checkup)->not->toBeNull()
-        ->and($checkup->content)->toContain('Разбор недели');
+        ->and($checkup->content)->toContain('Глеб, разбор недели');
 });
 
 it('routes each active profile reminders and topics to its own chat', function () {
@@ -491,4 +491,19 @@ it('isolates a failing profile so the tick still reminds the others', function (
         ->withArgs(fn ($message, $context) => $message === 'nutrition: tick profile failed'
             && ($context['profile_id'] ?? null) === $broken->id)
         ->once();
+});
+
+it('addresses the client by name in the morning greeting', function () {
+    $this->travelTo(CarbonImmutable::create(2026, 7, 16, 7, 35, 0, 'Europe/Moscow'));
+
+    $this->artisan('nutrition:tick')->assertExitCode(0);
+
+    $greeting = NutritionMessage::query()
+        ->where('direction', 'out')
+        ->where('kind', 'greeting')
+        ->value('content');
+
+    expect($greeting)->not->toBeNull()
+        ->and($greeting)->toStartWith('Глеб,')
+        ->and($greeting)->toContain('План на сегодня');
 });

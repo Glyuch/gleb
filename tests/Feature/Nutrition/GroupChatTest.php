@@ -186,6 +186,6 @@ it('replies the checkup into the source group chat on /checkup', function () {
     Http::assertSent(function ($request) {
         return str_contains($request->url(), '/sendMessage')
             && $request['chat_id'] == -100500
-            && str_contains($request['text'], 'Идеально');
+            && str_contains($request['text'], 'Глеб, идеально');
     });
 });

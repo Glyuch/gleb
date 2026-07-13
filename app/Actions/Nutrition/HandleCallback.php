@@ -4,6 +4,7 @@ namespace App\Actions\Nutrition;
 
 use App\Models\NutritionMeal;
 use App\Models\NutritionProfile;
+use App\Support\Nutrition\Address;
 use App\Support\Nutrition\Claude;
 use App\Support\Nutrition\MealLogger;
 use App\Support\Nutrition\MealPlan;
@@ -121,7 +122,7 @@ class HandleCallback
         Planner::markEaten($profile, $meal, $now, $fileId, $parsed['feedback'], $parsed['score'], $parsed['extra']);
         $profile->clearWaiting('meal_photo');
 
-        $lines = [$parsed['feedback'] ?? 'Записал приём 👌🏻 Разбор пришлю позже'];
+        $lines = [Address::ensure($profile, $parsed['feedback'] ?? 'Записал приём 👌🏻 Разбор пришлю позже')];
         $tail = MealLogger::windowsTail($profile, $now);
         if ($tail !== '') {
             $lines[] = '';

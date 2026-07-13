@@ -5,6 +5,7 @@ namespace App\Actions\Nutrition;
 use App\Models\NutritionMeal;
 use App\Models\NutritionMetric;
 use App\Models\NutritionProfile;
+use App\Support\Nutrition\Address;
 use App\Support\Nutrition\Claude;
 use App\Support\Nutrition\Fmt;
 use App\Support\Nutrition\PromptBuilder;
@@ -42,7 +43,7 @@ class RunDaySummary
             $profile,
         );
 
-        $tg->send($text ?? $this->fallback($profile, $now), null, 'summary', $chatId);
+        $tg->send(Address::ensure($profile, $text ?? $this->fallback($profile, $now)), null, 'summary', $chatId);
     }
 
     private function fallback(NutritionProfile $profile, CarbonImmutable $now): string

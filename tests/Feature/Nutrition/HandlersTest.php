@@ -127,7 +127,7 @@ it('attaches a food photo directly to the only open meal', function () {
     expect($lunch->status)->toBe('eaten')
         ->and($lunch->ai_feedback)->toBe('Идеально! 🙌🏼')
         ->and($lunch->photo_file_id)->toBe('big');
-    expect(lastOutText())->toContain('Идеально');
+    expect(lastOutText())->toContain('Глеб, идеально');
 });
 
 it('replies there are no snacks when no meal window has candidates', function () {
@@ -288,7 +288,7 @@ it('answers a free-form question via the chat model', function () {
     Http::assertSent(fn ($request) => str_contains($request->url(), 'api.anthropic.com')
         && $request['model'] === 'claude-sonnet-5'
         && $request['max_tokens'] === 800);
-    expect(lastOutText())->toContain('Идеально');
+    expect(lastOutText())->toContain('Глеб, идеально');
 });
 
 it('runs a checkup on /checkup', function () {

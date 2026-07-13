@@ -40,7 +40,9 @@ class MealIntent
      */
     public static function classify(NutritionProfile $profile, string $text, CarbonImmutable $now): ?array
     {
-        $prompt = PromptBuilder::dayContext($profile, $now)."\n\n".self::INSTRUCTION."\n\nСообщение клиента: ".$text;
+        $prompt = PromptBuilder::dayContext($profile, $now)."\n\n".self::INSTRUCTION
+            ."\n\nВ поле reply начни с обращения к клиенту по имени ".$profile->displayName().' (звательно, по-русски естественно).'
+            ."\n\nСообщение клиента: ".$text;
 
         $raw = Claude::text(
             [['type' => 'text', 'text' => $prompt]],

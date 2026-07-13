@@ -6,6 +6,7 @@ use App\Models\NutritionMeal;
 use App\Models\NutritionMessage;
 use App\Models\NutritionMetric;
 use App\Models\NutritionProfile;
+use App\Support\Nutrition\Address;
 use App\Support\Nutrition\Claude;
 use App\Support\Nutrition\MealLogger;
 use App\Support\Nutrition\MealPlan;
@@ -91,7 +92,7 @@ class HandlePhoto
         Planner::markEaten($profile, $meal, $now, $fileId, $parsed['feedback'], $parsed['score'], $parsed['extra']);
 
         // 4. Fallback: если ИИ не ответил — всё равно фиксируем приём.
-        $parts = [$parsed['feedback'] ?? 'Записал приём 👌🏻 Разбор пришлю позже'];
+        $parts = [Address::ensure($profile, $parsed['feedback'] ?? 'Записал приём 👌🏻 Разбор пришлю позже')];
 
         // Детерминированный хвост про сдвинутые окна следующих приёмов (общий с текстовым путём).
         $tail = MealLogger::windowsTail($profile, $now);

@@ -5,6 +5,7 @@ namespace App\Actions\Nutrition;
 use App\Models\NutritionMeal;
 use App\Models\NutritionMetric;
 use App\Models\NutritionProfile;
+use App\Support\Nutrition\Address;
 use App\Support\Nutrition\Claude;
 use App\Support\Nutrition\Fmt;
 use App\Support\Nutrition\PromptBuilder;
@@ -55,7 +56,7 @@ class RunCheckup
 
         // Невалидный JSON → отправляем сырой текст без корректировок.
         if (! is_array($data) || ! isset($data['message'])) {
-            $tg->send($raw, null, 'checkup', $chatId);
+            $tg->send(Address::ensure($profile, $raw), null, 'checkup', $chatId);
 
             return;
         }
@@ -64,7 +65,7 @@ class RunCheckup
         $adjustments = $this->validAdjustments($data['adjustments'] ?? null);
 
         if ($adjustments === []) {
-            $tg->send($message, null, 'checkup', $chatId);
+            $tg->send(Address::ensure($profile, $message), null, 'checkup', $chatId);
 
             return;
         }
@@ -76,7 +77,7 @@ class RunCheckup
             [['text' => 'Не надо', 'callback_data' => 'adj:no']],
         ];
 
-        $tg->send($message, $keyboard, 'checkup', $chatId);
+        $tg->send(Address::ensure($profile, $message), $keyboard, 'checkup', $chatId);
     }
 
     /**
