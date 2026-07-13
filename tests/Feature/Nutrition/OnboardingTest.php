@@ -69,12 +69,13 @@ it('generates an invite for an admin and refuses a non-admin', function () {
     Http::assertSent(fn ($r) => str_contains($r->url(), '/sendMessage') && str_contains($r['text'], 'только владелец'));
 });
 
-it('walks the full 6-step questionnaire into an active profile with an ai_profile and start button', function () {
+it('walks the full 7-step questionnaire into an active profile with an ai_profile and start button', function () {
     $profile = onbProfile();
     app(Onboarding::class)->start($profile, 555);
 
     $answers = [
         'Аня, хочу снизить вес',
+        'Берлин',
         '70 кг, 165 см, 30 лет',
         '08:00 и 22:00',
         'бег 3 раза в неделю',
@@ -87,6 +88,7 @@ it('walks the full 6-step questionnaire into an active profile with an ai_profil
 
     $fresh = $profile->fresh();
     expect($fresh->status)->toBe('active')
+        ->and($fresh->timezone)->toBe('Europe/Berlin')
         ->and($fresh->ai_profile)->not->toBeNull()
         ->and($fresh->ai_profile)->toContain('снизить вес')
         ->and($fresh->ai_profile)->toContain('Онбординг пройден')
@@ -99,13 +101,14 @@ it('walks the full 6-step questionnaire into an active profile with an ai_profil
     });
 });
 
-it('applies wake/sleep from step 3 into settings and shifts the breakfast window', function () {
+it('applies wake/sleep from step 4 into settings and shifts the breakfast window', function () {
     $profile = onbProfile();
     app(Onboarding::class)->start($profile, 555);
 
     (new ProcessNutritionUpdate(onbUpdate(555, 'Аня, энергия')))->handle();      // step 1 -> 2
-    (new ProcessNutritionUpdate(onbUpdate(555, '70, 165, 30')))->handle();       // step 2 -> 3
-    (new ProcessNutritionUpdate(onbUpdate(555, 'встаю 08:00, ложусь 22:00')))->handle(); // step 3
+    (new ProcessNutritionUpdate(onbUpdate(555, 'Москва')))->handle();            // step 2 (пояс) -> 3
+    (new ProcessNutritionUpdate(onbUpdate(555, '70, 165, 30')))->handle();       // step 3 -> 4
+    (new ProcessNutritionUpdate(onbUpdate(555, 'встаю 08:00, ложусь 22:00')))->handle(); // step 4
 
     $fresh = $profile->fresh();
     expect($fresh->setting('wake_time'))->toBe('08:00')
@@ -115,15 +118,45 @@ it('applies wake/sleep from step 3 into settings and shifts the breakfast window
         ->and($fresh->setting('default_windows')['lunch'])->toBe(['start' => '11:00', 'end' => '12:30']);
 });
 
+it('sets the timezone at step 2 so later wake/sleep apply under it', function () {
+    $profile = onbProfile();
+    app(Onboarding::class)->start($profile, 555);
+
+    (new ProcessNutritionUpdate(onbUpdate(555, 'Аня, энергия')))->handle();   // step 1 -> 2
+    (new ProcessNutritionUpdate(onbUpdate(555, 'Берлин')))->handle();         // step 2 (пояс) -> 3
+
+    expect($profile->fresh()->timezone)->toBe('Europe/Berlin');
+
+    (new ProcessNutritionUpdate(onbUpdate(555, '70, 165, 30')))->handle();    // step 3 -> 4
+    (new ProcessNutritionUpdate(onbUpdate(555, '08:00 22:00')))->handle();    // step 4 (режим дня)
+
+    $fresh = $profile->fresh();
+    expect($fresh->timezone)->toBe('Europe/Berlin')
+        ->and($fresh->setting('wake_time'))->toBe('08:00')
+        ->and($fresh->setting('sleep_time'))->toBe('22:00');
+});
+
+it('keeps the default Moscow timezone when the step-2 input is unrecognized', function () {
+    $profile = onbProfile();
+    app(Onboarding::class)->start($profile, 555);
+
+    (new ProcessNutritionUpdate(onbUpdate(555, 'Аня, цель')))->handle();      // step 1 -> 2
+    (new ProcessNutritionUpdate(onbUpdate(555, 'где-то там')))->handle();     // step 2 — мусор
+
+    // Пояс остаётся дефолтным, анкета не застряла (перешла на шаг 3).
+    expect($profile->fresh()->timezone)->toBe('Europe/Moscow')
+        ->and($profile->fresh()->waiting('onboarding_step'))->toBe(3);
+});
+
 it('finishes on the skip button at the last step', function () {
     $profile = onbProfile();
     app(Onboarding::class)->start($profile, 555);
 
-    foreach (['цель', 'параметры', '07:00 23:00', 'активность', 'ограничения'] as $text) {
-        (new ProcessNutritionUpdate(onbUpdate(555, $text)))->handle(); // steps 1..5
+    foreach (['цель', 'Москва', 'параметры', '07:00 23:00', 'активность', 'ограничения'] as $text) {
+        (new ProcessNutritionUpdate(onbUpdate(555, $text)))->handle(); // steps 1..6
     }
 
-    // Нажатие «Пропустить» на 6-м шаге.
+    // Нажатие «Пропустить» на последнем (7-м) шаге.
     (new ProcessNutritionUpdate(['callback_query' => [
         'id' => 'cb1',
         'from' => ['id' => 555],
@@ -143,13 +176,13 @@ it('does not route an onboarding text message to MealIntent', function () {
 
     (new ProcessNutritionUpdate(onbUpdate(555, 'Аня, цель')))->handle(); // step 1 -> 2
 
-    // Сообщение-«еда» на шаге 2 должно вести анкету, а не классифицироваться моделью.
+    // Сообщение-«еда» на шаге 2 (пояс) должно вести анкету, а не классифицироваться моделью.
     (new ProcessNutritionUpdate(onbUpdate(555, 'позавтракал омлетом и кашей')))->handle();
 
     // Никаких обращений к модели во время анкеты (сжатие только на финале).
     Http::assertNotSent(fn ($r) => str_contains($r->url(), 'api.anthropic.com'));
-    // И задан следующий вопрос (режим дня), а не разбор еды.
-    Http::assertSent(fn ($r) => str_contains($r->url(), '/sendMessage') && str_contains($r['text'], 'встаёшь'));
+    // И задан следующий вопрос (параметры), а не разбор еды.
+    Http::assertSent(fn ($r) => str_contains($r->url(), '/sendMessage') && str_contains($r['text'], 'вес, рост, возраст'));
     expect($profile->fresh()->waiting('onboarding_step'))->toBe(3);
 });
 
@@ -170,10 +203,10 @@ it('softly declines a photo during onboarding', function () {
 it('repeats the current question on /start and blocks other commands during onboarding', function () {
     $profile = onbProfile();
     app(Onboarding::class)->start($profile, 555);
-    (new ProcessNutritionUpdate(onbUpdate(555, 'Аня, цель')))->handle(); // now on step 2
+    (new ProcessNutritionUpdate(onbUpdate(555, 'Аня, цель')))->handle(); // now on step 2 (пояс)
 
     (new ProcessNutritionUpdate(onbUpdate(555, '/start')))->handle();
-    Http::assertSent(fn ($r) => str_contains($r->url(), '/sendMessage') && str_contains($r['text'], 'вес, рост, возраст'));
+    Http::assertSent(fn ($r) => str_contains($r->url(), '/sendMessage') && str_contains($r['text'], 'часовом поясе'));
 
     (new ProcessNutritionUpdate(onbUpdate(555, '/today')))->handle();
     Http::assertSent(fn ($r) => str_contains($r->url(), '/sendMessage') && str_contains($r['text'], 'после онбординга'));
@@ -192,8 +225,8 @@ it('produces different ai_profiles for two different users (isolation)', functio
     app(Onboarding::class)->start($anya, 555);
     app(Onboarding::class)->start($boris, 666);
 
-    $anyaAnswers = ['Аня, снизить вес', '60 кг, 160 см, 28 лет', '07:00 23:00', 'йога', 'без глютена', 'нет'];
-    $borisAnswers = ['Борис, набрать массу', '85 кг, 185 см, 35 лет', '06:00 22:00', 'зал 5 раз', 'ем всё', 'нет'];
+    $anyaAnswers = ['Аня, снизить вес', 'Берлин', '60 кг, 160 см, 28 лет', '07:00 23:00', 'йога', 'без глютена', 'нет'];
+    $borisAnswers = ['Борис, набрать массу', 'Ереван', '85 кг, 185 см, 35 лет', '06:00 22:00', 'зал 5 раз', 'ем всё', 'нет'];
 
     foreach ($anyaAnswers as $text) {
         (new ProcessNutritionUpdate(onbUpdate(555, $text)))->handle();
