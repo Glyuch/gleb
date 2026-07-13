@@ -8,6 +8,7 @@ use App\Models\NutritionProfile;
 use App\Models\NutritionSetting;
 use App\Models\NutritionTopic;
 use App\Models\NutritionTopicSend;
+use Carbon\CarbonImmutable;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\Schema;
 
@@ -18,7 +19,7 @@ it('creates all v2 tables and columns', function () {
 
     expect(Schema::hasColumns('nutrition_profiles', [
         'telegram_user_id', 'name', 'username', 'main_chat_id', 'is_admin', 'status',
-        'phase', 'program_started_on', 'ai_profile', 'settings', 'awaiting', 'last_seen_at',
+        'phase', 'timezone', 'program_started_on', 'ai_profile', 'settings', 'awaiting', 'last_seen_at',
     ]))->toBeTrue();
 
     expect(Schema::hasColumns('nutrition_invites', [
@@ -80,6 +81,26 @@ it('falls back to default settings and persists setting/waiting mutations', func
     expect($p->fresh()->waiting('setting'))->toBe('wake_time');
     $p->clearWaiting('setting');
     expect($p->fresh()->waiting('setting'))->toBeNull();
+});
+
+it('defaults timezone to Europe/Moscow and exposes tz()/now() helpers', function () {
+    // Профиль без явного timezone → дефолт Europe/Moscow (DDL-дефолт + бэкфилл).
+    $p = NutritionProfile::create(['telegram_user_id' => 321, 'name' => 'Z']);
+    expect($p->fresh()->timezone)->toBe('Europe/Moscow')
+        ->and($p->tz())->toBe('Europe/Moscow');
+
+    // Местное время профиля считается в его поясе.
+    $this->travelTo(CarbonImmutable::create(2026, 7, 13, 12, 0, 0, 'UTC'));
+    $moscow = nutritionProfile(['telegram_user_id' => 401]);            // Europe/Moscow (+3)
+    $yekat = nutritionProfile(['telegram_user_id' => 402, 'is_admin' => false, 'timezone' => 'Asia/Yekaterinburg']); // +5
+
+    expect($moscow->now()->format('H:i'))->toBe('15:00')
+        ->and($yekat->now()->format('H:i'))->toBe('17:00')
+        ->and($yekat->now()->getTimestamp())->toBe($moscow->now()->getTimestamp());
+
+    // Пустой пояс откатывается на Europe/Moscow.
+    $blank = nutritionProfile(['telegram_user_id' => 403, 'is_admin' => false, 'timezone' => '']);
+    expect($blank->tz())->toBe('Europe/Moscow');
 });
 
 it('resolves the admin profile', function () {

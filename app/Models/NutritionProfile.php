@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Carbon;
@@ -15,6 +16,7 @@ use Illuminate\Support\Carbon;
  * @property bool $is_admin
  * @property string $status
  * @property string $phase
+ * @property string $timezone
  * @property Carbon|null $program_started_on
  * @property string|null $ai_profile
  * @property array<string, mixed>|null $settings
@@ -47,6 +49,7 @@ class NutritionProfile extends Model
         'is_admin',
         'status',
         'phase',
+        'timezone',
         'program_started_on',
         'ai_profile',
         'settings',
@@ -58,6 +61,7 @@ class NutritionProfile extends Model
         'is_admin' => false,
         'status' => 'onboarding',
         'phase' => 'program',
+        'timezone' => 'Europe/Moscow',
     ];
 
     protected function casts(): array
@@ -77,6 +81,18 @@ class NutritionProfile extends Model
     public function displayName(): string
     {
         return filled($this->name) ? (string) $this->name : 'клиент';
+    }
+
+    /** Часовой пояс профиля (IANA или «+HH:MM»); при пустом — Europe/Moscow. */
+    public function tz(): string
+    {
+        return filled($this->timezone) ? (string) $this->timezone : 'Europe/Moscow';
+    }
+
+    /** «Сейчас» в местном времени профиля. Единый источник времени profile-scoped расчётов. */
+    public function now(): CarbonImmutable
+    {
+        return CarbonImmutable::now($this->tz());
     }
 
     /** Первый профиль-администратор (владелец инстанса). */
