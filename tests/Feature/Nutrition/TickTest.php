@@ -50,6 +50,32 @@ function pkey(NutritionProfile $profile, string $bare): string
     return 'p'.$profile->id.':'.$bare;
 }
 
+it('evaluates tick windows in each profile local timezone (isolation)', function () {
+    // Один и тот же момент: 07:30 по Москве = 06:30 в поясе +02:00.
+    $this->travelTo(CarbonImmutable::create(2026, 7, 15, 7, 30, 0, 'Europe/Moscow'));
+
+    $moscow = $this->profile;                                    // admin, Europe/Moscow, чат 123
+    $plus2 = nutritionProfile([
+        'telegram_user_id' => 222,
+        'is_admin' => false,
+        'main_chat_id' => 456,
+        'timezone' => '+02:00',
+    ]);
+
+    $this->artisan('nutrition:tick')->assertExitCode(0);
+
+    $d = '2026-07-15';
+
+    // Москва: местное 07:30 = старт окна завтрака → напоминание ушло.
+    expect(NutritionSentEvent::where('event_key', pkey($moscow, "{$d}:meal:breakfast:07:30"))->exists())->toBeTrue()
+        // +02:00: местное 06:30 — окно завтрака (07:30 по его времени) ещё не наступило.
+        ->and(NutritionSentEvent::where('event_key', pkey($plus2, "{$d}:meal:breakfast:07:30"))->exists())->toBeFalse();
+
+    // Приветствие (в wake+30 = 07:30): у Москвы есть, у +02:00 (06:30) — нет.
+    expect(NutritionSentEvent::where('event_key', pkey($moscow, "{$d}:greeting"))->exists())->toBeTrue()
+        ->and(NutritionSentEvent::where('event_key', pkey($plus2, "{$d}:greeting"))->exists())->toBeFalse();
+});
+
 it('sends weight_request and greeting on Thursday morning and is idempotent', function () {
     $this->travelTo(CarbonImmutable::create(2026, 7, 16, 7, 35, 0, 'Europe/Moscow'));
 

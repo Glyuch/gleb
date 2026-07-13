@@ -5,7 +5,6 @@ namespace App\Actions\Nutrition;
 use App\Models\NutritionProfile;
 use App\Models\NutritionTopicSend;
 use App\Support\Nutrition\TelegramClient;
-use Carbon\CarbonImmutable;
 
 class SendTopic
 {
@@ -39,6 +38,6 @@ class SendTopic
             }
         }
 
-        $send->update(['sent_at' => CarbonImmutable::now('Europe/Moscow')]);
+        $send->update(['sent_at' => $profile->now()]);
     }
 }

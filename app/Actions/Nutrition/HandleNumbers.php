@@ -10,7 +10,6 @@ use App\Support\Nutrition\PendingRequest;
 use App\Support\Nutrition\SettingInput;
 use App\Support\Nutrition\TelegramClient;
 use App\Support\Nutrition\Tg;
-use Carbon\CarbonImmutable;
 
 class HandleNumbers
 {
@@ -37,7 +36,7 @@ class HandleNumbers
             return;
         }
 
-        $now = CarbonImmutable::now('Europe/Moscow');
+        $now = $profile->now();
         $today = $now->format('Y-m-d');
 
         // lastOutKind — быстрый путь (в т.ч. для program:start-ветки, где

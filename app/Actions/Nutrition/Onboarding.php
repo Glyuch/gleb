@@ -179,7 +179,7 @@ class Onboarding
             return;
         }
 
-        $now = CarbonImmutable::now('Europe/Moscow');
+        $now = $profile->now();
         $answers = $profile->waiting('onboarding_answers');
         $answers = is_array($answers) ? $answers : [];
         $raw = $this->rawProfile($answers);

@@ -29,7 +29,7 @@ class RunCheckup
      */
     public function handle(NutritionProfile $profile, bool $onDemand = false, ?int $chatId = null): void
     {
-        $now = CarbonImmutable::now('Europe/Moscow');
+        $now = $profile->now();
         $tg = app(TelegramClient::class);
         $tg->profileId = $profile->id;
 

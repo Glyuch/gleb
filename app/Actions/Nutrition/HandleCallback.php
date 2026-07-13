@@ -12,7 +12,6 @@ use App\Support\Nutrition\Planner;
 use App\Support\Nutrition\ProgramStatus;
 use App\Support\Nutrition\TelegramClient;
 use App\Support\Nutrition\Tg;
-use Carbon\CarbonImmutable;
 
 class HandleCallback
 {
@@ -61,7 +60,7 @@ class HandleCallback
             return;
         }
 
-        Planner::markEaten($profile, $meal, CarbonImmutable::now('Europe/Moscow'), null, null);
+        Planner::markEaten($profile, $meal, $profile->now(), null, null);
         $tg->send(MealPlan::LABELS[$type].' отмечен ✅', chatId: $chatId);
     }
 
@@ -82,7 +81,7 @@ class HandleCallback
         }
 
         $meal->update(['status' => 'skipped']);
-        Planner::recalculate($profile, CarbonImmutable::now('Europe/Moscow')->startOfDay());
+        Planner::recalculate($profile, $profile->now()->startOfDay());
         $tg->send(MealPlan::LABELS[$type].' пропущен ⏭', chatId: $chatId);
     }
 
@@ -110,7 +109,7 @@ class HandleCallback
             return;
         }
 
-        $now = CarbonImmutable::now('Europe/Moscow');
+        $now = $profile->now();
 
         $image = $tg->downloadPhotoBase64($fileId);
         $raw = $image !== null
@@ -263,7 +262,7 @@ class HandleCallback
             return null;
         }
 
-        $now = CarbonImmutable::now('Europe/Moscow');
+        $now = $profile->now();
         Planner::ensureDay($profile, $now);
 
         return NutritionMeal::query()

@@ -11,7 +11,6 @@ use App\Support\Nutrition\PromptBuilder;
 use App\Support\Nutrition\SettingInput;
 use App\Support\Nutrition\TelegramClient;
 use App\Support\Nutrition\Tg;
-use Carbon\CarbonImmutable;
 
 class HandleQuestion
 {
@@ -27,7 +26,7 @@ class HandleQuestion
 
         $chatId = Tg::chatId($update);
         $text = trim((string) ($update['message']['text'] ?? ''));
-        $now = CarbonImmutable::now('Europe/Moscow');
+        $now = $profile->now();
 
         $intent = MealIntent::classify($profile, $text, $now);
 

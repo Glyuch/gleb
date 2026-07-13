@@ -23,7 +23,7 @@ class HandlePhoto
         $tg = app(TelegramClient::class);
         $tg->profileId = $profile->id;
         $chatId = Tg::chatId($update);
-        $now = CarbonImmutable::now('Europe/Moscow');
+        $now = $profile->now();
 
         Planner::ensureDay($profile, $now);
 
@@ -173,7 +173,7 @@ class HandlePhoto
             return null;
         }
 
-        $prevAt = CarbonImmutable::parse($prev->eaten_at->format('Y-m-d H:i:s'), 'Europe/Moscow');
+        $prevAt = CarbonImmutable::parse($prev->eaten_at->format('Y-m-d H:i:s'), $profile->tz());
 
         if (abs($prevAt->diffInMinutes($now)) < 150) {
             return '⚠️ Меньше 2,5 ч от прошлого приёма — в следующий раз чуть позже';

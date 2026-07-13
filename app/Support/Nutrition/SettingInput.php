@@ -5,7 +5,6 @@ namespace App\Support\Nutrition;
 use App\Models\NutritionMeal;
 use App\Models\NutritionMessage;
 use App\Models\NutritionProfile;
-use Carbon\CarbonImmutable;
 
 /**
  * Перехват следующего сообщения как значения интерактивной настройки или времени
@@ -100,7 +99,7 @@ class SettingInput
             return true;
         }
 
-        $now = CarbonImmutable::now('Europe/Moscow');
+        $now = $profile->now();
         Planner::ensureDay($profile, $now);
 
         $meal = NutritionMeal::query()
@@ -165,7 +164,7 @@ class SettingInput
 
         if ($key === 'sleep_time') {
             // Окна сегодняшних приёмов зависят от отбоя; на пустом дне отработает вхолостую.
-            Planner::recalculate($profile, CarbonImmutable::now('Europe/Moscow')->startOfDay());
+            Planner::recalculate($profile, $profile->now()->startOfDay());
         }
 
         $tg->send('Готово, '.$label.' теперь '.$value.' '.$emoji, chatId: $chatId);

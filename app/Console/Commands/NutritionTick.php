@@ -89,6 +89,10 @@ class NutritionTick extends Command
 
     private function tickProfile(NutritionProfile $profile, CarbonImmutable $now): void
     {
+        // Тот же абсолютный момент — в местном времени профиля. Все окна/слоты/
+        // пороги ниже считаются в его поясе (для Europe/Moscow — без изменений).
+        $now = $now->setTimezone($profile->tz());
+
         $d = $now->format('Y-m-d');
 
         // Guard: профилю без main_chat_id слать некуда — пропускаем.
@@ -178,8 +182,11 @@ class NutritionTick extends Command
                 continue;
             }
 
-            $ws = $meal->window_start->copy();
-            $we = $meal->window_end->copy();
+            // Наивное окно из БД (app.timezone) переинтерпретируем в поясе профиля,
+            // чтобы сравнения со $now (местное время профиля) были верны и для
+            // не-московских поясов. Для Europe/Moscow результат идентичен прежнему.
+            $ws = CarbonImmutable::parse($meal->window_start->format('Y-m-d H:i:s'), $profile->tz());
+            $we = CarbonImmutable::parse($meal->window_end->format('Y-m-d H:i:s'), $profile->tz());
 
             // (1) Пре-напоминание: [ws-lead, ws). Только в фазе программы.
             if ($phase !== 'maintenance'
@@ -261,7 +268,7 @@ class NutritionTick extends Command
         // 8. Переход в фазу поддержки после 70 дней программы.
         $startedOn = $profile->program_started_on;
         if ($phase === 'program' && $startedOn !== null) {
-            $start = CarbonImmutable::parse($startedOn->format('Y-m-d'), 'Europe/Moscow')->startOfDay();
+            $start = CarbonImmutable::parse($startedOn->format('Y-m-d'), $profile->tz())->startOfDay();
             if ($start->addDays(70)->lessThanOrEqualTo($now->startOfDay())) {
                 $gtext = Address::ensure($profile, $this->graduationText());
                 $this->fire($profile, "{$d}:graduation", $gtext, function () use ($tg, $gtext, $profile, $chat) {

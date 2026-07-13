@@ -5,7 +5,6 @@ namespace App\Support\Nutrition;
 use App\Models\NutritionMeal;
 use App\Models\NutritionMetric;
 use App\Models\NutritionProfile;
-use Carbon\CarbonImmutable;
 
 /**
  * Данные для страницы статистики профиля (подписанная ссылка) и — позже — админки.
@@ -26,7 +25,7 @@ class NutritionStats
      */
     public static function for(NutritionProfile $profile): array
     {
-        $now = CarbonImmutable::now('Europe/Moscow');
+        $now = $profile->now();
         $from30 = $now->subDays(29)->format('Y-m-d');
         $from14 = $now->subDays(13)->format('Y-m-d');
         $target = (int) $profile->setting('steps_target');

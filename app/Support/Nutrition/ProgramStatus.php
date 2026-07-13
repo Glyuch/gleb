@@ -20,8 +20,8 @@ class ProgramStatus
             return 0;
         }
 
-        $start = CarbonImmutable::parse($startedOn->format('Y-m-d'), 'Europe/Moscow')->startOfDay();
-        $today = CarbonImmutable::now('Europe/Moscow')->startOfDay();
+        $start = CarbonImmutable::parse($startedOn->format('Y-m-d'), $profile->tz())->startOfDay();
+        $today = $profile->now()->startOfDay();
 
         return (int) $start->diffInDays($today) + 1;
     }

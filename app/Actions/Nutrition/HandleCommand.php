@@ -12,7 +12,6 @@ use App\Support\Nutrition\Planner;
 use App\Support\Nutrition\ProgramStatus;
 use App\Support\Nutrition\TelegramClient;
 use App\Support\Nutrition\Tg;
-use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\URL;
 
 class HandleCommand
@@ -116,7 +115,7 @@ class HandleCommand
 
     private function today(TelegramClient $tg, NutritionProfile $profile, ?int $chatId = null): void
     {
-        $now = CarbonImmutable::now('Europe/Moscow');
+        $now = $profile->now();
         Planner::ensureDay($profile, $now);
 
         $meals = NutritionMeal::query()
@@ -154,7 +153,7 @@ class HandleCommand
 
     private function stats(TelegramClient $tg, NutritionProfile $profile, ?int $chatId = null): void
     {
-        $now = CarbonImmutable::now('Europe/Moscow');
+        $now = $profile->now();
         $from = $now->subDays(6)->format('Y-m-d');
         $to = $now->format('Y-m-d');
 
@@ -227,7 +226,7 @@ class HandleCommand
             return;
         }
 
-        $today = CarbonImmutable::now('Europe/Moscow')->format('Y-m-d');
+        $today = $profile->now()->format('Y-m-d');
 
         NutritionMetric::query()->updateOrCreate(
             ['profile_id' => $profile->id, 'date' => $today, 'type' => $type],
@@ -239,7 +238,7 @@ class HandleCommand
 
     private function skip(TelegramClient $tg, NutritionProfile $profile, ?int $chatId = null): void
     {
-        $now = CarbonImmutable::now('Europe/Moscow');
+        $now = $profile->now();
         Planner::ensureDay($profile, $now);
 
         $meal = Planner::currentMeal($profile, $now);

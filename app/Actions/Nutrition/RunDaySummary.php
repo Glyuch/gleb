@@ -26,7 +26,7 @@ class RunDaySummary
      */
     public function handle(NutritionProfile $profile, ?CarbonImmutable $now = null, ?int $chatId = null): void
     {
-        $now ??= CarbonImmutable::now('Europe/Moscow');
+        $now ??= $profile->now();
         $tg = app(TelegramClient::class);
         $tg->profileId = $profile->id;
 

@@ -25,8 +25,8 @@ class StartProgram
      */
     public function handle(NutritionProfile $profile, ?CarbonImmutable $date = null): string
     {
-        $date = $date?->setTimezone('Europe/Moscow');
-        $start = ($date ?? CarbonImmutable::now('Europe/Moscow'))->startOfDay();
+        $date = $date?->setTimezone($profile->tz());
+        $start = ($date ?? $profile->now())->startOfDay();
 
         $profile->update([
             'program_started_on' => $start->format('Y-m-d'),

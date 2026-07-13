@@ -3,7 +3,6 @@
 namespace App\Support\Nutrition;
 
 use App\Models\NutritionProfile;
-use Carbon\CarbonImmutable;
 
 /**
  * Резолвинг профиля-отправителя входящего апдейта по Telegram from.id.
@@ -30,7 +29,7 @@ class ProfileContext
             ->first();
 
         if ($profile !== null) {
-            $profile->forceFill(['last_seen_at' => CarbonImmutable::now('Europe/Moscow')])->save();
+            $profile->forceFill(['last_seen_at' => $profile->now()])->save();
         }
 
         return $profile;

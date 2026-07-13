@@ -40,7 +40,7 @@ class Planner
             $meal = $meals[$type] ?? null;
             $facts[$type] = [
                 'status' => $meal?->status ?? 'pending',
-                'eaten_at' => self::toMoscow($meal?->eaten_at),
+                'eaten_at' => self::toLocal($meal?->eaten_at, $profile->tz()),
             ];
         }
 
@@ -79,7 +79,7 @@ class Planner
         // interval_ok опирается на предыдущий съеденный приём сегодня.
         $rating = ($ratingExtra ?? []) + [
             'interval_ok' => self::intervalOk($profile, $meal, $at),
-            'window_ok' => self::windowOk($meal, $at),
+            'window_ok' => self::windowOk($meal, $at, $profile->tz()),
         ];
 
         $meal->update([
@@ -91,7 +91,7 @@ class Planner
             'rating' => $rating,
         ]);
 
-        self::recalculate($profile, self::dateOf($meal));
+        self::recalculate($profile, self::dateOf($meal, $profile->tz()));
     }
 
     /**
@@ -102,7 +102,7 @@ class Planner
     {
         $prev = NutritionMeal::query()
             ->where('profile_id', $profile->id)
-            ->whereDate('date', self::dateOf($meal)->format('Y-m-d'))
+            ->whereDate('date', self::dateOf($meal, $profile->tz())->format('Y-m-d'))
             ->where('status', 'eaten')
             ->whereNotNull('eaten_at')
             ->where('id', '!=', $meal->id)
@@ -113,7 +113,7 @@ class Planner
             return true;
         }
 
-        $prevAt = self::toMoscow($prev->eaten_at);
+        $prevAt = self::toLocal($prev->eaten_at, $profile->tz());
         $minutes = abs($prevAt->diffInMinutes($at));
 
         return $minutes >= 150 && $minutes <= 270;
@@ -123,14 +123,14 @@ class Planner
      * Попадание во временное окно приёма: eaten_at в [window_start, window_end+15м].
      * Нет окна → null (не оцениваем).
      */
-    private static function windowOk(NutritionMeal $meal, CarbonImmutable $at): ?bool
+    private static function windowOk(NutritionMeal $meal, CarbonImmutable $at, string $tz): ?bool
     {
         if ($meal->window_start === null || $meal->window_end === null) {
             return null;
         }
 
-        $start = self::toMoscow($meal->window_start);
-        $end = self::toMoscow($meal->window_end)->addMinutes(15);
+        $start = self::toLocal($meal->window_start, $tz);
+        $end = self::toLocal($meal->window_end, $tz)->addMinutes(15);
 
         return $at->greaterThanOrEqualTo($start) && $at->lessThanOrEqualTo($end);
     }
@@ -189,19 +189,19 @@ class Planner
     }
 
     /**
-     * Наивный московский datetime из БД → CarbonImmutable в Europe/Moscow.
+     * Наивный локальный datetime из БД → CarbonImmutable в поясе профиля $tz.
      */
-    private static function toMoscow(mixed $value): ?CarbonImmutable
+    private static function toLocal(mixed $value, string $tz): ?CarbonImmutable
     {
         if ($value === null) {
             return null;
         }
 
-        return CarbonImmutable::parse($value->format('Y-m-d H:i:s'), 'Europe/Moscow');
+        return CarbonImmutable::parse($value->format('Y-m-d H:i:s'), $tz);
     }
 
-    private static function dateOf(NutritionMeal $meal): CarbonImmutable
+    private static function dateOf(NutritionMeal $meal, string $tz): CarbonImmutable
     {
-        return CarbonImmutable::parse($meal->date->format('Y-m-d'), 'Europe/Moscow');
+        return CarbonImmutable::parse($meal->date->format('Y-m-d'), $tz);
     }
 }
