@@ -118,6 +118,28 @@ it('applies wake/sleep from step 4 into settings and shifts the breakfast window
         ->and($fresh->setting('default_windows')['lunch'])->toBe(['start' => '11:00', 'end' => '12:30']);
 });
 
+it('defaults the bedtime and notifies the user when step-4 bedtime is a daytime value', function () {
+    $profile = onbProfile();
+    app(Onboarding::class)->start($profile, 555);
+
+    (new ProcessNutritionUpdate(onbUpdate(555, 'Аня, энергия')))->handle();      // step 1 -> 2
+    (new ProcessNutritionUpdate(onbUpdate(555, 'Москва')))->handle();            // step 2 -> 3
+    (new ProcessNutritionUpdate(onbUpdate(555, '70, 165, 30')))->handle();       // step 3 -> 4
+    // Отбой 14:00 — дневной (абсурдный): Bedtime → reask, дефолт 23:00 сохраняется.
+    (new ProcessNutritionUpdate(onbUpdate(555, 'встаю 08:00, ложусь 14:00')))->handle(); // step 4 -> 5
+
+    $fresh = $profile->fresh();
+    expect($fresh->setting('wake_time'))->toBe('08:00')
+        ->and($fresh->setting('sleep_time'))->toBe('23:00')
+        // Шаг завершился, анкета перешла на 5-й вопрос.
+        ->and($fresh->waiting('onboarding_step'))->toBe(5);
+
+    // Пользователю ушла пометка про дефолтный отбой.
+    Http::assertSent(fn ($r) => str_contains($r->url(), '/sendMessage')
+        && str_contains($r['text'], 'по умолчанию')
+        && str_contains($r['text'], '/settings'));
+});
+
 it('sets the timezone at step 2 so later wake/sleep apply under it', function () {
     $profile = onbProfile();
     app(Onboarding::class)->start($profile, 555);

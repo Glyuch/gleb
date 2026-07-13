@@ -161,3 +161,46 @@ it('leaves a normal day untouched (ordering invariant for Gleb-like profile)', f
             ->and($w[$type]['end']->format('H:i'))->toBe($win['end']);
     }
 });
+
+it('keeps dinner in the evening for a past-midnight bedtime (00:00), not dragged to afternoon', function () {
+    // Отбой 00:00 (полночь) относится к следующим суткам. До фикса «sleep − 2ч»
+    // уезжало на прошлый день, ужин утягивался к концу полдника → фиксированные
+    // 16:10–17:10. Теперь ужин остаётся вечерним (дефолт 19:00–20:00 укладывается
+    // в границу «≤ 22:00»).
+    $w = MealPlan::windows(mskDate(), defaults(), pendingAll(), '00:00');
+    expect($w['dinner']['start']->format('H:i'))->toBe('19:00')
+        ->and($w['dinner']['end']->format('H:i'))->toBe('20:00')
+        ->and($w['dinner']['start']->format('H:i'))->not->toBe('16:10');
+});
+
+it('clamps dinner to 2h before a past-midnight bedtime for a late-dinner profile', function () {
+    // «Сова» с поздним дефолтным ужином (21:00–23:00) и отбоем в полночь: граница
+    // «конец ≤ sleep−2ч» = 22:00 (на следующих сутках), окно ужина → 21:00–22:00.
+    $owlDefaults = [
+        'breakfast' => ['start' => '09:30', 'end' => '10:30'],
+        'lunch' => ['start' => '13:00', 'end' => '14:30'],
+        'snack' => ['start' => '17:00', 'end' => '18:30'],
+        'dinner' => ['start' => '21:00', 'end' => '23:00'],
+    ];
+    $w = MealPlan::windows(mskDate(), $owlDefaults, pendingAll(), '00:00');
+    expect($w['dinner']['start']->format('H:i'))->toBe('21:00')
+        ->and($w['dinner']['end']->format('H:i'))->toBe('22:00');
+});
+
+it('keeps dinner in the evening for a past-midnight bedtime at 02:00', function () {
+    // Отбой 02:00 — тоже следующие сутки. Граница «≤ 00:00 next day» не режет
+    // дефолтный вечерний ужин; никакого «ужина в 16:10».
+    $w = MealPlan::windows(mskDate(), defaults(), pendingAll(), '02:00');
+    expect((int) $w['dinner']['start']->format('H'))->toBeGreaterThanOrEqual(18)
+        ->and($w['dinner']['start']->format('H:i'))->toBe('19:00')
+        ->and($w['dinner']['end']->format('H:i'))->toBe('20:00');
+});
+
+it('keeps a monotonic order for a past-midnight bedtime (no inversion)', function () {
+    // Полный день на pending при ночном отбое: строгий хронологический порядок,
+    // ужин последним — инварианты фикса A не нарушены.
+    $w = MealPlan::windows(mskDate(), defaults(), pendingAll(), '00:00');
+    expect($w['lunch']['start']->greaterThan($w['breakfast']['start']))->toBeTrue()
+        ->and($w['snack']['start']->greaterThan($w['lunch']['start']))->toBeTrue()
+        ->and($w['dinner']['start']->greaterThan($w['snack']['start']))->toBeTrue();
+});

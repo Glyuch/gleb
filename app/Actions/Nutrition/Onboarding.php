@@ -80,7 +80,12 @@ class Onboarding
         }
 
         if ($step === 4) {
-            $this->applySchedule($profile, $text);
+            $note = $this->applySchedule($profile, $text);
+            if ($note !== null) {
+                $tg = app(TelegramClient::class);
+                $tg->profileId = $profile->id;
+                $tg->send($note, chatId: $chatId);
+            }
         }
 
         if ($step >= self::LAST_STEP) {
@@ -144,9 +149,10 @@ class Onboarding
      * Шаг 4: парсит подъём/отбой из текста (первые два ЧЧ:ММ), пишет в настройки и
      * сдвигает окно завтрака от подъёма (подъём+30мин … подъём+90мин); остальные
      * окна остаются дефолтными. Если время распознать не удалось — тихо пропускаем
-     * (анкета не должна застревать на вводе).
+     * (анкета не должна застревать на вводе). Возвращает короткую пометку для
+     * пользователя, если отбой пришёл невалидным/дневным и остался дефолтным; иначе null.
      */
-    private function applySchedule(NutritionProfile $profile, string $text): void
+    private function applySchedule(NutritionProfile $profile, string $text): ?string
     {
         preg_match_all('/(\d{1,2}):(\d{2})/', $text, $matches, PREG_SET_ORDER);
 
@@ -161,7 +167,7 @@ class Onboarding
         }
 
         if ($times === []) {
-            return;
+            return null;
         }
 
         $wake = $times[0];
@@ -170,10 +176,17 @@ class Onboarding
         // Отбой прогоняем через эвристику Bedtime: «12:00» → полночь; явно дневное
         // значение (напр. «14:00») — вероятная опечатка, НЕ сохраняем абсурд, оставляем
         // дефолтный отбой (анкета не застревает, поправимо позже через /settings).
+        $bedtimeNote = null;
         if (isset($times[1])) {
             $parsed = Bedtime::fromText($times[1]);
             if ($parsed['status'] === 'ok') {
                 $profile->setSetting('sleep_time', $parsed['value']);
+            } else {
+                // Не роняем молча в дефолт: подсказываем, что отбой не распознан и
+                // остался значением по умолчанию — поправимо через /settings.
+                $default = NutritionProfile::DEFAULT_SETTINGS['sleep_time'];
+                $bedtimeNote = 'Отбой не распознал, поставил '.$default
+                    .' по умолчанию — поправишь через /settings.';
             }
         }
 
@@ -189,6 +202,8 @@ class Onboarding
         ];
 
         $profile->setSetting('default_windows', $windows);
+
+        return $bedtimeNote;
     }
 
     /**

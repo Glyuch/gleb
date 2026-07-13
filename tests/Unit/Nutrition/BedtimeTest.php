@@ -24,3 +24,17 @@ it('reports invalid input without any time', function () {
     expect(Bedtime::fromText('спокойной ночи'))->toBe(['status' => 'invalid'])
         ->and(Bedtime::fromText(''))->toBe(['status' => 'invalid']);
 });
+
+it('parses «24:00» and «полночь» as midnight', function () {
+    expect(Bedtime::fromText('24:00'))->toBe(['status' => 'ok', 'value' => '00:00'])
+        ->and(Bedtime::fromText('полночь'))->toBe(['status' => 'ok', 'value' => '00:00'])
+        ->and(Bedtime::fromText('в полночь'))->toBe(['status' => 'ok', 'value' => '00:00'])
+        ->and(Bedtime::fromText('12 ночи'))->toBe(['status' => 'ok', 'value' => '00:00']);
+});
+
+it('treats an explicit noon as an absurd bedtime and reasks', function () {
+    expect(Bedtime::fromText('полдень'))->toBe(['status' => 'reask'])
+        ->and(Bedtime::fromText('в полдень'))->toBe(['status' => 'reask'])
+        ->and(Bedtime::fromText('12 дня'))->toBe(['status' => 'reask'])
+        ->and(Bedtime::fromText('в 12 дня'))->toBe(['status' => 'reask']);
+});

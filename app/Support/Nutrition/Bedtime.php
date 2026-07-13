@@ -23,18 +23,35 @@ class Bedtime
     private const DAY_TO = 1200;
 
     /**
-     * Разбирает свободный ввод отбоя: «23:00», «00:30», «12», «в 12», «в 12 ночи».
+     * Разбирает свободный ввод отбоя: «23:00», «00:30», «12», «в 12», «в 12 ночи»,
+     * «24:00», «полночь». Полдень трактуется как абсурдный отбой: «полдень»,
+     * «12 дня», «в 12 дня» → reask.
      *
      * @return array{status: 'ok', value: string}|array{status: 'reask'}|array{status: 'invalid'}
      */
     public static function fromText(string $text): array
     {
+        $lower = mb_strtolower($text);
+
+        // Явная полночь словом — валидный отбой.
+        if (preg_match('/полноч|полуноч/u', $lower)) {
+            return ['status' => 'ok', 'value' => '00:00'];
+        }
+
+        // Явный полдень словом — абсурдный отбой, переспрашиваем.
+        if (preg_match('/полдень|полудн|полудень/u', $lower)) {
+            return ['status' => 'reask'];
+        }
+
+        // Дневной квалификатор при «12»: «12 дня», «в 12 дня» — это полдень, не полночь.
+        $noonIsDaytime = (bool) preg_match('/дня|днём|днем|дневн/u', $lower);
+
         if (preg_match('/(\d{1,2}):(\d{2})/', $text, $m)) {
-            return self::fromHm((int) $m[1], (int) $m[2]);
+            return self::fromHm((int) $m[1], (int) $m[2], $noonIsDaytime);
         }
 
         if (preg_match('/(\d{1,2})/', $text, $m)) {
-            return self::fromHm((int) $m[1], 0);
+            return self::fromHm((int) $m[1], 0, $noonIsDaytime);
         }
 
         return ['status' => 'invalid'];
@@ -43,16 +60,27 @@ class Bedtime
     /**
      * Нормализует уже распарсенные часы/минуты отбоя.
      *
+     * @param  bool  $noonIsDaytime  «12» пришло с дневным квалификатором («12 дня») —
+     *                               это полдень (абсурдный отбой), а не полночь.
      * @return array{status: 'ok', value: string}|array{status: 'reask'}|array{status: 'invalid'}
      */
-    public static function fromHm(int $hours, int $minutes): array
+    public static function fromHm(int $hours, int $minutes, bool $noonIsDaytime = false): array
     {
+        // «24:00» — распространённая запись полуночи.
+        if ($hours === 24 && $minutes === 0) {
+            $hours = 0;
+        }
+
         if ($hours < 0 || $hours > 23 || $minutes < 0 || $minutes > 59) {
             return ['status' => 'invalid'];
         }
 
-        // «12» (полдень) под отбоем — это полночь: 12:xx → 00:xx.
+        // «12» под отбоём: без дневного квалификатора — полночь (12:xx → 00:xx);
+        // «12 дня»/«в 12 дня» — полдень, абсурдный отбой → переспрос.
         if ($hours === 12) {
+            if ($noonIsDaytime) {
+                return ['status' => 'reask'];
+            }
             $hours = 0;
         }
 
