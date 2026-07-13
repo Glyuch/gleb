@@ -17,12 +17,20 @@ use App\Models\NutritionProfile;
  */
 class SettingInput
 {
+    /** Подсказка при невалидном имени (общая для /name и awaiting-перехвата). */
+    public const NAME_HINT = 'Имя не понял. Пришли 1–32 символа, например «Ваня».';
+
     /**
      * @param  array<string, mixed>  $update
      * @return bool true, если сообщение поглощено как значение настройки/времени приёма
      */
     public static function intercept(array $update, NutritionProfile $profile): bool
     {
+        // Ожидание имени — раньше остальных ожиданий.
+        if (self::interceptName($update, $profile)) {
+            return true;
+        }
+
         // Ожидание часового пояса — раньше настройки/времени приёма.
         if (self::interceptTimezone($update, $profile)) {
             return true;
@@ -136,6 +144,71 @@ class SettingInput
         $tg->send($reply, chatId: $chatId);
 
         return true;
+    }
+
+    /**
+     * Ожидание имени (после /name без аргумента): следующее сообщение трактуется как
+     * новое имя. Пока запрос имени — последнее исходящее, ввод — попытка задать имя
+     * (невалидное → подсказка, ожидание сохраняется). Если бот успел спросить
+     * что-то ещё — сбрасываем устаревший awaiting и пропускаем дальше.
+     *
+     * @param  array<string, mixed>  $update
+     */
+    private static function interceptName(array $update, NutritionProfile $profile): bool
+    {
+        if ($profile->waiting('name') !== true) {
+            return false;
+        }
+
+        if (self::lastOutKind($profile) !== 'name_request') {
+            $profile->clearWaiting('name');
+
+            return false;
+        }
+
+        $tg = app(TelegramClient::class);
+        $chatId = Tg::chatId($update);
+        $input = (string) ($update['message']['text'] ?? '');
+
+        $name = self::normalizeName($input);
+        if ($name === null) {
+            $tg->send(self::NAME_HINT, null, 'name_request', $chatId);
+
+            return true;
+        }
+
+        $profile->name = $name;
+        $profile->save();
+        $profile->clearWaiting('name');
+
+        $tg->send('Готово, '.$name.'! Теперь буду обращаться к тебе так 👌🏻', chatId: $chatId);
+
+        return true;
+    }
+
+    /**
+     * Нормализует свободный ввод в имя обращения или возвращает null, если невалидно.
+     * Берётся первая строка (имя не многострочное), обрезаются пробелы. Отклоняются:
+     * пустое, длиннее 32 символов, начинающееся с «/» (команда), и не содержащее
+     * ни одной буквы (только цифры/пунктуация).
+     */
+    public static function normalizeName(string $input): ?string
+    {
+        $first = trim((string) (preg_split('/\r\n|\r|\n/', $input)[0] ?? ''));
+
+        if ($first === '' || mb_strlen($first) > 32) {
+            return null;
+        }
+
+        if (str_starts_with($first, '/')) {
+            return null;
+        }
+
+        if (! preg_match('/\p{L}/u', $first)) {
+            return null;
+        }
+
+        return $first;
     }
 
     /**

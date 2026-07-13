@@ -26,10 +26,11 @@ class HandleCommand
 
     public function handle(array $update, NutritionProfile $profile): void
     {
-        // Любая команда выводит из режима ожидания значения настройки, времени приёма и пояса.
+        // Любая команда выводит из режима ожидания значения настройки, времени приёма, пояса и имени.
         $profile->clearWaiting('setting');
         $profile->clearWaiting('meal_time');
         $profile->clearWaiting('timezone');
+        $profile->clearWaiting('name');
 
         $tg = app(TelegramClient::class);
         $tg->profileId = $profile->id;
@@ -52,6 +53,7 @@ class HandleCommand
             '/checkup' => $this->checkup($tg, $profile, $chatId),
             '/settings' => $this->settings($tg, $profile, $chatId),
             '/timezone' => $this->timezone($tg, $profile, $arg, $chatId),
+            '/name' => $this->name($tg, $profile, $arg, $chatId),
             '/invite' => $this->invite($tg, $profile, $chatId),
             default => $tg->send('Не знаю такой команды. /help — список команд.', chatId: $chatId),
         };
@@ -91,6 +93,7 @@ class HandleCommand
         $lines[] = '/skip — пропустить ближайший приём';
         $lines[] = '/settings — режим дня и цели';
         $lines[] = '/timezone — часовой пояс';
+        $lines[] = '/name — как к тебе обращаться';
         $lines[] = '/help — справка';
 
         $tg->send(implode("\n", $lines), $keyboard, chatId: $chatId);
@@ -113,6 +116,7 @@ class HandleCommand
             '/checkup — недельный чек-ап',
             '/settings — режим дня и цели',
             '/timezone — часовой пояс',
+            '/name Ваня — сменить имя',
         ];
 
         $tg->send(implode("\n", $lines), chatId: $chatId);
@@ -325,6 +329,39 @@ class HandleCommand
         ];
 
         $tg->send(implode("\n", $lines), null, 'timezone_request', $chatId);
+    }
+
+    /**
+     * /name: с аргументом сразу ставит имя (по которому бот обращается к клиенту);
+     * без — показывает текущее имя и ждёт следующий ввод, который перехватит
+     * SettingInput::interceptName. Невалидный аргумент — подсказка, имя не меняется.
+     */
+    private function name(TelegramClient $tg, NutritionProfile $profile, string $arg, ?int $chatId = null): void
+    {
+        if ($arg !== '') {
+            $name = SettingInput::normalizeName($arg);
+            if ($name === null) {
+                $tg->send(SettingInput::NAME_HINT, null, 'name_request', $chatId);
+
+                return;
+            }
+
+            $profile->name = $name;
+            $profile->save();
+            $tg->send('Готово, '.$name.'! Теперь буду обращаться к тебе так 👌🏻', chatId: $chatId);
+
+            return;
+        }
+
+        $profile->setWaiting('name', true);
+
+        $lines = [
+            'Сейчас обращаюсь к тебе: <b>'.$profile->displayName().'</b>.',
+            '',
+            'Как к тебе обращаться? Пришли имя.',
+        ];
+
+        $tg->send(implode("\n", $lines), null, 'name_request', $chatId);
     }
 
     private function settings(TelegramClient $tg, NutritionProfile $profile, ?int $chatId = null): void
