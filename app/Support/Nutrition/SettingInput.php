@@ -23,6 +23,11 @@ class SettingInput
      */
     public static function intercept(array $update, NutritionProfile $profile): bool
     {
+        // Ожидание часового пояса — раньше настройки/времени приёма.
+        if (self::interceptTimezone($update, $profile)) {
+            return true;
+        }
+
         // Ожидание времени приёма — раньше настройки (ключи взаимоисключающи).
         if (self::interceptMealTime($update, $profile)) {
             return true;
@@ -129,6 +134,85 @@ class SettingInput
         }
 
         $tg->send($reply, chatId: $chatId);
+
+        return true;
+    }
+
+    /**
+     * Ожидание часового пояса (после /timezone): следующее сообщение парсится как
+     * город/смещение/IANA. Пока запрос пояса — последнее исходящее, ввод трактуется
+     * как попытка пояса (невалидное → подсказка, ожидание сохраняется). Если бот
+     * успел спросить что-то ещё — сбрасываем устаревший awaiting и пропускаем дальше.
+     *
+     * @param  array<string, mixed>  $update
+     */
+    private static function interceptTimezone(array $update, NutritionProfile $profile): bool
+    {
+        if ($profile->waiting('timezone') !== true) {
+            return false;
+        }
+
+        if (self::lastOutKind($profile) !== 'timezone_request') {
+            $profile->clearWaiting('timezone');
+
+            return false;
+        }
+
+        $tg = app(TelegramClient::class);
+        $chatId = Tg::chatId($update);
+        $text = trim((string) ($update['message']['text'] ?? ''));
+
+        self::applyTimezone($tg, $profile, $text, $chatId);
+
+        return true;
+    }
+
+    /**
+     * Ставит часовой пояс профиля из свободного ввода (город/смещение/IANA),
+     * пересчитывает окна ещё не съеденных приёмов дня под новое местное время и
+     * отвечает новыми окнами. Съеденные приёмы и их eaten_at не трогаются.
+     * Невалидный ввод — подсказка, ожидание сохраняется, возвращает false.
+     */
+    public static function applyTimezone(TelegramClient $tg, NutritionProfile $profile, string $input, ?int $chatId): bool
+    {
+        $tz = Timezone::parse($input);
+        if ($tz === null) {
+            $tg->send('Не распознал пояс. Пришли город (например «Берлин») или смещение (+2).', null, 'timezone_request', $chatId);
+
+            return false;
+        }
+
+        $profile->timezone = $tz;
+        $profile->save();
+        $profile->clearWaiting('timezone');
+
+        // Пересчёт остатка дня под новое местное время.
+        $now = $profile->now();
+        Planner::ensureDay($profile, $now);
+        Planner::recalculate($profile, $now);
+
+        $lines = [$profile->displayName().', поставил пояс '.$tz.'. Сейчас у тебя '.$now->format('H:i').'.'];
+
+        $rest = NutritionMeal::query()
+            ->where('profile_id', $profile->id)
+            ->whereDate('date', $now->format('Y-m-d'))
+            ->where('status', 'pending')
+            ->orderBy('window_start')
+            ->get();
+
+        if ($rest->isNotEmpty()) {
+            $lines[] = '';
+            $lines[] = 'Окна на сегодня:';
+            foreach ($rest as $meal) {
+                if ($meal->window_start === null || $meal->window_end === null) {
+                    continue;
+                }
+                $lines[] = '⏳ '.MealPlan::LABELS[$meal->type].' '
+                    .$meal->window_start->format('H:i').'–'.$meal->window_end->format('H:i');
+            }
+        }
+
+        $tg->send(implode("\n", $lines), chatId: $chatId);
 
         return true;
     }

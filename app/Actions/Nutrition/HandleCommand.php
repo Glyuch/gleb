@@ -10,6 +10,7 @@ use App\Support\Nutrition\Fmt;
 use App\Support\Nutrition\MealPlan;
 use App\Support\Nutrition\Planner;
 use App\Support\Nutrition\ProgramStatus;
+use App\Support\Nutrition\SettingInput;
 use App\Support\Nutrition\TelegramClient;
 use App\Support\Nutrition\Tg;
 use Illuminate\Support\Facades\URL;
@@ -25,9 +26,10 @@ class HandleCommand
 
     public function handle(array $update, NutritionProfile $profile): void
     {
-        // Любая команда выводит из режима ожидания значения настройки и времени приёма.
+        // Любая команда выводит из режима ожидания значения настройки, времени приёма и пояса.
         $profile->clearWaiting('setting');
         $profile->clearWaiting('meal_time');
+        $profile->clearWaiting('timezone');
 
         $tg = app(TelegramClient::class);
         $tg->profileId = $profile->id;
@@ -49,6 +51,7 @@ class HandleCommand
             '/skip' => $this->skip($tg, $profile, $chatId),
             '/checkup' => $this->checkup($tg, $profile, $chatId),
             '/settings' => $this->settings($tg, $profile, $chatId),
+            '/timezone' => $this->timezone($tg, $profile, $arg, $chatId),
             '/invite' => $this->invite($tg, $profile, $chatId),
             default => $tg->send('Не знаю такой команды. /help — список команд.', chatId: $chatId),
         };
@@ -87,6 +90,7 @@ class HandleCommand
         $lines[] = '/weight, /steps, /water — записать показатели';
         $lines[] = '/skip — пропустить ближайший приём';
         $lines[] = '/settings — режим дня и цели';
+        $lines[] = '/timezone — часовой пояс';
         $lines[] = '/help — справка';
 
         $tg->send(implode("\n", $lines), $keyboard, chatId: $chatId);
@@ -108,6 +112,7 @@ class HandleCommand
             '/skip — пропустить ближайший приём',
             '/checkup — недельный чек-ап',
             '/settings — режим дня и цели',
+            '/timezone — часовой пояс',
         ];
 
         $tg->send(implode("\n", $lines), chatId: $chatId);
@@ -295,6 +300,31 @@ class HandleCommand
             'Код: <b>'.$invite->code.'</b>. Друг пишет его боту в личку — и стартует онбординг.',
             chatId: $chatId,
         );
+    }
+
+    /**
+     * /timezone: с аргументом ставит пояс сразу; без — показывает текущий пояс и
+     * местное время и ждёт следующий ввод (город/смещение), который перехватит
+     * SettingInput::interceptTimezone.
+     */
+    private function timezone(TelegramClient $tg, NutritionProfile $profile, string $arg, ?int $chatId = null): void
+    {
+        if ($arg !== '') {
+            SettingInput::applyTimezone($tg, $profile, $arg, $chatId);
+
+            return;
+        }
+
+        $profile->setWaiting('timezone', true);
+
+        $lines = [
+            'Часовой пояс: <b>'.$profile->tz().'</b>.',
+            'Сейчас у тебя '.$profile->now()->format('H:i').'.',
+            '',
+            'Пришли город (Берлин, Belgrade, Ереван…) или смещение (+2, -5, +5:30).',
+        ];
+
+        $tg->send(implode("\n", $lines), null, 'timezone_request', $chatId);
     }
 
     private function settings(TelegramClient $tg, NutritionProfile $profile, ?int $chatId = null): void
