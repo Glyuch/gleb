@@ -180,8 +180,9 @@ it('does not re-evaluate an ordinary question even when a recent meal exists', f
     expect(reevalLastOut())->toContain('лучший выбор между приёмами');
 });
 
-it('does not leak raw JSON when the re-eval reply has an out-of-range score', function () {
+it('keeps the prior score and does not leak raw JSON when the re-eval score is out of range', function () {
     $this->travelTo(CarbonImmutable::create(2026, 7, 13, 12, 10, 0, 'Europe/Moscow'));
+    // Обед разобран по фото с осмысленным баллом 2.
     $lunch = seedEatenMeal($this->profile, 'lunch', 12, 2, 'Спорный состав 🤔');
 
     // Одна фикстура: кнопка (telegram) + переоценка с битым score (anthropic).
@@ -200,14 +201,54 @@ it('does not leak raw JSON when the re-eval reply has an out-of-range score', fu
     app(HandleQuestion::class)->handle(['message' => ['text' => 'это курогрудь']], $this->profile);
 
     $lunch->refresh();
-    expect($lunch->score)->toBeNull()
+    // Битый score (99) НЕ обнуляет прежний осмысленный балл — он сохранён.
+    expect($lunch->score)->toBe(2)
+        // Фидбек и структура состава при этом обновлены (score невалиден отдельно).
         ->and($lunch->ai_feedback)->toBe('Хороший белковый приём 👌🏻')
-        ->and($lunch->rating['composition_ok'])->toBeTrue();
+        ->and($lunch->rating['composition_ok'])->toBeTrue()
+        ->and($lunch->rating['reevaluated'])->toBeTrue();
 
+    // Ответ не заявляет новый балл, честно говорит про сохранённый прежний; без JSON-утечки.
     expect(reevalLastOut())
-        ->toContain('пересчитал Обед ✅')
+        ->toContain('балл оставил прежним')
+        ->toContain('2/10')
         ->not->toContain('"score"')
         ->not->toContain('composition_ok');
+});
+
+it('does not wipe the meal and softly refuses when the re-eval model call fails (Claude::text null)', function () {
+    $this->travelTo(CarbonImmutable::create(2026, 7, 13, 12, 10, 0, 'Europe/Moscow'));
+    // Обед разобран по фото: осмысленный балл 7 и фидбек.
+    $lunch = seedEatenMeal($this->profile, 'lunch', 12, 7, 'Хороший обед, чистый белок 👌🏻');
+    $priorRating = $lunch->rating;
+
+    // Anthropic отдаёт пустой content → Claude::text вернёт null (пустой ответ после
+    // проверок), моделируя сбой API/пустой ответ после retry. parseFood(null) → всё null.
+    Http::fake([
+        'api.telegram.org/*' => Http::response(['ok' => true, 'result' => ['message_id' => 1]]),
+        'api.anthropic.com/*' => Http::response(['content' => []]),
+    ]);
+
+    // Кнопка «переоценить» → ожидание reeval, затем текст-уточнение.
+    app(HandleCallback::class)->handle(['callback_query' => ['id' => 'cbr', 'data' => 'reeval:'.$lunch->id]], $this->profile);
+    app(HandleQuestion::class)->handle(['message' => ['text' => 'это курогрудь су-вид']], $this->profile);
+
+    $lunch->refresh();
+    // Приём НЕ изменён: прежний балл, фидбек и rating на месте, флага reevaluated нет.
+    expect($lunch->score)->toBe(7)
+        ->and($lunch->ai_feedback)->toBe('Хороший обед, чистый белок 👌🏻')
+        ->and($lunch->rating)->toEqual($priorRating)
+        ->and($lunch->rating)->not->toHaveKey('reevaluated');
+
+    // Пользователю ушёл мягкий отказ, а не ложное «Пересчитал ✅».
+    expect(reevalLastOut())
+        ->toContain('не смог сейчас пересчитать')
+        ->not->toContain('Пересчитал')
+        ->not->toContain('пересчитал Обед');
+
+    // Ожидание reeval ПЕРЕАРМИРОВАНО: следующий текст снова попадёт в переоценку
+    // этого же приёма без повторного нажатия кнопки.
+    expect($this->profile->fresh()->waiting('reeval'))->toBe($lunch->id);
 });
 
 it('keeps the name prefix once and leaves future-intent as a question', function () {

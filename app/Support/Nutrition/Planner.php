@@ -118,12 +118,17 @@ class Planner
     }
 
     /**
-     * Переоценка УЖЕ съеденного приёма по уточнению клиента: перезаписывает
+     * Переоценка УЖЕ съеденного приёма по уточнению клиента: обновляет
      * score/rating/ai_feedback, НЕ трогая eaten_at, status, окна и photo_file_id
      * (паттерн attachPhoto). Детерминированные interval_ok/window_ok пересчитываем
      * от исходного eaten_at (окна не сдвигаются), в rating ставим reevaluated=true —
      * пометка, что оценка правилась по словам клиента. recalculate не зовём: время
      * приёма не изменилось.
+     *
+     * Защита от потери данных при сбое/кривом ответе модели: null-поля НЕ пишутся
+     * поверх ненулевых. feedback=null → прежний фидбек сохранён; score=null (проза,
+     * балл вне 1–10, сбой API) → прежний балл сохранён; extra=null (полный сбой) →
+     * rating не трогаем. Полностью пустой eval → приём не изменяется вовсе.
      *
      * @param  array{feedback: ?string, score: ?int, extra: array{composition_ok?: ?bool, forbidden?: array<int, string>, comment?: ?string}|null}  $eval
      */
@@ -131,17 +136,34 @@ class Planner
     {
         $at = self::toLocal($meal->eaten_at, $profile->tz()) ?? $profile->now();
 
-        $rating = ($eval['extra'] ?? []) + [
-            'interval_ok' => self::intervalOk($profile, $meal, $at),
-            'window_ok' => self::windowOk($meal, $at, $profile->tz()),
-            'reevaluated' => true,
-        ];
+        $attributes = [];
 
-        $meal->update([
-            'ai_feedback' => $eval['feedback'] ?? null,
-            'score' => $eval['score'] ?? null,
-            'rating' => $rating,
-        ]);
+        // Фидбек обновляем, только если модель дала непустой; null (сбой модели) НЕ
+        // затирает прежний осмысленный фидбек приёма.
+        if (($eval['feedback'] ?? null) !== null) {
+            $attributes['ai_feedback'] = $eval['feedback'];
+        }
+
+        // Балл НИКОГДА не обнуляем: невалидный/отсутствующий score (проза модели,
+        // балл вне 1–10, сбой API) оставляет прежний балл приёма нетронутым.
+        if (($eval['score'] ?? null) !== null) {
+            $attributes['score'] = $eval['score'];
+        }
+
+        // extra есть (модель дала структуру) → обновляем rating с детерминированными
+        // флагами + reevaluated. extra null (полный сбой API) → rating не трогаем.
+        if (($eval['extra'] ?? null) !== null) {
+            $attributes['rating'] = $eval['extra'] + [
+                'interval_ok' => self::intervalOk($profile, $meal, $at),
+                'window_ok' => self::windowOk($meal, $at, $profile->tz()),
+                'reevaluated' => true,
+            ];
+        }
+
+        // Нечего писать (полностью пустой результат сбоя модели) → приём не трогаем.
+        if ($attributes !== []) {
+            $meal->update($attributes);
+        }
     }
 
     /**

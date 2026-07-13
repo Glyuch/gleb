@@ -130,21 +130,52 @@ class HandleQuestion
     }
 
     /**
-     * Пересчёт приёма по авторитетному описанию клиента + перезапись оценки без
+     * Пересчёт приёма по авторитетному описанию клиента + обновление оценки без
      * сдвига eaten_at/окон. Ответ — «пересчитал {приём}: {score}/10» + фидбек и
      * снова кнопка переоценки. Имя-обращение добавляем один раз через Address::ensure
      * (в reevalPrompt фидбек просится без имени, чтобы не дублировать).
+     *
+     * Защита от потери данных при сбое модели:
+     *  1) Полностью пустой eval (Claude::text вернул null: таймаут/не-2xx/пусто после
+     *     retry) → приём НЕ трогаем, отвечаем мягко и ПЕРЕАРМИРУЕМ ожидание reeval
+     *     (setWaiting + kind=reeval_request), чтобы следующий текст снова попал в
+     *     переоценку этого же приёма — кнопку жать заново не нужно (консистентно с
+     *     interceptReeval, который и активируется по паре waiting+reeval_request).
+     *  2) Фидбек есть, но score невалиден/null → Planner::updateEvaluation прежний
+     *     балл не обнуляет; в ответе не заявляем новый балл, а честно говорим, что
+     *     оставили прежний.
      */
     private function applyReeval(TelegramClient $tg, NutritionProfile $profile, NutritionMeal $meal, string $text, CarbonImmutable $now, ?int $chatId): void
     {
         $eval = MealLogger::reevaluate($profile, $meal, $text);
+
+        // (1) Полный сбой модели — ничего осмысленного не пришло. Приём не портим.
+        if ($eval['feedback'] === null && $eval['score'] === null && $eval['extra'] === null) {
+            $profile->setWaiting('reeval', $meal->id);
+            $tg->send(
+                Address::ensure($profile, 'Не смог сейчас пересчитать — попробуй ещё раз чуть позже 🙏'),
+                null,
+                'reeval_request',
+                $chatId,
+            );
+
+            return;
+        }
+
         Planner::updateEvaluation($profile, $meal, $eval);
 
         $label = MealPlan::LABELS[$meal->type];
-        $head = $eval['score'] !== null
-            ? 'Пересчитал '.$label.': '.$eval['score'].'/10 ✅'
-            : 'Пересчитал '.$label.' ✅';
         $feedback = $eval['feedback'] ?? 'Записал уточнение 👌🏻';
+
+        if ($eval['score'] !== null) {
+            // Валидный новый балл.
+            $head = 'Пересчитал '.$label.': '.$eval['score'].'/10 ✅';
+        } elseif ($meal->score !== null) {
+            // (2) Модель балл не дала (проза/битый score), прежний сохранён — не врём.
+            $head = 'Уточнение учёл, балл оставил прежним — '.$meal->score.'/10';
+        } else {
+            $head = 'Пересчитал '.$label.' ✅';
+        }
 
         $tg->send(Address::ensure($profile, $head."\n".$feedback), MealLogger::reevalButton($meal), chatId: $chatId);
     }
