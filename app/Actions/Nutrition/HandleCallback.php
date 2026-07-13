@@ -131,7 +131,7 @@ class HandleCallback
 
         $parsed = MealLogger::parseFood($raw);
 
-        Planner::markEaten($profile, $meal, $now, $fileId, $parsed['feedback'], $parsed['score'], $parsed['extra']);
+        Planner::recordFoodPhoto($profile, $meal, $now, $fileId, $parsed['feedback'], $parsed['score'], $parsed['extra']);
         $profile->clearWaiting('meal_photo');
 
         $lines = [Address::ensure($profile, $parsed['feedback'] ?? 'Записал приём 👌🏻 Разбор пришлю позже')];

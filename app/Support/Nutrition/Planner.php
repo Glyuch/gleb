@@ -95,6 +95,45 @@ class Planner
     }
 
     /**
+     * Доклеивает фото/разбор к УЖЕ съеденному приёму (отмечен кнопкой), НЕ трогая
+     * eaten_at, статус и окна — иначе поздний фидбэк сдвинул бы время приёма и
+     * пересчитал бы окна следующих. Детерминированные флаги считаем от исходного
+     * eaten_at.
+     */
+    public static function attachPhoto(NutritionProfile $profile, NutritionMeal $meal, ?string $photoFileId, ?string $feedback, ?int $score = null, ?array $ratingExtra = null): void
+    {
+        $at = self::toLocal($meal->eaten_at, $profile->tz()) ?? $profile->now();
+
+        $rating = ($ratingExtra ?? []) + [
+            'interval_ok' => self::intervalOk($profile, $meal, $at),
+            'window_ok' => self::windowOk($meal, $at, $profile->tz()),
+        ];
+
+        $meal->update([
+            'photo_file_id' => $photoFileId,
+            'ai_feedback' => $feedback,
+            'score' => $score,
+            'rating' => $rating,
+        ]);
+    }
+
+    /**
+     * Запись фото приёма: приём ещё не съеден — помечаем съеденным (markEaten);
+     * уже съеден (кнопкой) — только доклеиваем фото/разбор (attachPhoto),
+     * сохраняя исходные eaten_at/окна.
+     */
+    public static function recordFoodPhoto(NutritionProfile $profile, NutritionMeal $meal, CarbonImmutable $now, ?string $photoFileId, ?string $feedback, ?int $score = null, ?array $ratingExtra = null): void
+    {
+        if ($meal->status === 'eaten') {
+            self::attachPhoto($profile, $meal, $photoFileId, $feedback, $score, $ratingExtra);
+
+            return;
+        }
+
+        self::markEaten($profile, $meal, $now, $photoFileId, $feedback, $score, $ratingExtra);
+    }
+
+    /**
      * Интервал между приёмами: 2.5–4.5 ч от прошлого съеденного приёма сегодня.
      * Первый приём дня (нет предыдущего eaten) → true.
      */

@@ -33,10 +33,9 @@ function lastOutContent(): ?string
     return NutritionMessage::query()->where('direction', 'out')->orderByDesc('id')->value('content');
 }
 
-it('attaches a late photo to a meal marked eaten by button without a photo', function () {
-    // Баг из чата: полдник отмечен кнопкой (eaten, без фото) в 18:30, ужин ещё
-    // не в окне (19:00). Досланное в 18:36 фото должно прицепиться к полднику,
-    // а не отбиться «перекусов нет».
+it('attaches a late photo to a button-marked meal and keeps its eaten_at', function () {
+    // Полдник отмечен кнопкой (eaten, без фото) в 18:30, ужин ещё не в окне.
+    // Досланное в 18:36 фото цепляется к полднику; время приёма НЕ съезжает.
     $this->travelTo(CarbonImmutable::create(2026, 7, 13, 18, 36, 0, 'Europe/Moscow'));
     Planner::ensureDay($this->profile, CarbonImmutable::now('Europe/Moscow'));
 
@@ -55,14 +54,14 @@ it('attaches a late photo to a meal marked eaten by button without a photo', fun
     $snack = NutritionMeal::query()->where('type', 'snack')->first();
     expect($snack->status)->toBe('eaten')
         ->and($snack->photo_file_id)->toBe('big')
-        ->and($snack->ai_feedback)->toBe('Идеально! 🙌🏼');
+        ->and($snack->ai_feedback)->toBe('Идеально! 🙌🏼')
+        ->and($snack->eaten_at->format('H:i'))->toBe('18:30'); // НЕ 18:36
     expect(lastOutContent())->toContain('Глеб, идеально')
         ->and(lastOutContent())->not->toContain('Перекусов');
 });
 
-it('still replies no snacks when the photoless eaten meal is older than the fallback window', function () {
-    // Полдник отмечен кнопкой давно (17:00) — за пределами 40-мин фолбэка →
-    // честное «перекусов нет».
+it('still replies no snacks when the photoless eaten meal is older than the 40-min silent window', function () {
+    // Полдник кнопкой давно (17:00), живых кандидатов нет → «перекусов нет».
     $this->travelTo(CarbonImmutable::create(2026, 7, 13, 18, 36, 0, 'Europe/Moscow'));
     Planner::ensureDay($this->profile, CarbonImmutable::now('Europe/Moscow'));
 
@@ -81,9 +80,70 @@ it('still replies no snacks when the photoless eaten meal is older than the fall
     expect(lastOutContent())->toContain('Перекусов');
 });
 
+it('asks which meal when a photo arrives during an open window and a button-marked meal is still photoless', function () {
+    // Кейс из чата (20:01): ужин в окне (20:00–21:00), полдник закрыт кнопкой без
+    // фото в 18:30 (91 мин назад, в пределах 2 ч) → фото неоднозначно → спрашиваем.
+    $this->travelTo(CarbonImmutable::create(2026, 7, 13, 20, 1, 0, 'Europe/Moscow'));
+    Planner::ensureDay($this->profile, CarbonImmutable::now('Europe/Moscow'));
+    NutritionMeal::query()->where('type', 'breakfast')->update(['status' => 'eaten', 'eaten_at' => '2026-07-13 08:00:00']);
+    NutritionMeal::query()->where('type', 'lunch')->update(['status' => 'eaten', 'eaten_at' => '2026-07-13 12:00:00']);
+    NutritionMeal::query()->where('type', 'snack')->update(['status' => 'eaten', 'eaten_at' => '2026-07-13 18:30:00', 'photo_file_id' => null]);
+    NutritionMeal::query()->where('type', 'dinner')->update(['status' => 'pending', 'window_start' => '2026-07-13 20:00:00', 'window_end' => '2026-07-13 21:00:00']);
+
+    app(HandlePhoto::class)->handle(['message' => [
+        'photo' => [['file_id' => 'small'], ['file_id' => 'big']],
+    ]], $this->profile);
+
+    // Ничего не отмечено, фото отложено, спрошены оба приёма.
+    expect(NutritionMeal::query()->where('type', 'dinner')->value('status'))->toBe('pending');
+    expect(NutritionMeal::query()->where('type', 'snack')->value('photo_file_id'))->toBeNull();
+    expect($this->profile->fresh()->waiting('meal_photo'))->toBe('big');
+    Http::assertSent(fn ($r) => str_contains($r->url(), '/sendMessage')
+        && str_contains((string) ($r['reply_markup'] ?? ''), 'mealphoto:dinner')
+        && str_contains((string) ($r['reply_markup'] ?? ''), 'mealphoto:snack'));
+});
+
+it('attaches the picked meal photo without moving eaten_at and without touching the other meal', function () {
+    // Продолжение: выбрали «Полдник». Фото → полдник, eaten_at остаётся 18:30,
+    // ужин не тронут (иначе eaten_at 20:02 сдвинул бы окно ужина).
+    $this->travelTo(CarbonImmutable::create(2026, 7, 13, 20, 2, 0, 'Europe/Moscow'));
+    Planner::ensureDay($this->profile, CarbonImmutable::now('Europe/Moscow'));
+    NutritionMeal::query()->where('type', 'snack')->update(['status' => 'eaten', 'eaten_at' => '2026-07-13 18:30:00', 'photo_file_id' => null]);
+    NutritionMeal::query()->where('type', 'dinner')->update(['status' => 'pending', 'window_start' => '2026-07-13 20:00:00', 'window_end' => '2026-07-13 21:00:00']);
+    $this->profile->setWaiting('meal_photo', 'big');
+
+    app(HandleCallback::class)->handle(['callback_query' => ['id' => 'cbz', 'data' => 'mealphoto:snack']], $this->profile);
+
+    $snack = NutritionMeal::query()->where('type', 'snack')->first();
+    expect($snack->status)->toBe('eaten')
+        ->and($snack->photo_file_id)->toBe('big')
+        ->and($snack->eaten_at->format('H:i'))->toBe('18:30'); // НЕ 20:02
+    expect(NutritionMeal::query()->where('type', 'dinner')->value('status'))->toBe('pending');
+    expect($this->profile->fresh()->waiting('meal_photo'))->toBeNull();
+});
+
+it('attaches directly to the open meal when the button-marked photoless meal is older than 2h', function () {
+    // Полдник кнопкой без фото давно (18:30, 140 мин до 20:50, >2ч) → не предлагаем
+    // его, фото уходит в открытый ужин напрямую.
+    $this->travelTo(CarbonImmutable::create(2026, 7, 13, 20, 50, 0, 'Europe/Moscow'));
+    Planner::ensureDay($this->profile, CarbonImmutable::now('Europe/Moscow'));
+    NutritionMeal::query()->where('type', 'breakfast')->update(['status' => 'eaten', 'eaten_at' => '2026-07-13 08:00:00']);
+    NutritionMeal::query()->where('type', 'lunch')->update(['status' => 'eaten', 'eaten_at' => '2026-07-13 12:00:00']);
+    NutritionMeal::query()->where('type', 'snack')->update(['status' => 'eaten', 'eaten_at' => '2026-07-13 18:30:00', 'photo_file_id' => null]);
+    NutritionMeal::query()->where('type', 'dinner')->update(['status' => 'pending', 'window_start' => '2026-07-13 20:00:00', 'window_end' => '2026-07-13 21:00:00']);
+
+    app(HandlePhoto::class)->handle(['message' => [
+        'photo' => [['file_id' => 'small'], ['file_id' => 'big']],
+    ]], $this->profile);
+
+    $dinner = NutritionMeal::query()->where('type', 'dinner')->first();
+    expect($dinner->status)->toBe('eaten')
+        ->and($dinner->photo_file_id)->toBe('big');
+    // Полдник не подхватил фото (его не предлагали).
+    expect(NutritionMeal::query()->where('type', 'snack')->value('photo_file_id'))->toBeNull();
+});
+
 it('processes only the first photo of an album (same media_group_id)', function () {
-    // Обед активен (11:30). Альбом из двух фото с общим media_group_id → один
-    // разбор, второй апдейт молча пропускается (без повторной отбивки).
     $this->travelTo(CarbonImmutable::create(2026, 7, 13, 11, 30, 0, 'Europe/Moscow'));
     Planner::ensureDay($this->profile, CarbonImmutable::now('Europe/Moscow'));
     NutritionMeal::query()->where('type', 'breakfast')->update(['status' => 'eaten', 'eaten_at' => '2026-07-13 08:00:00']);
@@ -107,8 +167,6 @@ it('processes only the first photo of an album (same media_group_id)', function 
 });
 
 it('announces the shifted dinner window when a meal is marked eaten by button', function () {
-    // Полдник кнопкой в 18:30 → ужин уезжает на 20:00–21:00 (eaten+3ч=21:30,
-    // обрезка сном 23:00). Кнопка «✅ Поел» должна сообщить новое окно.
     $this->travelTo(CarbonImmutable::create(2026, 7, 13, 18, 30, 0, 'Europe/Moscow'));
     Planner::ensureDay($this->profile, CarbonImmutable::now('Europe/Moscow'));
     NutritionMeal::query()->where('type', 'breakfast')->update(['status' => 'eaten', 'eaten_at' => '2026-07-13 08:00:00']);
@@ -123,8 +181,6 @@ it('announces the shifted dinner window when a meal is marked eaten by button', 
 });
 
 it('announces the shifted snack window when a meal is skipped by button', function () {
-    // Пропуск обеда в 11:30 → полдник сдвигается на 15:30–16:30. Кнопка
-    // «⏭ Пропускаю» должна сообщить новое окно.
     $this->travelTo(CarbonImmutable::create(2026, 7, 13, 11, 30, 0, 'Europe/Moscow'));
     Planner::ensureDay($this->profile, CarbonImmutable::now('Europe/Moscow'));
 

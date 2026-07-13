@@ -70,24 +70,32 @@ class HandlePhoto
         // 3. Фото еды: кандидаты = пропущенные приёмы до текущего + текущий приём.
         $candidates = $this->foodCandidates($profile, $now);
 
-        // Фолбэк: приём мог быть отмечен кнопкой «✅ Поел» без фото — досланное
-        // фото цепляем к нему (недавний eaten без фото), а не отбиваем как перекус.
-        $fromRecentEaten = $candidates === [];
-        $meal = $candidates[0] ?? $this->recentEatenWithoutPhoto($profile, $now);
+        // Приём, закрытый кнопкой «✅ Поел» без фото, — цель для доклейки фото.
+        // Нет живых кандидатов → узкое окно 40 мин (тихо цепляем). Есть живой
+        // кандидат → неоднозначность (напр. поздний полдник vs открытый ужин):
+        // окно шире (2 ч) и мы не угадываем, а спрашиваем кнопками.
+        $eatenNoPhoto = $this->eatenWithoutPhoto($profile, $now, $candidates === [] ? 40 : 120);
 
-        if ($meal === null) {
+        $choices = $candidates;
+        if ($eatenNoPhoto !== null) {
+            // eatenNoPhoto всегда 'eaten' → в foodCandidates (pending/missed) не попадёт.
+            $choices[] = $eatenNoPhoto;
+        }
+
+        if ($choices === []) {
             $tg->send('Перекусов на программе нет 👌🏻 До следующего приёма — вода/чай/кофе без всего', chatId: $chatId);
 
             return;
         }
 
-        // Есть пропущенные приёмы до текущего — не пишем разбор молча, уточняем приём.
-        if (count($candidates) > 1) {
+        // Несколько возможных приёмов (просроченные до текущего и/или закрытый
+        // кнопкой без фото) — не угадываем, уточняем кнопками.
+        if (count($choices) > 1) {
             $profile->setWaiting('meal_photo', $fileId);
 
             $buttons = [];
-            foreach ($candidates as $candidate) {
-                $buttons[] = [['text' => MealPlan::LABELS[$candidate->type], 'callback_data' => 'mealphoto:'.$candidate->type]];
+            foreach ($choices as $choice) {
+                $buttons[] = [['text' => MealPlan::LABELS[$choice->type], 'callback_data' => 'mealphoto:'.$choice->type]];
             }
 
             $tg->send('Это какой приём? 🤔', $buttons, chatId: $chatId);
@@ -95,8 +103,10 @@ class HandlePhoto
             return;
         }
 
-        // На фолбэк-пути (фото к уже отмеченному приёму) «слишком рано» не считаем.
-        $warning = $fromRecentEaten ? null : $this->tooSoonWarning($profile, $now);
+        $meal = $choices[0];
+
+        // «Слишком рано» не считаем, если клеим фото к уже съеданному приёму.
+        $warning = $meal->status === 'eaten' ? null : $this->tooSoonWarning($profile, $now);
 
         $image = $tg->downloadPhotoBase64($fileId);
         $raw = $image !== null
@@ -105,7 +115,7 @@ class HandlePhoto
 
         $parsed = MealLogger::parseFood($raw);
 
-        Planner::markEaten($profile, $meal, $now, $fileId, $parsed['feedback'], $parsed['score'], $parsed['extra']);
+        Planner::recordFoodPhoto($profile, $meal, $now, $fileId, $parsed['feedback'], $parsed['score'], $parsed['extra']);
 
         // 4. Fallback: если ИИ не ответил — всё равно фиксируем приём.
         $parts = [Address::ensure($profile, $parsed['feedback'] ?? 'Записал приём 👌🏻 Разбор пришлю позже')];
@@ -144,11 +154,10 @@ class HandlePhoto
     }
 
     /**
-     * Фолбэк для досланного фото: приём, отмеченный кнопкой «✅ Поел» недавно
-     * (в пределах 40 мин) и ещё БЕЗ фото. Позволяет прикрепить фото к уже
-     * записанному приёму, а не трактовать его как перекус.
+     * Приём, отмеченный кнопкой «✅ Поел» в пределах $withinMinutes и ещё БЕЗ фото —
+     * цель, к которой можно доклеить досланное фото/разбор.
      */
-    private function recentEatenWithoutPhoto(NutritionProfile $profile, CarbonImmutable $now): ?NutritionMeal
+    private function eatenWithoutPhoto(NutritionProfile $profile, CarbonImmutable $now, int $withinMinutes): ?NutritionMeal
     {
         return NutritionMeal::query()
             ->where('profile_id', $profile->id)
@@ -156,7 +165,7 @@ class HandlePhoto
             ->where('status', 'eaten')
             ->whereNull('photo_file_id')
             ->whereNotNull('eaten_at')
-            ->where('eaten_at', '>=', $now->subMinutes(40)->format('Y-m-d H:i:s'))
+            ->where('eaten_at', '>=', $now->subMinutes($withinMinutes)->format('Y-m-d H:i:s'))
             ->orderByDesc('eaten_at')
             ->first();
     }
