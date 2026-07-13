@@ -37,3 +37,13 @@ it('returns null for garbage', function () {
         ->and(Timezone::parse('   '))->toBeNull()
         ->and(Timezone::parse('12345'))->toBeNull();
 });
+
+it('maps every city to a loadable IANA zone (map stays clean, guard-safe)', function () {
+    $identifiers = DateTimeZone::listIdentifiers();
+
+    foreach (Timezone::CITIES as $key => $zone) {
+        expect(fn () => new DateTimeZone($zone))->not->toThrow(Exception::class);
+        expect(in_array($zone, $identifiers, true))
+            ->toBeTrue("CITIES[{$key}] => {$zone} must be a real IANA identifier");
+    }
+});

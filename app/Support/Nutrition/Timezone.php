@@ -68,8 +68,11 @@ class Timezone
 
         // 3. Город (регистронезависимо, пробелы схлопнуты).
         $key = mb_strtolower((string) preg_replace('/\s+/u', ' ', $trim));
+        $city = self::CITIES[$key] ?? null;
 
-        return self::CITIES[$key] ?? null;
+        // Значение из карты тоже прогоняем через guard: битая зона позже уронит
+        // now() и тихо убьёт тик профиля, поэтому непроверенную не отдаём.
+        return ($city !== null && in_array($city, DateTimeZone::listIdentifiers(), true)) ? $city : null;
     }
 
     /**
