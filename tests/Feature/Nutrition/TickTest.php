@@ -208,8 +208,10 @@ it('does not duplicate a slot reminder within the same 30-minute bucket', functi
 
 it('does not burst-backfill missed slots when the worker was down (first tick at 14:20)', function () {
     // Симуляция простоя воркера: до 14:20 тик не запускался, слот-события пусты.
+    // Окно 13:00–15:00 (шире часа), чтобы 14:20 всё ещё было ВНУТРИ окна и надж
+    // текущего ведра слался (границу window_end проверяет отдельный тест).
     $this->travelTo(CarbonImmutable::create(2026, 7, 16, 14, 20, 0, 'Europe/Moscow'));
-    prepareLunchWindow($this->profile);
+    prepareLunchWindow($this->profile, '2026-07-16 13:00:00', '2026-07-16 15:00:00');
 
     $this->artisan('nutrition:tick')->assertExitCode(0);
 
@@ -222,6 +224,48 @@ it('does not burst-backfill missed slots when the worker was down (first tick at
     // Пропущенные слоты НЕ материализованы.
     expect(NutritionSentEvent::query()->where('event_key', pkey($this->profile, '2026-07-16:meal:lunch:13:00'))->exists())->toBeFalse()
         ->and(NutritionSentEvent::query()->where('event_key', pkey($this->profile, '2026-07-16:meal:lunch:13:30'))->exists())->toBeFalse();
+});
+
+it('stops nudging once the window has ended even while still in the missed grace period', function () {
+    // Окно обеда 13:00–14:00; сейчас 14:30 — за window_end, но ещё в grace-периоде
+    // до missed (14:00 + 90м = 15:30). Раньше здесь уходил надж «поели обед?»;
+    // теперь наджи обрезаны границей окна — молчим.
+    $this->travelTo(CarbonImmutable::create(2026, 7, 16, 14, 30, 0, 'Europe/Moscow'));
+    $lunch = prepareLunchWindow($this->profile);
+
+    $this->artisan('nutrition:tick')->assertExitCode(0);
+
+    // Ни одного наджа «поели обед?» и ни одного слот-события 14:30.
+    expect(NutritionMessage::query()->where('content', 'like', '%поели обед%')->count())->toBe(0);
+    expect(NutritionSentEvent::query()->where('event_key', pkey($this->profile, '2026-07-16:meal:lunch:14:30'))->exists())->toBeFalse();
+
+    // Приём ещё pending — свой порог missed (window_end + 90м) не достигнут.
+    expect($lunch->fresh()->status)->toBe('pending');
+});
+
+it('still sends the nudge exactly at the window end boundary', function () {
+    // Ровно на window_end (14:00) окно ещё считается открытым (now <= window_end),
+    // поэтому надж текущего ведра уходит; за границей (14:01+) — уже нет.
+    $this->travelTo(CarbonImmutable::create(2026, 7, 16, 14, 0, 0, 'Europe/Moscow'));
+    prepareLunchWindow($this->profile);
+
+    $this->artisan('nutrition:tick')->assertExitCode(0);
+
+    expect(NutritionMessage::query()->where('kind', 'followup')->where('content', 'like', '%поели обед%')->count())->toBe(1);
+    expect(NutritionSentEvent::query()->where('event_key', pkey($this->profile, '2026-07-16:meal:lunch:14:00'))->count())->toBe(1);
+});
+
+it('still marks the meal missed by its own threshold after nudges have stopped', function () {
+    // Наджи прекратились на window_end (14:00), но пометка missed живёт по своему
+    // порогу window_end + missed_after (90м) = 15:30. Сейчас 15:31 — приём missed.
+    $this->travelTo(CarbonImmutable::create(2026, 7, 16, 15, 31, 0, 'Europe/Moscow'));
+    $lunch = prepareLunchWindow($this->profile);
+
+    $this->artisan('nutrition:tick')->assertExitCode(0);
+
+    expect($lunch->fresh()->status)->toBe('missed');
+    // За границей окна наджей нет.
+    expect(NutritionMessage::query()->where('content', 'like', '%поели обед%')->count())->toBe(0);
 });
 
 it('in maintenance sends only the start reminder, no pre and no nudges', function () {

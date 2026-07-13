@@ -218,8 +218,10 @@ class NutritionTick extends Command
                     .$ws->format('H:i').'–'.$we->format('H:i')
                     .'. '.MealPlan::COMPOSITION[$type]);
                 $this->fire($profile, $slotKey, $text, fn () => $tg->send($text, $this->mealButtons($type), 'reminder', $chat));
-            } elseif ($phase !== 'maintenance') {
-                // Надж внутри окна/грейса. В maintenance — мягкий режим, без пингов.
+            } elseif ($phase !== 'maintenance' && $now->lessThanOrEqualTo($we)) {
+                // Надж «поели?» — только пока окно ещё открыто (now <= window_end).
+                // После конца окна в grace-период до missed больше НЕ пингуем, чтобы
+                // не спамить (окна могут наслаиваться). В maintenance — всегда молчим.
                 $ntext = Address::ensure($profile, 'Поели '.mb_strtolower(MealPlan::LABELS[$type]).'? ☺️');
                 $this->fire($profile, $slotKey, $ntext, fn () => $tg->send($ntext, $this->mealButtons($type), 'followup', $chat));
             }
