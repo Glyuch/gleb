@@ -41,9 +41,13 @@ class Address
             return $text;
         }
 
-        // Уже начинается с имени — не дублируем.
+        // Уже начинается с имени — не дублируем. Но только по границе слова:
+        // «Ян, молодец» — уже обратились, а «Янтарная кислота» — нет (имя внутри слова).
         if (mb_strtolower(mb_substr($body, 0, mb_strlen($name))) === mb_strtolower($name)) {
-            return $text;
+            $after = mb_substr($body, mb_strlen($name), 1);
+            if ($after === '' || ! preg_match('/^\p{L}$/u', $after)) {
+                return $text;
+            }
         }
 
         return $name.', '.self::lowerFirst($body);
@@ -55,17 +59,28 @@ class Address
     }
 
     /**
-     * Понижает регистр первой буквы, только если это кириллическая заглавная
-     * (А–Я, Ё). Прочее не трогаем, чтобы не ломать эмодзи/латинские аббревиатуры.
+     * Понижает регистр первой буквы, только если первое слово — обычное с одной
+     * заглавной («Отлично» → «отлично»). Не трогаем, если первый символ не
+     * кириллическая заглавная (эмодзи/латиница/цифры), либо первое слово целиком
+     * в верхнем регистре (аббревиатура: «ЗОЖ», «АД»), либо это одиночный инициал.
      */
     private static function lowerFirst(string $text): string
     {
         $first = mb_substr($text, 0, 1);
 
-        if (preg_match('/^[А-ЯЁ]$/u', $first)) {
-            return mb_strtolower($first).mb_substr($text, 1);
+        if (! preg_match('/^[А-ЯЁ]$/u', $first)) {
+            return $text;
         }
 
-        return $text;
+        // Первое слово — ведущая последовательность букв.
+        preg_match('/^\p{L}+/u', $text, $m);
+        $word = $m[0] ?? $first;
+
+        // Одиночный инициал или аббревиатура целиком капсом — не трогаем.
+        if (mb_strlen($word) === 1 || mb_strtoupper($word) === $word) {
+            return $text;
+        }
+
+        return mb_strtolower($first).mb_substr($text, 1);
     }
 }

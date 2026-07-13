@@ -47,7 +47,7 @@ class RunCheckup
         );
 
         if ($raw === null) {
-            $tg->send('Не смог сейчас собрать чек-ап, попробуем позже 🙏', null, 'checkup', $chatId);
+            $tg->send(Address::ensure($profile, 'Не смог сейчас собрать чек-ап, попробуем позже 🙏'), null, 'checkup', $chatId);
 
             return;
         }

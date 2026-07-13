@@ -5,6 +5,7 @@ use App\Actions\Nutrition\HandleCommand;
 use App\Actions\Nutrition\HandleNumbers;
 use App\Actions\Nutrition\HandlePhoto;
 use App\Actions\Nutrition\HandleQuestion;
+use App\Actions\Nutrition\RunCheckup;
 use App\Models\NutritionMeal;
 use App\Models\NutritionMessage;
 use App\Models\NutritionMetric;
@@ -358,4 +359,26 @@ it('reads a pedometer screenshot after the summary clobbers the metrics request'
     expect($steps)->not->toBeNull()
         ->and((int) $steps->value)->toBe(11200);
     expect(NutritionMeal::query()->where('status', 'eaten')->count())->toBe(0);
+});
+
+it('addresses the client by name in the question fallback when Claude is unavailable', function () {
+    Http::fake([
+        'api.telegram.org/*' => Http::response(['ok' => true, 'result' => ['message_id' => 1]]),
+        'api.anthropic.com/*' => Http::response([], 500),
+    ]);
+
+    app(HandleQuestion::class)->handle(['message' => ['text' => 'Можно ли банан на ужин?']], $this->profile);
+
+    expect(lastOutText())->toContain('Глеб,');
+});
+
+it('addresses the client by name in the checkup fallback when Claude is unavailable', function () {
+    Http::fake([
+        'api.telegram.org/*' => Http::response(['ok' => true, 'result' => ['message_id' => 1]]),
+        'api.anthropic.com/*' => Http::response([], 500),
+    ]);
+
+    app(RunCheckup::class)->handle($this->profile);
+
+    expect(lastOutText())->toContain('Глеб,');
 });

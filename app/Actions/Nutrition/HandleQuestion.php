@@ -40,7 +40,7 @@ class HandleQuestion
                 $profile,
             );
 
-            $tg->send($answer !== null ? Address::ensure($profile, $answer) : 'Не смог сейчас ответить, попробуй ещё раз чуть позже 🙏', chatId: $chatId);
+            $tg->send(Address::ensure($profile, $answer ?? 'Не смог сейчас ответить, попробуй ещё раз чуть позже 🙏'), chatId: $chatId);
 
             return;
         }
@@ -52,6 +52,6 @@ class HandleQuestion
             return;
         }
 
-        $tg->send($intent['reply'] !== '' ? Address::ensure($profile, $intent['reply']) : 'Не смог сейчас ответить, попробуй ещё раз чуть позже 🙏', chatId: $chatId);
+        $tg->send(Address::ensure($profile, $intent['reply'] !== '' ? $intent['reply'] : 'Не смог сейчас ответить, попробуй ещё раз чуть позже 🙏'), chatId: $chatId);
     }
 }

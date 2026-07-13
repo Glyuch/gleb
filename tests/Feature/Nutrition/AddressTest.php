@@ -24,6 +24,21 @@ it('does not duplicate the name when the AI text already starts with it', functi
     expect(Address::ensure($profile, 'андрей, ты молодец'))->toBe('андрей, ты молодец');
 });
 
+it('adds the name when it only matches a substring of a longer leading word', function () {
+    $profile = nutritionProfile(['name' => 'Ян']);
+
+    expect(Address::ensure($profile, 'Янтарная кислота помогает'))->toBe('Ян, янтарная кислота помогает');
+    expect(Address::ensure($profile, 'Ян, молодец'))->toBe('Ян, молодец');
+});
+
+it('keeps abbreviations and single-letter initials in their original case', function () {
+    $profile = nutritionProfile(['name' => 'Глеб']);
+
+    expect(Address::ensure($profile, 'ЗОЖ — это система привычек'))->toBe('Глеб, ЗОЖ — это система привычек');
+    expect(Address::ensure($profile, 'АД в норме'))->toBe('Глеб, АД в норме');
+    expect(Address::ensure($profile, 'Отлично!'))->toBe('Глеб, отлично!');
+});
+
 it('leaves the text untouched for a nameless profile without failing', function () {
     $nameless = nutritionProfile(['telegram_user_id' => 333, 'name' => '', 'is_admin' => false]);
 
