@@ -63,8 +63,8 @@ class SettingInput
         return match ($key) {
             // Подъём: 04:00–12:00.
             'wake_time' => self::applyTime($tg, $profile, $chatId, 'wake_time', $text, 240, 720, 'подъём', '☀️'),
-            // Отбой: 20:00–23:59.
-            'sleep_time' => self::applyTime($tg, $profile, $chatId, 'sleep_time', $text, 1200, 1439, 'отбой', '🌙'),
+            // Отбой: ночной/вечерний, с эвристикой «12»→полночь (см. applySleepTime).
+            'sleep_time' => self::applySleepTime($tg, $profile, $chatId, $text),
             'steps_target' => self::applySteps($tg, $profile, $chatId, $text),
             // Неизвестный ключ — сбрасываем и отдаём сообщение обычной обработке.
             default => self::abandon($profile),
@@ -325,6 +325,40 @@ class SettingInput
         }
 
         $tg->send('Готово, '.$label.' теперь '.$value.' '.$emoji, chatId: $chatId);
+
+        return true;
+    }
+
+    /**
+     * Отбой: разбирает ввод через Bedtime («12»/«в 12» → полночь; дневное значение
+     * → переспрос). Валидный отбой сохраняет и пересчитывает окна дня; невалидный
+     * или дневной — подсказывает и сохраняет ожидание (ключ setting не чистим,
+     * запрос переотправляем kind='setting_request', чтобы следующий ввод перехватился).
+     */
+    private static function applySleepTime(TelegramClient $tg, NutritionProfile $profile, ?int $chatId, string $text): bool
+    {
+        $parsed = Bedtime::fromText($text);
+
+        if ($parsed['status'] === 'invalid') {
+            $tg->send('Не понял время. Пришли в формате ЧЧ:ММ, например 23:00', null, 'setting_request', $chatId);
+
+            return true;
+        }
+
+        if ($parsed['status'] === 'reask') {
+            $tg->send('Во сколько ложишься спать? Напиши как 23:00 или «в 12 ночи».', null, 'setting_request', $chatId);
+
+            return true;
+        }
+
+        $value = $parsed['value'];
+        $profile->setSetting('sleep_time', $value);
+        $profile->clearWaiting('setting');
+
+        // Окна сегодняшних приёмов зависят от отбоя; на пустом дне отработает вхолостую.
+        Planner::recalculate($profile, $profile->now()->startOfDay());
+
+        $tg->send('Готово, отбой теперь '.$value.' 🌙', chatId: $chatId);
 
         return true;
     }

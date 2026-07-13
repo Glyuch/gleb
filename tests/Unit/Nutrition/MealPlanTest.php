@@ -123,3 +123,41 @@ it('recalculates only first pending after skipped meal, rest stay default', func
         ->and($w['dinner']['start']->format('H:i'))->toBe('19:00')
         ->and($w['dinner']['end']->format('H:i'))->toBe('20:00');
 });
+
+it('never builds inverted windows when sleep_time is absurd (noon)', function () {
+    // Отбой в полдень (12:00) при подъёме в 09:00 — перевёрнутый ввод. Раньше
+    // dinner-клэмп «конец ≤ sleep−2ч» утаскивал ужин на 09:00–10:00 (перед завтраком).
+    $wakeDefaults = [
+        'breakfast' => ['start' => '09:30', 'end' => '10:30'],
+        'lunch' => ['start' => '11:00', 'end' => '12:30'],
+        'snack' => ['start' => '14:40', 'end' => '16:10'],
+        'dinner' => ['start' => '19:00', 'end' => '20:00'],
+    ];
+    $w = MealPlan::windows(mskDate(), $wakeDefaults, pendingAll(), '12:00');
+
+    // Все окна на месте и в строгом хронологическом порядке — никакого «ужина в 9 утра».
+    expect($w)->toHaveKeys(['breakfast', 'lunch', 'snack', 'dinner']);
+    $bStart = $w['breakfast']['start'];
+    expect($w['lunch']['start']->greaterThan($bStart))->toBeTrue()
+        ->and($w['snack']['start']->greaterThan($w['lunch']['start']))->toBeTrue()
+        ->and($w['dinner']['start']->greaterThan($w['snack']['start']))->toBeTrue()
+        // Ужин физически не может начаться раньше конца полдника.
+        ->and($w['dinner']['start']->greaterThanOrEqualTo($w['snack']['end']))->toBeTrue()
+        ->and($w['breakfast']['start']->format('H:i'))->toBe('09:30');
+});
+
+it('leaves a normal day untouched (ordering invariant for Gleb-like profile)', function () {
+    // Инвариант: нормальный профиль (подъём ~08:00, отбой 23:00) — окна прежние.
+    $normalDefaults = [
+        'breakfast' => ['start' => '08:30', 'end' => '09:30'],
+        'lunch' => ['start' => '11:00', 'end' => '12:30'],
+        'snack' => ['start' => '14:40', 'end' => '16:10'],
+        'dinner' => ['start' => '19:00', 'end' => '20:00'],
+    ];
+    $w = MealPlan::windows(mskDate(), $normalDefaults, pendingAll(), '23:00');
+
+    foreach ($normalDefaults as $type => $win) {
+        expect($w[$type]['start']->format('H:i'))->toBe($win['start'])
+            ->and($w[$type]['end']->format('H:i'))->toBe($win['end']);
+    }
+});

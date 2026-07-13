@@ -36,6 +36,7 @@ class MealPlan
         $result = [];
         $anchor = null;       // CarbonImmutable|null — время, от которого считать следующий приём
         $chainBroken = false; // true после первого факта (eaten/skipped/missed)
+        $prevWindow = null;   // array{start,end}|null — окно предыдущего приёма (для монотонности)
 
         foreach (self::TYPES as $type) {
             $fact = $facts[$type];
@@ -55,7 +56,22 @@ class MealPlan
                 } elseif ($window['end']->greaterThan($latestEnd)) {
                     $window['end'] = $latestEnd;
                 }
+
+                // Защита от перевёрнутого ужина: при абсурдном sleep_time (напр. отбой
+                // в полдень) клэмп «конец ≤ sleep−2ч» мог утащить ужин на утро — раньше
+                // полдника/завтрака. Если после клэмпа окно ужина начинается раньше, чем
+                // закончилось окно предыдущего приёма, сдвигаем его вперёд, сохраняя
+                // длительность: ужин физически не может начаться раньше полдника.
+                if ($prevWindow !== null && $window['start']->lessThan($prevWindow['end'])) {
+                    $duration = (int) $window['start']->diffInSeconds($window['end']);
+                    $window = [
+                        'start' => $prevWindow['end'],
+                        'end' => $prevWindow['end']->addSeconds($duration),
+                    ];
+                }
             }
+
+            $prevWindow = $window;
 
             if ($fact['status'] === 'eaten' && $fact['eaten_at'] !== null) {
                 $anchor = $fact['eaten_at'];

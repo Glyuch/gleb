@@ -79,6 +79,39 @@ it('falls back to maintenance phase when the program is not started', function (
     expect($context)->toContain('Режим поддержки');
 });
 
+it('labels meal statuses explicitly and distinctly in the day context', function () {
+    $date = CarbonImmutable::parse('2026-07-13', 'Europe/Moscow');
+
+    // Поздно съеденный обед (16:02) не должен путаться с ещё не отмеченным полдником.
+    NutritionMeal::query()->create([
+        'profile_id' => $this->profile->id,
+        'date' => $date->format('Y-m-d'),
+        'type' => 'lunch',
+        'window_start' => $date->setTime(11, 0)->format('Y-m-d H:i:s'),
+        'window_end' => $date->setTime(12, 30)->format('Y-m-d H:i:s'),
+        'eaten_at' => $date->setTime(16, 2)->format('Y-m-d H:i:s'),
+        'score' => 6,
+        'status' => 'eaten',
+    ]);
+
+    NutritionMeal::query()->create([
+        'profile_id' => $this->profile->id,
+        'date' => $date->format('Y-m-d'),
+        'type' => 'snack',
+        'window_start' => $date->setTime(19, 2)->format('Y-m-d H:i:s'),
+        'window_end' => $date->setTime(20, 2)->format('Y-m-d H:i:s'),
+        'status' => 'pending',
+    ]);
+
+    $context = PromptBuilder::dayContext($this->profile, $date);
+
+    expect($context)->toContain('Обед: СЪЕДЕН в 16:02')
+        ->and($context)->toContain('Полдник: ЖДЁТ (окно 19:02–20:02')
+        ->and($context)->toContain('ещё не отмечен')
+        // Метки разные — полдник не должен быть помечен как СЪЕДЕН.
+        ->and($context)->not->toContain('Полдник: СЪЕДЕН');
+});
+
 it('isolates day context data between profiles', function () {
     $date = CarbonImmutable::parse('2026-07-13', 'Europe/Moscow');
     $other = nutritionProfile(['telegram_user_id' => 222, 'is_admin' => false]);

@@ -3,6 +3,7 @@
 namespace App\Actions\Nutrition;
 
 use App\Models\NutritionProfile;
+use App\Support\Nutrition\Bedtime;
 use App\Support\Nutrition\Claude;
 use App\Support\Nutrition\TelegramClient;
 use App\Support\Nutrition\Timezone;
@@ -166,8 +167,14 @@ class Onboarding
         $wake = $times[0];
         $profile->setSetting('wake_time', $wake);
 
+        // Отбой прогоняем через эвристику Bedtime: «12:00» → полночь; явно дневное
+        // значение (напр. «14:00») — вероятная опечатка, НЕ сохраняем абсурд, оставляем
+        // дефолтный отбой (анкета не застревает, поправимо позже через /settings).
         if (isset($times[1])) {
-            $profile->setSetting('sleep_time', $times[1]);
+            $parsed = Bedtime::fromText($times[1]);
+            if ($parsed['status'] === 'ok') {
+                $profile->setSetting('sleep_time', $parsed['value']);
+            }
         }
 
         $windows = $profile->setting('default_windows');
