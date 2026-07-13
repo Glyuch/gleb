@@ -38,6 +38,17 @@ class HandlePhoto
             return;
         }
 
+        // 1.5. Альбом: Telegram шлёт каждое фото отдельным апдейтом с общим
+        // media_group_id. Обрабатываем только первое фото группы, остальные молча
+        // пропускаем — иначе один приём разбирается и отвечается N раз.
+        $mediaGroupId = (string) ($update['message']['media_group_id'] ?? '');
+        if ($mediaGroupId !== '') {
+            if ($profile->waiting('photo_group') === $mediaGroupId) {
+                return;
+            }
+            $profile->setWaiting('photo_group', $mediaGroupId);
+        }
+
         // 2. Скрин шагомера в ответ на запрос метрик (если шаги ещё не записаны).
         $lastOutKind = NutritionMessage::query()
             ->where('profile_id', $profile->id)
@@ -59,7 +70,12 @@ class HandlePhoto
         // 3. Фото еды: кандидаты = пропущенные приёмы до текущего + текущий приём.
         $candidates = $this->foodCandidates($profile, $now);
 
-        if ($candidates === []) {
+        // Фолбэк: приём мог быть отмечен кнопкой «✅ Поел» без фото — досланное
+        // фото цепляем к нему (недавний eaten без фото), а не отбиваем как перекус.
+        $fromRecentEaten = $candidates === [];
+        $meal = $candidates[0] ?? $this->recentEatenWithoutPhoto($profile, $now);
+
+        if ($meal === null) {
             $tg->send('Перекусов на программе нет 👌🏻 До следующего приёма — вода/чай/кофе без всего', chatId: $chatId);
 
             return;
@@ -79,8 +95,8 @@ class HandlePhoto
             return;
         }
 
-        $meal = $candidates[0];
-        $warning = $this->tooSoonWarning($profile, $now);
+        // На фолбэк-пути (фото к уже отмеченному приёму) «слишком рано» не считаем.
+        $warning = $fromRecentEaten ? null : $this->tooSoonWarning($profile, $now);
 
         $image = $tg->downloadPhotoBase64($fileId);
         $raw = $image !== null
@@ -125,6 +141,24 @@ class HandlePhoto
             ->orderBy('window_start')
             ->get()
             ->all();
+    }
+
+    /**
+     * Фолбэк для досланного фото: приём, отмеченный кнопкой «✅ Поел» недавно
+     * (в пределах 40 мин) и ещё БЕЗ фото. Позволяет прикрепить фото к уже
+     * записанному приёму, а не трактовать его как перекус.
+     */
+    private function recentEatenWithoutPhoto(NutritionProfile $profile, CarbonImmutable $now): ?NutritionMeal
+    {
+        return NutritionMeal::query()
+            ->where('profile_id', $profile->id)
+            ->whereDate('date', $now->format('Y-m-d'))
+            ->where('status', 'eaten')
+            ->whereNull('photo_file_id')
+            ->whereNotNull('eaten_at')
+            ->where('eaten_at', '>=', $now->subMinutes(40)->format('Y-m-d H:i:s'))
+            ->orderByDesc('eaten_at')
+            ->first();
     }
 
     private function pedometer(TelegramClient $tg, NutritionProfile $profile, string $fileId, CarbonImmutable $now, ?int $chatId = null): void

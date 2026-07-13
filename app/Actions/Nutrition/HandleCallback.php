@@ -61,7 +61,14 @@ class HandleCallback
         }
 
         Planner::markEaten($profile, $meal, $profile->now(), null, null);
-        $tg->send(MealPlan::LABELS[$type].' отмечен ✅', chatId: $chatId);
+
+        // Симметрично фото-пути: сообщаем сдвинутые окна следующих приёмов.
+        $parts = [MealPlan::LABELS[$type].' отмечен ✅'];
+        $tail = MealLogger::windowsTail($profile, $profile->now());
+        if ($tail !== '') {
+            $parts[] = $tail;
+        }
+        $tg->send(implode("\n\n", $parts), chatId: $chatId);
     }
 
     private function skip(TelegramClient $tg, NutritionProfile $profile, string $type, ?int $chatId = null): void
@@ -82,7 +89,13 @@ class HandleCallback
 
         $meal->update(['status' => 'skipped']);
         Planner::recalculate($profile, $profile->now()->startOfDay());
-        $tg->send(MealPlan::LABELS[$type].' пропущен ⏭', chatId: $chatId);
+
+        $parts = [MealPlan::LABELS[$type].' пропущен ⏭'];
+        $tail = MealLogger::windowsTail($profile, $profile->now());
+        if ($tail !== '') {
+            $parts[] = $tail;
+        }
+        $tg->send(implode("\n\n", $parts), chatId: $chatId);
     }
 
     /**
