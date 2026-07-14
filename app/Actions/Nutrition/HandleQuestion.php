@@ -62,6 +62,13 @@ class HandleQuestion
             return;
         }
 
+        // Отмена уже разобранного приёма (естественный текст «отмени», «пришлю заново»).
+        if ($intent['intent'] === 'cancel_meal') {
+            $this->cancelMeal($tg, $profile, $now, $chatId, $intent['target'] ?? null, $intent['resend_photo'] ?? false);
+
+            return;
+        }
+
         // Отчёт о еде — записываем приёмы; иначе отправляем ответ ИИ.
         if ($intent['intent'] === 'meal_report' && $intent['reports'] !== []) {
             MealLogger::logReports($update, $profile, $now, $intent['reports'], $intent['reply']);
@@ -130,6 +137,40 @@ class HandleQuestion
     }
 
     /**
+     * Естественный текст-отмена приёма: берём приём по названному типу, иначе
+     * последний разобранный сегодня. Нет подходящего (названный тип не фиксировали,
+     * либо отменять нечего) — мягкий отказ. Иначе сброс в pending + пересчёт окон;
+     * при обещании прислать фото («щас пришлю другое фото») ставим ожидание
+     * replace_photo, чтобы следующее фото перезаписало ИМЕННО этот приём.
+     */
+    private function cancelMeal(TelegramClient $tg, NutritionProfile $profile, CarbonImmutable $now, ?int $chatId, ?string $target, bool $resendPhoto): void
+    {
+        $meal = MealLogger::lastEvaluatedMeal($profile, $now, $target);
+
+        if ($meal === null) {
+            $label = ($target !== null && isset(MealPlan::LABELS[$target])) ? MealPlan::LABELS[$target] : 'этот приём';
+            $tg->send(Address::ensure($profile, $label.' ещё не фиксировали, отменять нечего 🤔'), chatId: $chatId);
+
+            return;
+        }
+
+        $label = MealPlan::LABELS[$meal->type];
+        $mealId = $meal->id;
+
+        Planner::cancelMeal($profile, $meal);
+
+        if ($resendPhoto) {
+            // Следующее ФОТО перезапишет именно этот приём (HandlePhoto::replace_photo).
+            $profile->setWaiting('replace_photo', $mealId);
+            $tg->send(Address::ensure($profile, 'отменил '.$label.', жду новое фото 🙌🏼'), chatId: $chatId);
+
+            return;
+        }
+
+        $tg->send(Address::ensure($profile, 'отменил '.$label.', окна пересчитал ✅ Пришлёшь заново — зафиксирую 🙌🏼'), chatId: $chatId);
+    }
+
+    /**
      * Пересчёт приёма по авторитетному описанию клиента + обновление оценки без
      * сдвига eaten_at/окон. Ответ — «пересчитал {приём}: {score}/10» + фидбек и
      * снова кнопка переоценки. Имя-обращение добавляем один раз через Address::ensure
@@ -177,7 +218,7 @@ class HandleQuestion
             $head = 'Пересчитал '.$label.' ✅';
         }
 
-        $tg->send(Address::ensure($profile, $head."\n".$feedback), MealLogger::reevalButton($meal), chatId: $chatId);
+        $tg->send(Address::ensure($profile, $head."\n".$feedback), MealLogger::mealActions($meal), chatId: $chatId);
     }
 
     /**

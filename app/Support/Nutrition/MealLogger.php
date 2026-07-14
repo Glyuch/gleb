@@ -101,7 +101,7 @@ class MealLogger
         // состав. Ничего не записали (только «уже отмечен») — без кнопки.
         $keyboard = null;
         if ($resolved !== []) {
-            $keyboard = self::reevalButton(end($resolved)['meal']);
+            $keyboard = self::mealActions(end($resolved)['meal']);
         }
 
         $tg->send(implode("\n\n", $parts), $keyboard, chatId: $chatId);
@@ -185,14 +185,19 @@ class MealLogger
     }
 
     /**
-     * Inline-кнопка «переоценить» под сообщением-разбором приёма: callback
-     * reeval:{meal_id}. Ряд из одной кнопки — формат reply_markup.inline_keyboard.
+     * Inline-ряд действий под сообщением-разбором приёма: «переоценить» (callback
+     * reeval:{meal_id}) и «отменить» (callback cancel:{meal_id}) — обе кнопки в
+     * одном ряду reply_markup.inline_keyboard. Переоценка меняет балл, не удаляя
+     * приём; отмена возвращает приём в pending, чтобы прислать заново.
      *
      * @return array<int, array<int, array<string, string>>>
      */
-    public static function reevalButton(NutritionMeal $meal): array
+    public static function mealActions(NutritionMeal $meal): array
     {
-        return [[['text' => '🔄 Состав другой / переоценить', 'callback_data' => 'reeval:'.$meal->id]]];
+        return [[
+            ['text' => '🔄 Состав другой / переоценить', 'callback_data' => 'reeval:'.$meal->id],
+            ['text' => '↩️ Отменить', 'callback_data' => 'cancel:'.$meal->id],
+        ]];
     }
 
     /**

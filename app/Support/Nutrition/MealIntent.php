@@ -49,7 +49,20 @@ class MealIntent
         TXT;
 
     /**
-     * @return array{intent: string, reports: array<int, array{meal: ?string, time: ?string, food: string, score: ?int, composition_ok: ?bool, forbidden: array<int, string>, comment: ?string}>, reply: string, target: ?string}|null
+     * Доп-инструкция про intent=cancel_meal. Подмешивается вместе с correct_meal-хинтом
+     * ТОЛЬКО когда за сегодня есть разобранный (СЪЕДЕН) приём — отменять иначе нечего.
+     */
+    private const CANCEL_MEAL_HINT = <<<'TXT'
+        ЕЩЁ допустим intent="cancel_meal":
+        - "cancel_meal" — клиент просит ОТМЕНИТЬ / УДАЛИТЬ / СБРОСИТЬ уже записанный СЕГОДНЯ приём (не тот приём, или чтобы прислать заново): «отмени завтрак», «удали ужин», «это не ужин», «я ещё не ужинал», «я ещё не ел», «щас пришлю другое фото», «сейчас другое фото», «пришлю заново». reports = [].
+        Для cancel_meal добавь поля:
+        - "target": "breakfast|lunch|snack|dinner|null" — тип приёма, если он ЯВНО назван клиентом; иначе null (возьмём последний разобранный).
+        - "resend_photo": true|false — true ТОЛЬКО если клиент прямо обещает прислать/переснять фото сейчас («щас пришлю другое фото», «сейчас другое фото», «пришлю заново»); иначе false.
+        СТРОГО отличай cancel_meal от correct_meal: поправка состава/оценки уже съеденного приёма («это куриная грудка, а не паштет», «переоцени ужин») — это correct_meal, приём НЕ удаляется. Удаление/пересъёмка приёма («отмени», «это не тот приём», «я ещё не ел», «пришлю заново») — cancel_meal. Сообщение о будущем/намерении поесть — по-прежнему question.
+        TXT;
+
+    /**
+     * @return array{intent: string, reports: array<int, array{meal: ?string, time: ?string, food: string, score: ?int, composition_ok: ?bool, forbidden: array<int, string>, comment: ?string}>, reply: string, target: ?string, resend_photo: bool}|null
      */
     public static function classify(NutritionProfile $profile, string $text, CarbonImmutable $now): ?array
     {
@@ -63,7 +76,7 @@ class MealIntent
 
         $instruction = self::INSTRUCTION;
         if ($hasEvaluated) {
-            $instruction .= "\n\n".self::CORRECT_MEAL_HINT;
+            $instruction .= "\n\n".self::CORRECT_MEAL_HINT."\n\n".self::CANCEL_MEAL_HINT;
         }
 
         $prompt = PromptBuilder::dayContext($profile, $now)."\n\n".$instruction
@@ -90,6 +103,7 @@ class MealIntent
         $allowed = ['meal_report', 'question', 'other'];
         if ($hasEvaluated) {
             $allowed[] = 'correct_meal';
+            $allowed[] = 'cancel_meal';
         }
 
         $intent = (string) $data['intent'];
@@ -97,14 +111,18 @@ class MealIntent
             return null;
         }
 
-        // Тип-цель для переоценки (опц., только для correct_meal).
+        // Тип-цель для переоценки/отмены (опц., только для correct_meal/cancel_meal).
         $target = null;
-        if ($intent === 'correct_meal') {
+        if (in_array($intent, ['correct_meal', 'cancel_meal'], true)) {
             $candidate = $data['target'] ?? null;
             if (in_array($candidate, MealPlan::TYPES, true)) {
                 $target = $candidate;
             }
         }
+
+        // Флаг «пришлю фото заново» (опц., только для cancel_meal) — включает
+        // replace_photo-поток: следующее фото перезапишет отменённый приём.
+        $resendPhoto = $intent === 'cancel_meal' && ($data['resend_photo'] ?? false) === true;
 
         $reports = [];
         if ($intent === 'meal_report' && isset($data['reports']) && is_array($data['reports'])) {
@@ -142,6 +160,7 @@ class MealIntent
             'reports' => $reports,
             'reply' => (string) ($data['reply'] ?? ''),
             'target' => $target,
+            'resend_photo' => $resendPhoto,
         ];
     }
 

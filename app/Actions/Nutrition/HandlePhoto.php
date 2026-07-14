@@ -49,6 +49,28 @@ class HandlePhoto
             $profile->setWaiting('photo_group', $mediaGroupId);
         }
 
+        // 1.6. Замена фото после отмены приёма («щас пришлю другое фото»): клиент
+        // отменил приём и обещал переснять — следующее ФОТО перезаписывает ИМЕННО тот
+        // приём (re-analyze + eaten на его слоте), а не плодит новый и не отбивается
+        // «перекусов нет». Ожидание снимаем сразу (одноразовое, на самое ближайшее
+        // фото); приём пропал — тихо падаем в обычный поток ниже.
+        $replaceId = $profile->waiting('replace_photo');
+        if (is_int($replaceId) || (is_string($replaceId) && ctype_digit($replaceId))) {
+            $profile->clearWaiting('replace_photo');
+
+            $meal = NutritionMeal::query()
+                ->where('profile_id', $profile->id)
+                ->whereDate('date', $now->format('Y-m-d'))
+                ->where('id', (int) $replaceId)
+                ->first();
+
+            if ($meal !== null) {
+                $this->recordPhotoForMeal($tg, $profile, $meal, $fileId, $now, $chatId);
+
+                return;
+            }
+        }
+
         // 2. Скрин шагомера в ответ на запрос метрик (если шаги ещё не записаны).
         $lastOutKind = NutritionMessage::query()
             ->where('profile_id', $profile->id)
@@ -131,7 +153,33 @@ class HandlePhoto
         }
 
         // Кнопка переоценки: если vision ошибся с составом, клиент поправит текстом.
-        $tg->send(implode("\n\n", $parts), MealLogger::reevalButton($meal), chatId: $chatId);
+        $tg->send(implode("\n\n", $parts), MealLogger::mealActions($meal), chatId: $chatId);
+    }
+
+    /**
+     * Распознаёт фото и фиксирует его на КОНКРЕТНОМ приёме (replace_photo-поток после
+     * отмены). Приём сброшен в pending → recordFoodPhoto пометит его eaten с новым
+     * eaten_at/фото/разбором (а уже eaten — доклеит фото, не сдвигая время). Ответ —
+     * фидбек + сдвинутые окна + ряд действий (переоценить/отменить).
+     */
+    private function recordPhotoForMeal(TelegramClient $tg, NutritionProfile $profile, NutritionMeal $meal, string $fileId, CarbonImmutable $now, ?int $chatId): void
+    {
+        $image = $tg->downloadPhotoBase64($fileId);
+        $raw = $image !== null
+            ? Claude::vision($image, MealLogger::foodPrompt($profile, $meal->type), 400, $profile)
+            : null;
+
+        $parsed = MealLogger::parseFood($raw);
+
+        Planner::recordFoodPhoto($profile, $meal, $now, $fileId, $parsed['feedback'], $parsed['score'], $parsed['extra']);
+
+        $parts = [Address::ensure($profile, $parsed['feedback'] ?? 'Записал приём 👌🏻 Разбор пришлю позже')];
+        $tail = MealLogger::windowsTail($profile, $now);
+        if ($tail !== '') {
+            $parts[] = $tail;
+        }
+
+        $tg->send(implode("\n\n", $parts), MealLogger::mealActions($meal), chatId: $chatId);
     }
 
     /**

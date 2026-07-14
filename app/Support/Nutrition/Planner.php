@@ -118,6 +118,28 @@ class Planner
     }
 
     /**
+     * Отмена/сброс зафиксированного приёма: слот НЕ удаляем (его предсоздаёт
+     * ensureDay), а возвращаем в pending, очищая факт еды — eaten_at, фото, фидбек,
+     * балл и rating. Затем пересчитываем окна: съеденный приём сдвигал окна
+     * последующих (anchor = eaten_at), откат должен вернуть их к дефолту/цепочке
+     * без этого приёма. После сброса клиент может прислать фото заново — обычный
+     * фото-поток подхватит pending-слот (или его перезапишет replace_photo-поток).
+     */
+    public static function cancelMeal(NutritionProfile $profile, NutritionMeal $meal): void
+    {
+        $meal->update([
+            'status' => 'pending',
+            'eaten_at' => null,
+            'photo_file_id' => null,
+            'ai_feedback' => null,
+            'score' => null,
+            'rating' => null,
+        ]);
+
+        self::recalculate($profile, self::dateOf($meal, $profile->tz()));
+    }
+
+    /**
      * Переоценка УЖЕ съеденного приёма по уточнению клиента: обновляет
      * score/rating/ai_feedback, НЕ трогая eaten_at, status, окна и photo_file_id
      * (паттерн attachPhoto). Детерминированные interval_ok/window_ok пересчитываем
