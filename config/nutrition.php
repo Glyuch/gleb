@@ -9,6 +9,7 @@ return [
     'timezone' => 'Europe/Moscow',
     'models' => [
         'vision' => 'claude-haiku-4-5',
+        'fast' => 'claude-haiku-4-5',
         'chat' => 'claude-sonnet-5',
     ],
     'reminders' => [

@@ -229,7 +229,7 @@ class Onboarding
 
         $ai = Claude::text(
             [['type' => 'text', 'text' => $this->compressionPrompt($raw)]],
-            (string) config('nutrition.models.chat'),
+            (string) config('nutrition.models.fast'),
             800,
             $profile,
         );

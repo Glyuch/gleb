@@ -85,7 +85,7 @@ class MealIntent
 
         $raw = Claude::text(
             [['type' => 'text', 'text' => $prompt]],
-            (string) config('nutrition.models.chat'),
+            (string) config('nutrition.models.fast'),
             500,
             $profile,
         );

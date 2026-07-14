@@ -119,7 +119,7 @@ class MealLogger
     {
         $raw = Claude::text(
             [['type' => 'text', 'text' => self::reevalPrompt($profile, $meal, $userText)]],
-            (string) config('nutrition.models.chat'),
+            (string) config('nutrition.models.fast'),
             400,
             $profile,
         );
