@@ -14,6 +14,14 @@
 - After PHP changes: `vendor/bin/pint --dirty --format agent`. After frontend changes: `npm run build`.
 - Run tests with `php artisan test --compact --filter=...`.
 - Access gate: existing `auth` + `admin` middleware (`users.is_admin`), consistent with other admin sub-projects. Non-admins get 403 (spec said 404; 403 follows repo convention — approved deviation).
+- The server runs with a CACHED route table (`bootstrap/cache/routes-v7.php`): after ANY `routes/web.php` change run `php artisan route:cache`, or new routes stay invisible (tests 404).
+
+**Static-analysis conventions (added after wave-1 code review — apply ON TOP of every code snippet below; the snippets predate this addendum):**
+- The repo has a CLEAN Larastan (phpstan level 7) and ESLint baseline. Every task must leave them clean: run `vendor/bin/phpstan analyse --memory-limit=512M` and scoped `npx eslint <your files>` as part of verification, alongside Pint and tests.
+- PHP factories: annotate class with `/** @extends Factory<Model> */` and `definition()` with `@return array<string, mixed>`.
+- PHP models: `/** @use HasFactory<ModelFactory> */` above the trait use; relation generics (`@return BelongsTo<Target, $this>`, `@return HasMany<Target, $this>`); scopes annotated `@param Builder<self> $query @return Builder<self>`; class-level `@property` docblock for every column (follow `app/Models/User.php` / `NutritionMetric.php` style).
+- PHP controllers/actions: explicit return types everywhere (already in snippets) + PHPDoc array shapes for array returns.
+- TSX: braces on all `if` bodies, blank line before `return` (`curly` + `@stylistic/padding-line-between-statements` rules); never render `String(maybeUndefined)` — coalesce with `?? '?'` first.
 
 ---
 
@@ -967,7 +975,8 @@ class BuildShtabBoard
                         ->where('object_id', $object->id)
                         ->whereNotNull('ended_at')
                         ->max('ended_at');
-                    $from = $lastEnd ? CarbonImmutable::parse($lastEnd) : $object->created_at->toImmutable();
+                    // startOfDay: created_at несёт время суток, без нормализации diffInDays усекает день.
+                    $from = ($lastEnd ? CarbonImmutable::parse($lastEnd) : $object->created_at->toImmutable())->startOfDay();
                     $uncoveredDays = (int) $from->diffInDays($today);
                 }
 
@@ -2320,6 +2329,46 @@ git add -A && git commit -m "feat(shtab): static map tab with sectors, chips, ch
 ---
 
 ## Task 9: Frontend — interactions (dialogs, DnD, CRUD)
+
+**Step 9.0 (backend hardening — added after wave-4 code review; runs AFTER Task 7 lands, files: AssignmentsController, MetricsController, ObjectsController, ShtabAssignmentsTest, ShtabStatusTest):**
+
+1. `AssignmentsController::move` — duplicate-active guard on the TARGET object (mirrors store):
+
+```php
+$duplicate = ShtabAssignment::query()->active()
+    ->where('person_id', $assignment->person_id)
+    ->where('object_id', $data['object_id'])
+    ->exists();
+
+if ($duplicate) {
+    throw ValidationException::withMessages([
+        'object_id' => 'Этот человек уже назначен на эту территорию.',
+    ]);
+}
+```
+
+Test (ShtabAssignmentsTest):
+
+```php
+it('rejects moving onto an object where the person is already active', function () {
+    $assignment = ShtabAssignment::factory()->create();
+    $target = ShtabObject::factory()->create();
+    ShtabAssignment::factory()->create(['person_id' => $assignment->person_id, 'object_id' => $target->id]);
+
+    $this->actingAs(shtabAdmin())
+        ->from('/shtab')
+        ->post("/shtab/assignments/{$assignment->id}/move", ['object_id' => $target->id, 'role_label' => 'дубль'])
+        ->assertSessionHasErrors('object_id');
+
+    expect($assignment->refresh()->ended_at)->toBeNull();
+});
+```
+
+2. No-op guards — skip mutation AND event when nothing changes: in `MetricsController::status` early-return `redirect()->back()` when `$metric->status === $data['status']` and value_text unchanged; in `ObjectsController::focus` when `$object->focus_level === $data['focus_level']`. Tests: posting the same status/focus adds 0 events.
+
+3. Archived-row validation: in AssignmentsController store/move use `Rule::exists('shtab_people', 'id')->whereNull('archived_at')` / `Rule::exists('shtab_objects', 'id')->whereNull('archived_at')` instead of bare `exists:` strings.
+
+**UI amendments for step 9.6 (from the same review):** active tab button gets `aria-current="page"`; reserve chips get `role="img" aria-label={p.name}` and remain draggable; in the map grid, order sectors parent-adjacent: products (focus desc) each followed by their child projects, then standalone objects — implement as a small `orderSectors(board.objects)` helper in index.tsx using `parent_id`.
 
 **Files:**
 - Create: `resources/js/pages/shtab/components/assign-dialog.tsx`

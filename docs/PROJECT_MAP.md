@@ -62,6 +62,15 @@ Behind `auth` + `admin`. **Blade.** Live and data-driven (rebuilt from the stati
 - **Controllers:** `app/Http/Controllers/Settings/{Profile,Security}Controller.php`.
 - **Frontend (React):** `resources/js/pages/auth/*.tsx`, `resources/js/pages/settings/*.tsx`. Note: the **game ships its own Blade auth**, separate from this.
 
+### 6. Штаб — management cockpit (`/shtab`)
+Личный командный пункт Глеба: карта «кто чем занят», назначения с историей, Хроника решений. Single-user (admin gate).
+- **URLs:** `/shtab` (Inertia SPA: табы Карта / Люди / Хроника); мутации `POST/PUT/PATCH/DELETE /shtab/{assignments,people,objects,metrics}/…` — все с redirect back.
+- **Controllers:** `app/Http/Controllers/Shtab/{ShtabController,AssignmentsController,PeopleController,ObjectsController,MetricsController}.php`.
+- **Board assembly:** `App\Actions\Shtab\BuildShtabBoard` (reserve / overload / uncovered-days flags). Порог перегруза: `config/shtab.php`.
+- **Models / tables:** `ShtabPerson`→`shtab_people`, `ShtabObject`→`shtab_objects` (products/projects/enablers, `focus_level` 0-2), `ShtabAssignment`→`shtab_assignments` (история через `ended_at`), `ShtabMetric`→`shtab_metrics`, `ShtabEvent`→`shtab_events` (Хроника; пишется транзакционно при каждой мутации).
+- **Frontend: Inertia + React** — `resources/js/pages/shtab/` (index + components + types).
+- **Spec:** `docs/specs/2026-08-08-shtab-management-cockpit-design.md` (+ мокап в `docs/specs/assets/`).
+
 ## Adding a new project
 Append a section under **Projects** using this stub:
 
