@@ -71,6 +71,7 @@ class BuildShtabBoard
                     'in_reserve' => $person->activeAssignments->isEmpty(),
                     'key_tasks' => $keyTasksByPerson->get($person->id, collect())
                         ->map(fn (ShtabTask $task): array => [
+                            'id' => $task->id,
                             'object_name' => $task->object?->name,
                             'object_emoji' => $task->object?->emoji,
                             'title' => $task->title,

@@ -73,6 +73,9 @@ export default function DigestDialog({ open, onClose }: Props) {
     const [selected, setSelected] = useState<boolean[]>([]);
     const [applying, setApplying] = useState(false);
     const [result, setResult] = useState<ApplyResponse | null>(null);
+    // Какая фаза упала: «Попробовать ещё раз» перезапускает именно её. Падение
+    // применения возвращает к предпросмотру (выбор сохранён), а не к новому разбору.
+    const [errorSource, setErrorSource] = useState<'digest' | 'apply'>('digest');
     const abortRef = useRef<AbortController | null>(null);
 
     useEffect(() => {
@@ -104,6 +107,7 @@ export default function DigestDialog({ open, onClose }: Props) {
                     return;
                 }
 
+                setErrorSource('digest');
                 setPhase('error');
             });
     };
@@ -128,9 +132,19 @@ export default function DigestDialog({ open, onClose }: Props) {
                     return;
                 }
 
+                setErrorSource('apply');
                 setPhase('error');
             })
             .finally(() => setApplying(false));
+    };
+
+    const retry = () => {
+        if (errorSource === 'apply') {
+            setPhase('preview');
+            apply();
+        } else {
+            digest();
+        }
     };
 
     const finish = () => {
@@ -154,6 +168,7 @@ export default function DigestDialog({ open, onClose }: Props) {
                             value={text}
                             onChange={(e) => setText(e.target.value)}
                             rows={6}
+                            maxLength={8000}
                             autoFocus
                             placeholder="Вика уходит с Обмена на KYC, маржа просела, у Димы завал…"
                             className="w-full resize-y rounded-md border border-gray-300 p-2 text-sm focus:border-violet-500 focus:outline-none"
@@ -239,7 +254,7 @@ export default function DigestDialog({ open, onClose }: Props) {
                     <div className="space-y-3">
                         <p className="text-sm text-red-600">ИИ недоступен, попробуй позже.</p>
                         <div className="flex gap-2">
-                            <Button onClick={digest} className="flex-1">
+                            <Button onClick={retry} className="flex-1">
                                 Попробовать ещё раз
                             </Button>
                             <Button variant="outline" onClick={onClose}>

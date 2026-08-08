@@ -187,8 +187,55 @@ it('apply writes an ai_digest chronicle event with counts and unparsed', functio
     $event = ShtabEvent::query()->where('type', 'ai_digest')->sole();
     expect($event->payload['applied'])->toBe(1)
         ->and($event->payload['failed'])->toBe(1)
-        ->and($event->payload['unparsed'])->toBe([['text' => 'непонятный кусок', 'reason' => 'нет сущности']])
+        ->and($event->payload['unparsed'])->toBe([
+            ['text' => 'непонятный кусок', 'reason' => 'нет сущности'],
+            ['text' => 'Закрыть несуществующую', 'reason' => 'не применено: Задача #999999 не найдена.'],
+        ])
         ->and($event->comment)->toBe('исходный рассказ Глеба');
+});
+
+it('apply rejects an over-long role_label with a readable reason and continues the batch', function () {
+    $person = ShtabPerson::factory()->create();
+    $object = ShtabObject::factory()->create();
+    $other = ShtabObject::factory()->create();
+
+    $response = $this->actingAs(aiAdmin())
+        ->postJson('/shtab/ai/apply', [
+            'text' => 'слишком длинная роль',
+            'operations' => [
+                ['type' => 'assign', 'summary' => 'Длинная роль', 'person_id' => $person->id, 'object_id' => $object->id, 'role_label' => str_repeat('р', 150)],
+                ['type' => 'task_add', 'summary' => 'Новая задача', 'object_id' => $other->id, 'title' => 'Довезти лендинг'],
+            ],
+        ])
+        ->assertOk()
+        ->assertJsonPath('applied', [1])
+        ->assertJsonPath('failed.0.index', 0)
+        ->assertJsonPath('failed.0.summary', 'Длинная роль');
+
+    expect($response->json('failed.0.reason'))->toContain('role_label')
+        ->toContain('макс. 100')
+        ->and(ShtabAssignment::count())->toBe(0)
+        ->and(ShtabTask::sole()->title)->toBe('Довезти лендинг');
+});
+
+it('apply appends failed operations to the stored unparsed list and truncates long items', function () {
+    $this->actingAs(aiAdmin())
+        ->postJson('/shtab/ai/apply', [
+            'text' => 'рассказ',
+            'operations' => [
+                ['type' => 'task_done', 'summary' => 'Закрыть несуществующую', 'task_id' => 999999],
+            ],
+            'unparsed' => [['text' => str_repeat('х', 400), 'reason' => 'нет сущности']],
+        ])
+        ->assertOk()
+        ->assertJsonPath('applied', [])
+        ->assertJsonPath('failed.0.index', 0);
+
+    $event = ShtabEvent::query()->where('type', 'ai_digest')->sole();
+    expect($event->payload['unparsed'])->toBe([
+        ['text' => str_repeat('х', 300), 'reason' => 'нет сущности'],
+        ['text' => 'Закрыть несуществующую', 'reason' => 'не применено: Задача #999999 не найдена.'],
+    ]);
 });
 
 it('forbids non-admins from ai endpoints', function () {

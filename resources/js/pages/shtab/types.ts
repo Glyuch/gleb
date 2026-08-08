@@ -27,6 +27,7 @@ export interface BoardTask {
 }
 
 export interface PersonKeyTask {
+    id: number;
     object_name: string | null;
     object_emoji: string | null;
     title: string;

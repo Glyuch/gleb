@@ -56,7 +56,7 @@ function PersonCardLarge({
                     </div>
                 ))}
                 {person.key_tasks.map((t) => (
-                    <div key={`${t.object_name ?? '—'}:${t.title}`} className="rounded-md bg-amber-50 px-2 py-1 text-[10px] text-gray-700">
+                    <div key={t.id} className="rounded-md bg-amber-50 px-2 py-1 text-[10px] text-gray-700">
                         ⭐ {t.object_emoji} <b>{t.object_name ?? '—'}</b>: {t.title}
                     </div>
                 ))}

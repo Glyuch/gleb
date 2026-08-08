@@ -183,7 +183,7 @@ it('puts tasks with counts into the board object payload ordered open and key fi
 it('puts open key tasks into the board person payload', function () {
     $person = ShtabPerson::factory()->create();
     $object = ShtabObject::factory()->create(['name' => 'Обмен', 'emoji' => '💱']);
-    ShtabTask::factory()->create([
+    $keyTask = ShtabTask::factory()->create([
         'object_id' => $object->id,
         'assignee_person_id' => $person->id,
         'is_key' => true,
@@ -201,6 +201,7 @@ it('puts open key tasks into the board person payload', function () {
     $row = collect((new BuildShtabBoard)->handle()['people'])->firstWhere('id', $person->id);
 
     expect($row['key_tasks'])->toBe([[
+        'id' => $keyTask->id,
         'object_name' => 'Обмен',
         'object_emoji' => '💱',
         'title' => 'Запустить обмен USDT',

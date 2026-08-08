@@ -48,11 +48,26 @@ class ApplyOperations
             }
         }
 
+        // Проваленные операции тоже уходят в Хронику — как «не разнесённые» куски,
+        // чтобы итог разбора был виден целиком. Хранимый список ограничен, чтобы
+        // payload события не разрастался: максимум 50 позиций по 300 символов.
+        foreach ($failed as $failure) {
+            $unparsed[] = [
+                'text' => $failure['summary'],
+                'reason' => 'не применено: '.$failure['reason'],
+            ];
+        }
+
+        $storedUnparsed = array_map(fn (array $item): array => [
+            'text' => mb_substr(is_string($item['text'] ?? null) ? $item['text'] : '', 0, 300),
+            'reason' => mb_substr(is_string($item['reason'] ?? null) ? $item['reason'] : '', 0, 300),
+        ], array_slice(array_values($unparsed), 0, 50));
+
         ShtabEvent::record('ai_digest', [
             'payload' => [
                 'applied' => count($applied),
                 'failed' => count($failed),
-                'unparsed' => $unparsed,
+                'unparsed' => $storedUnparsed,
             ],
             'comment' => $text !== null && $text !== '' ? mb_substr($text, 0, 1000) : null,
         ]);
@@ -89,7 +104,7 @@ class ApplyOperations
     {
         $person = $this->person($this->intField($operation, 'person_id', 'персонаж (person_id)'));
         $object = $this->object($this->intField($operation, 'object_id', 'территория (object_id)'));
-        $roleLabel = $this->stringField($operation, 'role_label', 'роль (role_label)');
+        $roleLabel = $this->maxLength($this->stringField($operation, 'role_label', 'роль (role_label)'), 'role_label', 100);
 
         $this->startAssignment($person->id, $object->id, $roleLabel, $comment);
     }
@@ -111,7 +126,7 @@ class ApplyOperations
     {
         $assignment = $this->assignment($this->intField($operation, 'assignment_id', 'назначение (assignment_id)'));
         $object = $this->object($this->intField($operation, 'object_id', 'территория (object_id)'));
-        $roleLabel = $this->stringField($operation, 'role_label', 'роль (role_label)');
+        $roleLabel = $this->maxLength($this->stringField($operation, 'role_label', 'роль (role_label)'), 'role_label', 100);
 
         // Как в ручном move: дубль на целевой территории проверяется ДО снятия.
         $duplicate = ShtabAssignment::query()->active()
@@ -140,6 +155,11 @@ class ApplyOperations
         }
 
         $valueText = $operation['value_text'] ?? null;
+
+        if (is_string($valueText)) {
+            $this->maxLength($valueText, 'value_text', 100);
+        }
+
         $newValueText = is_string($valueText) && $valueText !== '' ? $valueText : $metric->value_text;
 
         if ($metric->status === $status && $newValueText === $metric->value_text) {
@@ -207,11 +227,7 @@ class ApplyOperations
     private function taskAdd(array $operation, ?string $comment): void
     {
         $object = $this->object($this->intField($operation, 'object_id', 'территория (object_id)'));
-        $title = $this->stringField($operation, 'title', 'название задачи (title)');
-
-        if (mb_strlen($title) > 500) {
-            throw new RuntimeException('Название задачи длиннее 500 символов.');
-        }
+        $title = $this->maxLength($this->stringField($operation, 'title', 'название задачи (title)'), 'title', 500);
 
         $assignee = isset($operation['person_id'])
             ? $this->person($this->intField($operation, 'person_id', 'персонаж (person_id)'))
@@ -434,6 +450,19 @@ class ApplyOperations
         }
 
         throw new RuntimeException('В операции не хватает поля: '.$label.'.');
+    }
+
+    /**
+     * Лимиты как в ручных контроллерах (max:100/max:500): длинное значение модели
+     * должно падать читаемой ошибкой в failed[].reason, а не QueryException.
+     */
+    private function maxLength(string $value, string $key, int $max): string
+    {
+        if (mb_strlen($value) > $max) {
+            throw new RuntimeException("Слишком длинное значение {$key} (макс. {$max}).");
+        }
+
+        return $value;
     }
 
     /**
