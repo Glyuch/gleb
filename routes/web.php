@@ -9,6 +9,7 @@ use App\Http\Controllers\Admin\SiteDashboardController;
 use App\Http\Controllers\GameController;
 use App\Http\Controllers\NutritionBotController;
 use App\Http\Controllers\NutritionStatsController;
+use App\Http\Controllers\Shtab\AiController;
 use App\Http\Controllers\Shtab\AssignmentsController;
 use App\Http\Controllers\Shtab\MetricsController;
 use App\Http\Controllers\Shtab\ObjectsController;
@@ -84,6 +85,9 @@ Route::middleware(['auth', 'admin'])->prefix('shtab')->name('shtab.')->group(fun
     Route::post('/tasks', [TasksController::class, 'store'])->name('tasks.store');
     Route::patch('/tasks/{task}', [TasksController::class, 'update'])->name('tasks.update');
     Route::delete('/tasks/{task}', [TasksController::class, 'destroy'])->name('tasks.destroy');
+
+    Route::post('/ai/digest', [AiController::class, 'digest'])->name('ai.digest');
+    Route::post('/ai/apply', [AiController::class, 'apply'])->name('ai.apply');
 });
 
 Route::post('/nutrition-bot/webhook', [NutritionBotController::class, 'webhook'])
