@@ -9,6 +9,7 @@ use App\Http\Controllers\Admin\SiteDashboardController;
 use App\Http\Controllers\GameController;
 use App\Http\Controllers\NutritionBotController;
 use App\Http\Controllers\NutritionStatsController;
+use App\Http\Controllers\Shtab\ShtabController;
 use Illuminate\Support\Facades\Route;
 
 Route::inertia('/', 'welcome')->name('home');
@@ -53,6 +54,10 @@ Route::middleware(['auth', 'admin'])->prefix('admin')->name('admin.')->group(fun
         Route::put('/{profile}', [NutritionAdminController::class, 'update'])->name('update');
         Route::post('/{profile}/pause', [NutritionAdminController::class, 'pause'])->name('pause');
     });
+});
+
+Route::middleware(['auth', 'admin'])->prefix('shtab')->name('shtab.')->group(function () {
+    Route::get('/', [ShtabController::class, 'index'])->name('index');
 });
 
 Route::post('/nutrition-bot/webhook', [NutritionBotController::class, 'webhook'])
