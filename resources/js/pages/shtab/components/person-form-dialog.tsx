@@ -21,6 +21,7 @@ export default function PersonFormDialog({ open, person, board, onClose }: Props
     const [klass, setKlass] = useState(person?.class ?? '');
     const [color, setColor] = useState(person?.color ?? COLORS[0]);
     const [isDirect, setIsDirect] = useState(person?.is_direct ?? true);
+    const [isMe, setIsMe] = useState(person?.is_me ?? false);
     const [managerId, setManagerId] = useState<number | null>(person?.manager_id ?? null);
     const [submitting, setSubmitting] = useState(false);
 
@@ -36,7 +37,7 @@ export default function PersonFormDialog({ open, person, board, onClose }: Props
             color,
             is_direct: isDirect,
             manager_id: managerId,
-            is_me: person?.is_me ?? false,
+            is_me: isMe,
         };
         const opts = {
             preserveScroll: true,
@@ -100,6 +101,10 @@ export default function PersonFormDialog({ open, person, board, onClose }: Props
                     <label className="flex items-center gap-2 text-sm">
                         <input type="checkbox" checked={isDirect} onChange={(e) => setIsDirect(e.target.checked)} />
                         Прямой подчинённый
+                    </label>
+                    <label className="flex items-center gap-2 text-sm">
+                        <input type="checkbox" checked={isMe} onChange={(e) => setIsMe(e.target.checked)} />
+                        Это я (моя карточка на карте)
                     </label>
                     <div>
                         <Label htmlFor="p_manager">Руководитель</Label>

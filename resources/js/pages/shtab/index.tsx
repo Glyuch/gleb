@@ -1,4 +1,4 @@
-import { Head, usePage } from '@inertiajs/react';
+import { Head, router, usePage } from '@inertiajs/react';
 import { useEffect, useState } from 'react';
 import { Toaster, toast } from 'sonner';
 import AssignDialog from './components/assign-dialog';
@@ -102,6 +102,21 @@ export default function ShtabIndex({ board, events }: Props) {
                             {m.name}
                         </button>
                     ))}
+                    <button
+                        type="button"
+                        aria-label="Добавить бизнес-метрику"
+                        title="Добавить бизнес-метрику"
+                        onClick={() => {
+                            const name = window.prompt('Название бизнес-метрики');
+
+                            if (name?.trim()) {
+                                router.post('/shtab/metrics', { object_id: null, name: name.trim() }, { preserveScroll: true });
+                            }
+                        }}
+                        className="cursor-pointer rounded-full border border-dashed border-gray-400 px-1.5 py-0.5 text-[10px] font-semibold text-gray-400 transition hover:border-gray-600 hover:text-gray-600"
+                    >
+                        +
+                    </button>
                     <button
                         type="button"
                         onClick={() => setPersonForm({ open: true, person: null })}

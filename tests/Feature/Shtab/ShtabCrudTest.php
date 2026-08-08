@@ -135,6 +135,43 @@ it('creates, updates and deletes a metric', function () {
     expect(ShtabMetric::count())->toBe(0);
 });
 
+it('records a focus_level_changed event when update changes the focus level', function () {
+    $object = ShtabObject::factory()->create(['focus_level' => 0]);
+
+    $this->actingAs(crudAdmin())
+        ->put("/shtab/objects/{$object->id}", [
+            'type' => 'product',
+            'name' => $object->name,
+            'emoji' => $object->emoji,
+            'focus_level' => 2,
+            'color' => $object->color,
+        ])
+        ->assertRedirect();
+
+    expect($object->refresh()->focus_level)->toBe(2);
+
+    $event = ShtabEvent::query()->where('type', 'focus_level_changed')->sole();
+    expect($event->object_id)->toBe($object->id)
+        ->and($event->payload)->toBe(['from' => 0, 'to' => 2]);
+});
+
+it('writes no event when update keeps the same focus level', function () {
+    $object = ShtabObject::factory()->create(['focus_level' => 1]);
+
+    $this->actingAs(crudAdmin())
+        ->put("/shtab/objects/{$object->id}", [
+            'type' => 'product',
+            'name' => 'Новое имя',
+            'emoji' => $object->emoji,
+            'focus_level' => 1,
+            'color' => $object->color,
+        ])
+        ->assertRedirect();
+
+    expect($object->refresh()->name)->toBe('Новое имя')
+        ->and(ShtabEvent::query()->count())->toBe(0);
+});
+
 it('stores null parent_id when creating a product with a parent_id set', function () {
     $parent = ShtabObject::factory()->create(['type' => 'product']);
 

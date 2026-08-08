@@ -13,6 +13,9 @@ use Illuminate\Validation\ValidationException;
 
 class ObjectsController extends Controller
 {
+    /**
+     * Лёгкий API для быстрого переключения фокуса; текущий UI меняет focus_level через update().
+     */
     public function focus(Request $request, ShtabObject $object): RedirectResponse
     {
         $data = $request->validate([
@@ -50,7 +53,19 @@ class ObjectsController extends Controller
 
     public function update(Request $request, ShtabObject $object): RedirectResponse
     {
-        $object->update($this->validated($request));
+        $data = $this->validated($request);
+        $from = $object->focus_level;
+
+        DB::transaction(function () use ($object, $data, $from): void {
+            $object->update($data);
+
+            if ((int) $data['focus_level'] !== $from) {
+                ShtabEvent::record('focus_level_changed', [
+                    'object_id' => $object->id,
+                    'payload' => ['from' => $from, 'to' => (int) $data['focus_level']],
+                ]);
+            }
+        });
 
         return redirect()->back();
     }
