@@ -14,6 +14,7 @@ interface Props {
 
 export default function AssignmentDialog({ assignmentId, board, onClose }: Props) {
     const [comment, setComment] = useState('');
+    const [submitting, setSubmitting] = useState(false);
 
     if (!assignmentId) {
         return null;
@@ -30,7 +31,12 @@ export default function AssignmentDialog({ assignmentId, board, onClose }: Props
         router.post(
             `/shtab/assignments/${assignment.id}/end`,
             { comment: comment.trim() || null },
-            { preserveScroll: true, onSuccess: onClose },
+            {
+                preserveScroll: true,
+                onStart: () => setSubmitting(true),
+                onFinish: () => setSubmitting(false),
+                onSuccess: onClose,
+            },
         );
     };
 
@@ -50,7 +56,7 @@ export default function AssignmentDialog({ assignmentId, board, onClose }: Props
                         <Label htmlFor="end_comment">Комментарий к снятию</Label>
                         <Input id="end_comment" value={comment} onChange={(e) => setComment(e.target.value)} placeholder="релиз вышел / передал Диме…" />
                     </div>
-                    <Button variant="destructive" onClick={end} className="w-full">
+                    <Button variant="destructive" onClick={end} disabled={submitting} className="w-full">
                         Снять с территории
                     </Button>
                 </div>

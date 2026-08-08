@@ -20,17 +20,17 @@ class MetricsController extends Controller
             'comment' => ['nullable', 'string', 'max:1000'],
         ]);
 
-        $newValueText = $data['value_text'] ?? $metric->value_text;
+        $newValueText = array_key_exists('value_text', $data) ? $data['value_text'] : $metric->value_text;
 
         if ($metric->status === $data['status'] && $newValueText === $metric->value_text) {
             return redirect()->back();
         }
 
-        DB::transaction(function () use ($metric, $data): void {
+        DB::transaction(function () use ($metric, $data, $newValueText): void {
             $from = $metric->status;
             $metric->update([
                 'status' => $data['status'],
-                'value_text' => $data['value_text'] ?? $metric->value_text,
+                'value_text' => $newValueText,
             ]);
 
             ShtabEvent::record('metric_status_changed', [
@@ -39,7 +39,7 @@ class MetricsController extends Controller
                 'payload' => [
                     'from' => $from,
                     'to' => $data['status'],
-                    'value_text' => $metric->refresh()->value_text,
+                    'value_text' => $newValueText,
                 ],
                 'comment' => $data['comment'] ?? null,
             ]);

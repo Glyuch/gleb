@@ -132,3 +132,21 @@ it('creates, updates and deletes a metric', function () {
 
     expect(ShtabMetric::count())->toBe(0);
 });
+
+it('stores null parent_id when creating a product with a parent_id set', function () {
+    $parent = ShtabObject::factory()->create(['type' => 'product']);
+
+    $this->actingAs(crudAdmin())
+        ->post('/shtab/objects', [
+            'type' => 'product',
+            'parent_id' => $parent->id,
+            'name' => 'Новый продукт',
+            'emoji' => '📦',
+            'focus_level' => 0,
+            'color' => '#5B6EE8',
+        ])
+        ->assertRedirect();
+
+    $product = ShtabObject::query()->where('name', 'Новый продукт')->sole();
+    expect($product->parent_id)->toBeNull();
+});

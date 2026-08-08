@@ -22,6 +22,7 @@ export default function PersonFormDialog({ open, person, board, onClose }: Props
     const [color, setColor] = useState(person?.color ?? COLORS[0]);
     const [isDirect, setIsDirect] = useState(person?.is_direct ?? true);
     const [managerId, setManagerId] = useState<number | null>(person?.manager_id ?? null);
+    const [submitting, setSubmitting] = useState(false);
 
     if (!open) {
         return null;
@@ -37,7 +38,12 @@ export default function PersonFormDialog({ open, person, board, onClose }: Props
             manager_id: managerId,
             is_me: person?.is_me ?? false,
         };
-        const opts = { preserveScroll: true, onSuccess: onClose };
+        const opts = {
+            preserveScroll: true,
+            onStart: () => setSubmitting(true),
+            onFinish: () => setSubmitting(false),
+            onSuccess: onClose,
+        };
 
         if (person) {
             router.put(`/shtab/people/${person.id}`, payload, opts);
@@ -58,7 +64,13 @@ export default function PersonFormDialog({ open, person, board, onClose }: Props
                 <DialogHeader>
                     <DialogTitle>{person ? `Персонаж: ${person.name}` : 'Новый персонаж'}</DialogTitle>
                 </DialogHeader>
-                <div className="space-y-3">
+                <form
+                    className="space-y-3"
+                    onSubmit={(e) => {
+                        e.preventDefault();
+                        submit();
+                    }}
+                >
                     <div>
                         <Label htmlFor="p_name">Имя</Label>
                         <Input id="p_name" value={name} onChange={(e) => setName(e.target.value)} />
@@ -107,15 +119,15 @@ export default function PersonFormDialog({ open, person, board, onClose }: Props
                                 ))}
                         </select>
                     </div>
-                    <Button onClick={submit} disabled={!name.trim()} className="w-full">
+                    <Button type="submit" disabled={!name.trim() || submitting} className="w-full">
                         Сохранить
                     </Button>
-                    {person && (
-                        <Button variant="outline" onClick={archive} className="w-full">
-                            В архив (если без назначений)
-                        </Button>
-                    )}
-                </div>
+                </form>
+                {person && (
+                    <Button type="button" variant="outline" onClick={archive} className="w-full">
+                        В архив (если без назначений)
+                    </Button>
+                )}
             </DialogContent>
         </Dialog>
     );

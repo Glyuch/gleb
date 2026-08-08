@@ -76,7 +76,7 @@ class ObjectsController extends Controller
      */
     private function validated(Request $request): array
     {
-        return $request->validate([
+        $data = $request->validate([
             'type' => ['required', Rule::in(['product', 'project', 'enabler'])],
             'parent_id' => ['nullable', 'integer', 'exists:shtab_objects,id'],
             'name' => ['required', 'string', 'max:100'],
@@ -84,5 +84,11 @@ class ObjectsController extends Controller
             'focus_level' => ['required', 'integer', Rule::in([0, 1, 2])],
             'color' => ['required', 'string', 'max:7'],
         ]);
+
+        if ($data['type'] === 'product') {
+            $data['parent_id'] = null;
+        }
+
+        return $data;
     }
 }

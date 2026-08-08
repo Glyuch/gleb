@@ -22,14 +22,27 @@ export default function ObjectFormDialog({ open, object, board, onClose }: Props
     const [focusLevel, setFocusLevel] = useState<0 | 1 | 2>(object?.focus_level ?? 0);
     const [color, setColor] = useState(object?.color ?? COLORS[0]);
     const [parentId, setParentId] = useState<number | null>(object?.parent_id ?? null);
+    const [submitting, setSubmitting] = useState(false);
 
     if (!open) {
         return null;
     }
 
     const submit = () => {
-        const payload = { type, name: name.trim(), emoji: emoji.trim() || null, focus_level: focusLevel, color, parent_id: parentId };
-        const opts = { preserveScroll: true, onSuccess: onClose };
+        const payload = {
+            type,
+            name: name.trim(),
+            emoji: emoji.trim() || null,
+            focus_level: focusLevel,
+            color,
+            parent_id: type === 'product' ? null : parentId,
+        };
+        const opts = {
+            preserveScroll: true,
+            onStart: () => setSubmitting(true),
+            onFinish: () => setSubmitting(false),
+            onSuccess: onClose,
+        };
 
         if (object) {
             router.put(`/shtab/objects/${object.id}`, payload, opts);
@@ -50,7 +63,13 @@ export default function ObjectFormDialog({ open, object, board, onClose }: Props
                 <DialogHeader>
                     <DialogTitle>{object ? `Территория: ${object.name}` : 'Новая территория'}</DialogTitle>
                 </DialogHeader>
-                <div className="space-y-3">
+                <form
+                    className="space-y-3"
+                    onSubmit={(e) => {
+                        e.preventDefault();
+                        submit();
+                    }}
+                >
                     <div className="flex gap-2">
                         {(
                             [
@@ -132,15 +151,15 @@ export default function ObjectFormDialog({ open, object, board, onClose }: Props
                             />
                         ))}
                     </div>
-                    <Button onClick={submit} disabled={!name.trim()} className="w-full">
+                    <Button type="submit" disabled={!name.trim() || submitting} className="w-full">
                         Сохранить
                     </Button>
-                    {object && (
-                        <Button variant="outline" onClick={archive} className="w-full">
-                            В архив (если пуста)
-                        </Button>
-                    )}
-                </div>
+                </form>
+                {object && (
+                    <Button type="button" variant="outline" onClick={archive} className="w-full">
+                        В архив (если пуста)
+                    </Button>
+                )}
             </DialogContent>
         </Dialog>
     );

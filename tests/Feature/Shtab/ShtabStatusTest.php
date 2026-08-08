@@ -81,3 +81,18 @@ it('writes no event when the posted focus level is unchanged', function () {
     expect(ShtabEvent::count())->toBe(0)
         ->and($object->refresh()->focus_level)->toBe(1);
 });
+
+it('clears the metric value when posting the same status with a null value', function () {
+    $metric = ShtabMetric::factory()->create(['status' => 'green', 'value_text' => '12%']);
+
+    $this->actingAs(statusAdmin())
+        ->patch("/shtab/metrics/{$metric->id}/status", ['status' => 'green', 'value_text' => null])
+        ->assertRedirect();
+
+    expect($metric->refresh()->status)->toBe('green')
+        ->and($metric->value_text)->toBeNull();
+
+    $event = ShtabEvent::sole();
+    expect($event->type)->toBe('metric_status_changed')
+        ->and($event->payload)->toBe(['from' => 'green', 'to' => 'green', 'value_text' => null]);
+});

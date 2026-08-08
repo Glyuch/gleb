@@ -22,6 +22,7 @@ export default function AssignDialog({ intent, board, onClose }: Props) {
     const [personId, setPersonId] = useState<number | null>(null);
     const [roleLabel, setRoleLabel] = useState('');
     const [comment, setComment] = useState('');
+    const [submitting, setSubmitting] = useState(false);
 
     if (!intent) {
         return null;
@@ -38,7 +39,12 @@ export default function AssignDialog({ intent, board, onClose }: Props) {
         }
 
         const payload = { role_label: roleLabel.trim(), comment: comment.trim() || null, object_id: intent.objectId };
-        const opts = { preserveScroll: true, onSuccess: onClose };
+        const opts = {
+            preserveScroll: true,
+            onStart: () => setSubmitting(true),
+            onFinish: () => setSubmitting(false),
+            onSuccess: onClose,
+        };
 
         if (intent.moveAssignmentId) {
             router.post(`/shtab/assignments/${intent.moveAssignmentId}/move`, payload, opts);
@@ -69,7 +75,13 @@ export default function AssignDialog({ intent, board, onClose }: Props) {
                         ))}
                     </div>
                 )}
-                <div className="space-y-3">
+                <form
+                    className="space-y-3"
+                    onSubmit={(e) => {
+                        e.preventDefault();
+                        submit();
+                    }}
+                >
                     <div>
                         <Label htmlFor="role_label">Роль на территории</Label>
                         <Input id="role_label" value={roleLabel} onChange={(e) => setRoleLabel(e.target.value)} placeholder="владелец / аналитика / ведёт…" />
@@ -78,10 +90,10 @@ export default function AssignDialog({ intent, board, onClose }: Props) {
                         <Label htmlFor="assign_comment">Почему (для Хроники)</Label>
                         <Input id="assign_comment" value={comment} onChange={(e) => setComment(e.target.value)} placeholder="на месяц, до релиза" />
                     </div>
-                    <Button onClick={submit} disabled={!chosenPersonId || !roleLabel.trim()} className="w-full">
+                    <Button type="submit" disabled={!chosenPersonId || !roleLabel.trim() || submitting} className="w-full">
                         {intent.moveAssignmentId ? 'Перенести' : 'Назначить'}
                     </Button>
-                </div>
+                </form>
             </DialogContent>
         </Dialog>
     );

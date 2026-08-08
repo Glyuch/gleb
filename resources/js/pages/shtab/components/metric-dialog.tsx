@@ -26,6 +26,7 @@ export default function MetricDialog({ metricId, board, onClose }: Props) {
     const [status, setStatus] = useState<MetricStatus>(metric?.status ?? 'green');
     const [valueText, setValueText] = useState(metric?.value_text ?? '');
     const [comment, setComment] = useState('');
+    const [submitting, setSubmitting] = useState(false);
 
     if (!metricId || !metric) {
         return null;
@@ -35,7 +36,12 @@ export default function MetricDialog({ metricId, board, onClose }: Props) {
         router.patch(
             `/shtab/metrics/${metric.id}/status`,
             { status, value_text: valueText.trim() || null, comment: comment.trim() || null },
-            { preserveScroll: true, onSuccess: onClose },
+            {
+                preserveScroll: true,
+                onStart: () => setSubmitting(true),
+                onFinish: () => setSubmitting(false),
+                onSuccess: onClose,
+            },
         );
     };
 
@@ -84,7 +90,7 @@ export default function MetricDialog({ metricId, board, onClose }: Props) {
                         <Label htmlFor="metric_comment">Комментарий</Label>
                         <Input id="metric_comment" value={comment} onChange={(e) => setComment(e.target.value)} />
                     </div>
-                    <Button onClick={submit} className="w-full">
+                    <Button onClick={submit} disabled={submitting} className="w-full">
                         Сохранить
                     </Button>
                     <div className="flex gap-2">

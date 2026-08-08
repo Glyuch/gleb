@@ -1,4 +1,5 @@
 import { router } from '@inertiajs/react';
+import { useState } from 'react';
 import type { Board, BoardObject } from '../types';
 import { FIRE, STATUS_DOT } from '../types';
 import PersonChip from './person-chip';
@@ -20,24 +21,37 @@ const TYPE_LABEL: Record<BoardObject['type'], string> = {
 };
 
 export default function SectorCard({ object, board, onAssignClick, onPersonDrop, onPersonClick, onMetricClick, onEditClick }: Props) {
+    const [dragOver, setDragOver] = useState(false);
     const uncoveredHot = object.is_uncovered && object.focus_level >= 1;
+    const accentColor = object.is_uncovered ? (uncoveredHot ? '#D97706' : '#94A3B8') : object.color;
     const borderStyle = object.is_uncovered
-        ? { borderColor: uncoveredHot ? '#D97706' : '#94A3B8' }
+        ? { borderColor: accentColor }
         : { borderColor: object.color, backgroundColor: `${object.color}14` };
 
     return (
         <div
             className={`rounded-xl border-[1.5px] p-3 ${object.is_uncovered ? 'border-dashed' : ''}`}
-            style={borderStyle}
-            onDragOver={(e) => e.preventDefault()}
+            style={{ ...borderStyle, outline: dragOver ? `2px solid ${accentColor}` : undefined, outlineOffset: '2px' }}
+            onDragOver={(e) => {
+                e.preventDefault();
+                setDragOver(true);
+            }}
+            onDragLeave={() => setDragOver(false)}
             onDrop={(e) => {
                 e.preventDefault();
+                setDragOver(false);
                 const personId = Number(e.dataTransfer.getData('personId'));
                 const assignmentId = e.dataTransfer.getData('assignmentId');
 
-                if (personId) {
-                    onPersonDrop(personId, assignmentId ? Number(assignmentId) : null, object.id);
+                if (!personId) {
+                    return;
                 }
+
+                if (object.assignments.some((a) => a.person_id === personId)) {
+                    return;
+                }
+
+                onPersonDrop(personId, assignmentId ? Number(assignmentId) : null, object.id);
             }}
         >
             <div className="mb-2 flex items-center justify-between">
