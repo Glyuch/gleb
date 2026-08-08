@@ -9,6 +9,9 @@ use App\Http\Controllers\Admin\SiteDashboardController;
 use App\Http\Controllers\GameController;
 use App\Http\Controllers\NutritionBotController;
 use App\Http\Controllers\NutritionStatsController;
+use App\Http\Controllers\Shtab\AssignmentsController;
+use App\Http\Controllers\Shtab\MetricsController;
+use App\Http\Controllers\Shtab\ObjectsController;
 use App\Http\Controllers\Shtab\ShtabController;
 use Illuminate\Support\Facades\Route;
 
@@ -58,6 +61,11 @@ Route::middleware(['auth', 'admin'])->prefix('admin')->name('admin.')->group(fun
 
 Route::middleware(['auth', 'admin'])->prefix('shtab')->name('shtab.')->group(function () {
     Route::get('/', [ShtabController::class, 'index'])->name('index');
+    Route::post('/assignments', [AssignmentsController::class, 'store'])->name('assignments.store');
+    Route::post('/assignments/{assignment}/end', [AssignmentsController::class, 'end'])->name('assignments.end');
+    Route::post('/assignments/{assignment}/move', [AssignmentsController::class, 'move'])->name('assignments.move');
+    Route::patch('/metrics/{metric}/status', [MetricsController::class, 'status'])->name('metrics.status');
+    Route::patch('/objects/{object}/focus', [ObjectsController::class, 'focus'])->name('objects.focus');
 });
 
 Route::post('/nutrition-bot/webhook', [NutritionBotController::class, 'webhook'])
