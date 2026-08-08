@@ -1,6 +1,6 @@
 import { router } from '@inertiajs/react';
 import { useState } from 'react';
-import type { Board, BoardObject } from '../types';
+import type { Board, BoardObject, MetricStatus } from '../types';
 import { FIRE, STATUS_DOT } from '../types';
 import PersonChip from './person-chip';
 
@@ -18,6 +18,12 @@ const TYPE_LABEL: Record<BoardObject['type'], string> = {
     product: '',
     project: 'проект',
     enabler: 'энейблер',
+};
+
+const STATUS_PILL: Record<MetricStatus, string> = {
+    green: 'bg-green-50 text-green-800',
+    yellow: 'bg-yellow-50 text-yellow-800',
+    red: 'bg-red-50 text-red-800',
 };
 
 export default function SectorCard({ object, board, onAssignClick, onPersonDrop, onPersonClick, onMetricClick, onEditClick }: Props) {
@@ -54,37 +60,45 @@ export default function SectorCard({ object, board, onAssignClick, onPersonDrop,
                 onPersonDrop(personId, assignmentId ? Number(assignmentId) : null, object.id);
             }}
         >
-            <div className="mb-2 flex items-center justify-between">
-                <button type="button" onClick={() => onEditClick(object.id)} className="cursor-pointer text-[11px] font-extrabold tracking-wide text-[#3B475C] uppercase">
+            <div className="mb-1 flex items-center">
+                <button type="button" onClick={() => onEditClick(object.id)} className="cursor-pointer text-left text-[11px] font-extrabold tracking-wide text-[#3B475C] uppercase">
                     {FIRE[object.focus_level]} {object.emoji} {object.name}
                     {TYPE_LABEL[object.type] && <span className="ml-1 font-semibold text-gray-400 normal-case">· {TYPE_LABEL[object.type]}</span>}
                 </button>
-                <span className="flex gap-1">
-                    {object.metrics.map((m) => (
-                        <button
-                            key={m.id}
-                            type="button"
-                            title={`${m.name}${m.value_text ? `: ${m.value_text}` : ''}`}
-                            aria-label={m.name}
-                            onClick={() => onMetricClick(m.id)}
-                            className={`h-3 w-3 cursor-pointer rounded-full ${STATUS_DOT[m.status]}`}
-                        />
-                    ))}
+            </div>
+            {object.description && (
+                <p className="mb-1.5 line-clamp-2 text-[10px] leading-snug text-gray-500" title={object.description}>
+                    {object.description}
+                </p>
+            )}
+            <div className="mb-2 flex flex-wrap items-center gap-1">
+                {object.metrics.map((m) => (
                     <button
+                        key={m.id}
                         type="button"
-                        onClick={() => {
-                            const name = window.prompt('Название метрики');
-
-                            if (name?.trim()) {
-                                router.post('/shtab/metrics', { object_id: object.id, name: name.trim() }, { preserveScroll: true });
-                            }
-                        }}
-                        className="h-3 w-3 cursor-pointer rounded-full border border-dashed border-gray-400 text-[8px] leading-none text-gray-400"
-                        title="Добавить метрику"
+                        title={`${m.name}${m.value_text ? `: ${m.value_text}` : ''}`}
+                        aria-label={m.name}
+                        onClick={() => onMetricClick(m.id)}
+                        className={`flex cursor-pointer items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold ${STATUS_PILL[m.status]}`}
                     >
-                        +
+                        {m.name}
+                        <span className={`h-2.5 w-2.5 rounded-full ${STATUS_DOT[m.status]}`} />
                     </button>
-                </span>
+                ))}
+                <button
+                    type="button"
+                    onClick={() => {
+                        const name = window.prompt('Название метрики');
+
+                        if (name?.trim()) {
+                            router.post('/shtab/metrics', { object_id: object.id, name: name.trim() }, { preserveScroll: true });
+                        }
+                    }}
+                    className="cursor-pointer rounded-full border border-dashed border-gray-400 px-2 py-0.5 text-[10px] font-semibold text-gray-400 transition hover:border-gray-600 hover:text-gray-600"
+                    title="Добавить метрику"
+                >
+                    + метрика
+                </button>
             </div>
             <div className="flex flex-wrap gap-2">
                 {object.assignments.map((a) => {

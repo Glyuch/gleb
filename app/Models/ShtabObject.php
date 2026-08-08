@@ -15,6 +15,7 @@ use Illuminate\Support\Carbon;
  * @property string $type
  * @property int|null $parent_id
  * @property string $name
+ * @property string|null $description
  * @property string|null $emoji
  * @property int $focus_level
  * @property string $color
@@ -31,7 +32,7 @@ class ShtabObject extends Model
     protected $table = 'shtab_objects';
 
     protected $fillable = [
-        'type', 'parent_id', 'name', 'emoji', 'focus_level', 'color', 'sort', 'archived_at',
+        'type', 'parent_id', 'name', 'description', 'emoji', 'focus_level', 'color', 'sort', 'archived_at',
     ];
 
     protected function casts(): array

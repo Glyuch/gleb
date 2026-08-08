@@ -74,6 +74,7 @@ it('creates a project inside a product and validates type', function () {
             'type' => 'project',
             'parent_id' => $product->id,
             'name' => 'Запуск v2',
+            'description' => 'Вывод второй версии на рынок',
             'emoji' => '🚀',
             'focus_level' => 1,
             'color' => '#14B8A6',
@@ -82,6 +83,7 @@ it('creates a project inside a product and validates type', function () {
 
     $project = ShtabObject::query()->where('type', 'project')->sole();
     expect($project->parent->is($product))->toBeTrue()
+        ->and($project->description)->toBe('Вывод второй версии на рынок')
         ->and(ShtabEvent::query()->where('type', 'object_created')->count())->toBe(1);
 
     $this->actingAs(crudAdmin())

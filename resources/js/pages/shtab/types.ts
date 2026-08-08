@@ -50,6 +50,7 @@ export interface BoardObject {
     type: 'product' | 'project' | 'enabler';
     parent_id: number | null;
     name: string;
+    description: string | null;
     emoji: string | null;
     focus_level: 0 | 1 | 2;
     color: string;

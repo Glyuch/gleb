@@ -80,6 +80,7 @@ class ObjectsController extends Controller
             'type' => ['required', Rule::in(['product', 'project', 'enabler'])],
             'parent_id' => ['nullable', 'integer', 'exists:shtab_objects,id'],
             'name' => ['required', 'string', 'max:100'],
+            'description' => ['nullable', 'string', 'max:2000'],
             'emoji' => ['nullable', 'string', 'max:16'],
             'focus_level' => ['required', 'integer', Rule::in([0, 1, 2])],
             'color' => ['required', 'string', 'max:7'],

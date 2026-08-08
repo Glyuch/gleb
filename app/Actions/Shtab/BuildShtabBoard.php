@@ -80,6 +80,7 @@ class BuildShtabBoard
                     'type' => $object->type,
                     'parent_id' => $object->parent_id,
                     'name' => $object->name,
+                    'description' => $object->description,
                     'emoji' => $object->emoji,
                     'focus_level' => $object->focus_level,
                     'color' => $object->color,

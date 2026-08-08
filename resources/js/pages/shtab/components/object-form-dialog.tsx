@@ -8,6 +8,13 @@ import type { Board, BoardObject } from '../types';
 
 const COLORS = ['#5B6EE8', '#0EA5E9', '#14B8A6', '#F59E0B', '#EC4899', '#64748B'];
 
+// prettier-ignore
+const EMOJIS = [
+    '🏰', '🏙️', '🏘️', '🚀', '⚙️', '🛠️', '💱', '👛',
+    '💳', '🏦', '📈', '📊', '🧪', '🔐', '🛡️', '🌉',
+    '🤝', '📣', '🧲', '🛰️', '🧭', '⚡', '🎯', '🧩',
+];
+
 interface Props {
     open: boolean;
     object: BoardObject | null; // null → создание
@@ -18,6 +25,7 @@ interface Props {
 export default function ObjectFormDialog({ open, object, board, onClose }: Props) {
     const [type, setType] = useState<BoardObject['type']>(object?.type ?? 'product');
     const [name, setName] = useState(object?.name ?? '');
+    const [description, setDescription] = useState(object?.description ?? '');
     const [emoji, setEmoji] = useState(object?.emoji ?? '🏰');
     const [focusLevel, setFocusLevel] = useState<0 | 1 | 2>(object?.focus_level ?? 0);
     const [color, setColor] = useState(object?.color ?? COLORS[0]);
@@ -32,6 +40,7 @@ export default function ObjectFormDialog({ open, object, board, onClose }: Props
         const payload = {
             type,
             name: name.trim(),
+            description: description.trim() || null,
             emoji: emoji.trim() || null,
             focus_level: focusLevel,
             color,
@@ -88,14 +97,44 @@ export default function ObjectFormDialog({ open, object, board, onClose }: Props
                             </button>
                         ))}
                     </div>
-                    <div className="grid grid-cols-[1fr_70px] gap-3">
-                        <div>
-                            <Label htmlFor="o_name">Название</Label>
-                            <Input id="o_name" value={name} onChange={(e) => setName(e.target.value)} />
-                        </div>
-                        <div>
-                            <Label htmlFor="o_emoji">Эмодзи</Label>
-                            <Input id="o_emoji" value={emoji} onChange={(e) => setEmoji(e.target.value)} maxLength={4} />
+                    <div>
+                        <Label htmlFor="o_name">Название</Label>
+                        <Input id="o_name" value={name} onChange={(e) => setName(e.target.value)} />
+                    </div>
+                    <div>
+                        <Label htmlFor="o_desc">Контекст / описание</Label>
+                        <textarea
+                            id="o_desc"
+                            rows={3}
+                            maxLength={2000}
+                            value={description}
+                            onChange={(e) => setDescription(e.target.value)}
+                            className="w-full rounded-md border border-gray-300 p-2 text-sm"
+                        />
+                    </div>
+                    <div>
+                        <Label htmlFor="o_emoji">Эмодзи</Label>
+                        <div className="flex items-start gap-2">
+                            <div className="grid grid-cols-8 gap-1">
+                                {EMOJIS.map((em) => (
+                                    <button
+                                        key={em}
+                                        type="button"
+                                        aria-label={`Эмодзи ${em}`}
+                                        onClick={() => setEmoji(em)}
+                                        className={`flex h-7 w-7 cursor-pointer items-center justify-center rounded-md text-base ${emoji === em ? 'ring-2 ring-gray-900 ring-offset-1' : 'hover:bg-gray-100'}`}
+                                    >
+                                        {em}
+                                    </button>
+                                ))}
+                            </div>
+                            <Input
+                                id="o_emoji"
+                                value={emoji}
+                                onChange={(e) => setEmoji(e.target.value)}
+                                maxLength={4}
+                                className="w-14 shrink-0 text-center"
+                            />
                         </div>
                     </div>
                     <div>
