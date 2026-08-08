@@ -76,6 +76,14 @@ class ShtabObject extends Model
     }
 
     /**
+     * @return HasMany<ShtabTask, $this>
+     */
+    public function tasks(): HasMany
+    {
+        return $this->hasMany(ShtabTask::class, 'object_id');
+    }
+
+    /**
      * @return HasMany<ShtabAssignment, $this>
      */
     public function activeAssignments(): HasMany

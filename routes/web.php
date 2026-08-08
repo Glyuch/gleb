@@ -14,6 +14,7 @@ use App\Http\Controllers\Shtab\MetricsController;
 use App\Http\Controllers\Shtab\ObjectsController;
 use App\Http\Controllers\Shtab\PeopleController;
 use App\Http\Controllers\Shtab\ShtabController;
+use App\Http\Controllers\Shtab\TasksController;
 use Illuminate\Support\Facades\Route;
 
 Route::inertia('/', 'welcome')->name('home');
@@ -79,6 +80,10 @@ Route::middleware(['auth', 'admin'])->prefix('shtab')->name('shtab.')->group(fun
     Route::post('/metrics', [MetricsController::class, 'store'])->name('metrics.store');
     Route::put('/metrics/{metric}', [MetricsController::class, 'update'])->name('metrics.update');
     Route::delete('/metrics/{metric}', [MetricsController::class, 'destroy'])->name('metrics.destroy');
+
+    Route::post('/tasks', [TasksController::class, 'store'])->name('tasks.store');
+    Route::patch('/tasks/{task}', [TasksController::class, 'update'])->name('tasks.update');
+    Route::delete('/tasks/{task}', [TasksController::class, 'destroy'])->name('tasks.destroy');
 });
 
 Route::post('/nutrition-bot/webhook', [NutritionBotController::class, 'webhook'])
