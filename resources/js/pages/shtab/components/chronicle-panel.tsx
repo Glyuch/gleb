@@ -17,6 +17,14 @@ const TYPE_META: Record<string, { dot: string; label: (e: ChronicleEvent) => str
         dot: 'bg-orange-500',
         label: (e) => `Фокус ${e.object?.name ?? '—'}: ${String(e.payload?.from ?? '?')} → ${String(e.payload?.to ?? '?')}`,
     },
+    task_done: {
+        dot: 'bg-emerald-500',
+        label: (e) => `✅ Задача закрыта: „${String(e.payload?.title ?? '?')}" — ${e.object?.name ?? '—'}`,
+    },
+    task_assigned: {
+        dot: 'bg-blue-400',
+        label: (e) => `${e.person?.name ?? '—'} ← задача „${String(e.payload?.title ?? '?')}"`,
+    },
     person_created: { dot: 'bg-blue-400', label: (e) => `Добавлен ${e.person?.name ?? '—'}` },
     person_archived: { dot: 'bg-slate-400', label: (e) => `В архив: ${e.person?.name ?? '—'}` },
     object_created: { dot: 'bg-blue-400', label: (e) => `Новая территория: ${e.object?.name ?? '—'}` },

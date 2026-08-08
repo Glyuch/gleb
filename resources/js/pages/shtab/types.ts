@@ -18,6 +18,20 @@ export interface PersonAssignment {
     days: number;
 }
 
+export interface BoardTask {
+    id: number;
+    title: string;
+    is_done: boolean;
+    is_key: boolean;
+    assignee: { id: number; name: string; initials: string; color: string } | null;
+}
+
+export interface PersonKeyTask {
+    object_name: string | null;
+    object_emoji: string | null;
+    title: string;
+}
+
 export interface BoardPerson {
     id: number;
     name: string;
@@ -32,6 +46,7 @@ export interface BoardPerson {
     hot_count: number;
     is_overloaded: boolean;
     in_reserve: boolean;
+    key_tasks: PersonKeyTask[];
 }
 
 export interface ObjectAssignment {
@@ -56,6 +71,9 @@ export interface BoardObject {
     color: string;
     metrics: BoardMetric[];
     assignments: ObjectAssignment[];
+    tasks: BoardTask[];
+    open_tasks: number;
+    total_tasks: number;
     is_uncovered: boolean;
     uncovered_days: number | null;
 }

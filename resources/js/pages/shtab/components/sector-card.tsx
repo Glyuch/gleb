@@ -12,6 +12,7 @@ interface Props {
     onPersonClick: (assignmentId: number) => void;
     onMetricClick: (metricId: number) => void;
     onEditClick: (objectId: number) => void;
+    onTasksClick: (objectId: number) => void;
 }
 
 const TYPE_LABEL: Record<BoardObject['type'], string> = {
@@ -26,9 +27,10 @@ const STATUS_PILL: Record<MetricStatus, string> = {
     red: 'bg-red-50 text-red-800',
 };
 
-export default function SectorCard({ object, board, onAssignClick, onPersonDrop, onPersonClick, onMetricClick, onEditClick }: Props) {
+export default function SectorCard({ object, board, onAssignClick, onPersonDrop, onPersonClick, onMetricClick, onEditClick, onTasksClick }: Props) {
     const [dragOver, setDragOver] = useState(false);
     const uncoveredHot = object.is_uncovered && object.focus_level >= 1;
+    const keyTask = object.tasks.find((t) => !t.is_done && t.is_key);
     const accentColor = object.is_uncovered ? (uncoveredHot ? '#D97706' : '#94A3B8') : object.color;
     const borderStyle = object.is_uncovered
         ? { borderColor: accentColor }
@@ -71,6 +73,25 @@ export default function SectorCard({ object, board, onAssignClick, onPersonDrop,
                     {object.description}
                 </p>
             )}
+            {keyTask && (
+                <p className="mb-1.5 flex items-center gap-1 text-[10px] font-semibold text-gray-700">
+                    <span aria-hidden="true">⭐</span>
+                    <span className="truncate" title={keyTask.title}>
+                        {keyTask.title}
+                    </span>
+                    {keyTask.assignee && (
+                        <span
+                            role="img"
+                            aria-label={keyTask.assignee.name}
+                            title={keyTask.assignee.name}
+                            className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full text-[7px] font-extrabold text-white"
+                            style={{ backgroundColor: keyTask.assignee.color }}
+                        >
+                            {keyTask.assignee.initials}
+                        </span>
+                    )}
+                </p>
+            )}
             <div className="mb-2 flex flex-wrap items-center gap-1">
                 {object.metrics.map((m) => (
                     <button
@@ -98,6 +119,18 @@ export default function SectorCard({ object, board, onAssignClick, onPersonDrop,
                     title="Добавить метрику"
                 >
                     + метрика
+                </button>
+                <button
+                    type="button"
+                    onClick={() => onTasksClick(object.id)}
+                    title="Задачи территории"
+                    className={
+                        object.total_tasks > 0
+                            ? 'cursor-pointer rounded-full bg-white/70 px-2 py-0.5 text-[10px] font-semibold text-gray-600 ring-1 ring-gray-200 transition hover:text-gray-900'
+                            : 'cursor-pointer rounded-full border border-dashed border-gray-400 px-2 py-0.5 text-[10px] font-semibold text-gray-400 transition hover:border-gray-600 hover:text-gray-600'
+                    }
+                >
+                    {object.total_tasks > 0 ? `задачи ${object.open_tasks}/${object.total_tasks}` : '+ задача'}
                 </button>
             </div>
             <div className="flex flex-wrap gap-2">

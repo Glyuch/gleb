@@ -2,7 +2,7 @@ import { useState } from 'react';
 import type { Board, ChronicleEvent } from '../types';
 import ChroniclePanel from './chronicle-panel';
 
-type Filter = 'all' | 'assignments' | 'metrics';
+type Filter = 'all' | 'assignments' | 'metrics' | 'tasks';
 
 export default function ChronicleTab({ board, events }: { board: Board; events: ChronicleEvent[] }) {
     const [filter, setFilter] = useState<Filter>('all');
@@ -15,6 +15,10 @@ export default function ChronicleTab({ board, events }: { board: Board; events: 
         }
 
         if (filter === 'metrics' && e.type !== 'metric_status_changed') {
+            return false;
+        }
+
+        if (filter === 'tasks' && !e.type.startsWith('task_')) {
             return false;
         }
 
@@ -37,6 +41,7 @@ export default function ChronicleTab({ board, events }: { board: Board; events: 
                         ['all', 'все'],
                         ['assignments', 'назначения'],
                         ['metrics', 'метрики'],
+                        ['tasks', 'задачи'],
                     ] as const
                 ).map(([value, label]) => (
                     <button

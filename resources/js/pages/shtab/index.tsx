@@ -11,6 +11,7 @@ import ObjectFormDialog from './components/object-form-dialog';
 import PeopleTab from './components/people-tab';
 import PersonFormDialog from './components/person-form-dialog';
 import SectorCard from './components/sector-card';
+import TasksDialog from './components/tasks-dialog';
 import type { Board, BoardObject, BoardPerson, ChronicleEvent } from './types';
 import { STATUS_DOT } from './types';
 
@@ -56,6 +57,7 @@ export default function ShtabIndex({ board, events }: Props) {
     const [personForm, setPersonForm] = useState<{ open: boolean; person: BoardPerson | null }>({ open: false, person: null });
     const [objectForm, setObjectForm] = useState<{ open: boolean; object: BoardObject | null }>({ open: false, object: null });
     const [selectedPersonId, setSelectedPersonId] = useState<number | null>(null);
+    const [tasksObjectId, setTasksObjectId] = useState<number | null>(null);
     const reserve = board.people.filter((p) => p.in_reserve);
 
     useEffect(() => {
@@ -167,6 +169,7 @@ export default function ShtabIndex({ board, events }: Props) {
                                 onPersonClick={(assignmentId) => setOpenAssignmentId(assignmentId)}
                                 onMetricClick={(metricId) => setOpenMetricId(metricId)}
                                 onEditClick={(objectId) => setObjectForm({ open: true, object: board.objects.find((o) => o.id === objectId) ?? null })}
+                                onTasksClick={(objectId) => setTasksObjectId(objectId)}
                             />
                         ))}
                         {board.objects.length === 0 && (
@@ -208,6 +211,7 @@ export default function ShtabIndex({ board, events }: Props) {
             />
             <AssignmentDialog key={openAssignmentId ?? 'a'} assignmentId={openAssignmentId} board={board} onClose={() => setOpenAssignmentId(null)} />
             <MetricDialog key={openMetricId ?? 'm'} metricId={openMetricId} board={board} onClose={() => setOpenMetricId(null)} />
+            <TasksDialog key={tasksObjectId ?? 't'} objectId={tasksObjectId} board={board} onClose={() => setTasksObjectId(null)} />
             <PersonFormDialog
                 key={personForm.person?.id ?? 'new-p'}
                 open={personForm.open}

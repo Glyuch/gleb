@@ -55,6 +55,11 @@ function PersonCardLarge({
                         {a.object_emoji} <b>{a.object_name}</b> — {a.role_label} · {a.days} дн
                     </div>
                 ))}
+                {person.key_tasks.map((t) => (
+                    <div key={`${t.object_name ?? '—'}:${t.title}`} className="rounded-md bg-amber-50 px-2 py-1 text-[10px] text-gray-700">
+                        ⭐ {t.object_emoji} <b>{t.object_name ?? '—'}</b>: {t.title}
+                    </div>
+                ))}
                 {person.in_reserve && <div className="text-center text-[10px] font-bold text-amber-600">без фокуса!</div>}
             </div>
             <button
