@@ -1,3 +1,4 @@
+import { router } from '@inertiajs/react';
 import type { Board, BoardObject } from '../types';
 import { FIRE, STATUS_DOT } from '../types';
 import PersonChip from './person-chip';
@@ -55,6 +56,20 @@ export default function SectorCard({ object, board, onAssignClick, onPersonDrop,
                             className={`h-3 w-3 cursor-pointer rounded-full ${STATUS_DOT[m.status]}`}
                         />
                     ))}
+                    <button
+                        type="button"
+                        onClick={() => {
+                            const name = window.prompt('Название метрики');
+
+                            if (name?.trim()) {
+                                router.post('/shtab/metrics', { object_id: object.id, name: name.trim() }, { preserveScroll: true });
+                            }
+                        }}
+                        className="h-3 w-3 cursor-pointer rounded-full border border-dashed border-gray-400 text-[8px] leading-none text-gray-400"
+                        title="Добавить метрику"
+                    >
+                        +
+                    </button>
                 </span>
             </div>
             <div className="flex flex-wrap gap-2">
