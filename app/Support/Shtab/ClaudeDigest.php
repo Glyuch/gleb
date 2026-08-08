@@ -61,6 +61,9 @@ PROMPT;
                 ->post(self::ENDPOINT, [
                     'model' => (string) config('shtab.ai_model'),
                     'max_tokens' => 16000,
+                    // Forced tool_choice несовместим с thinking; на claude-opus-5 thinking включён
+                    // по умолчанию, поэтому выключаем явно (допустимо при effort high и ниже).
+                    'thinking' => ['type' => 'disabled'],
                     'system' => self::SYSTEM_PROMPT,
                     'tools' => [self::toolDefinition()],
                     'tool_choice' => ['type' => 'tool', 'name' => 'propose_operations'],
