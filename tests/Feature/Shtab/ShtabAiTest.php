@@ -70,7 +70,7 @@ it('digest returns operations and unparsed and sends model, tool_choice and text
             && $request->header('anthropic-version') === ['2023-06-01']
             && ($body['model'] ?? null) === 'claude-opus-5'
             && ($body['max_tokens'] ?? null) === 16000
-            && ! array_key_exists('thinking', $body)
+            && ($body['thinking'] ?? null) === ['type' => 'disabled']
             && ($body['tool_choice'] ?? null) === ['type' => 'tool', 'name' => 'propose_operations']
             && ($body['tools'][0]['name'] ?? null) === 'propose_operations'
             && str_contains($content, 'Вика уходит с Обмена на KYC')
