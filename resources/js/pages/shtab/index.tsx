@@ -5,9 +5,10 @@ import AssignDialog from './components/assign-dialog';
 import type { AssignIntent } from './components/assign-dialog';
 import AssignmentDialog from './components/assignment-dialog';
 import ChroniclePanel from './components/chronicle-panel';
+import ChronicleTab from './components/chronicle-tab';
 import MetricDialog from './components/metric-dialog';
 import ObjectFormDialog from './components/object-form-dialog';
-import PersonChip from './components/person-chip';
+import PeopleTab from './components/people-tab';
 import PersonFormDialog from './components/person-form-dialog';
 import SectorCard from './components/sector-card';
 import type { Board, BoardObject, BoardPerson, ChronicleEvent } from './types';
@@ -54,6 +55,7 @@ export default function ShtabIndex({ board, events }: Props) {
     const [openMetricId, setOpenMetricId] = useState<number | null>(null);
     const [personForm, setPersonForm] = useState<{ open: boolean; person: BoardPerson | null }>({ open: false, person: null });
     const [objectForm, setObjectForm] = useState<{ open: boolean; object: BoardObject | null }>({ open: false, object: null });
+    const [selectedPersonId, setSelectedPersonId] = useState<number | null>(null);
     const reserve = board.people.filter((p) => p.in_reserve);
 
     useEffect(() => {
@@ -167,19 +169,19 @@ export default function ShtabIndex({ board, events }: Props) {
 
             {tab === 'people' && (
                 <main className="p-5">
-                    <div className="flex flex-wrap gap-3">
-                        {board.people.map((p) => (
-                            <PersonChip key={p.id} person={p} />
-                        ))}
-                    </div>
+                    <PeopleTab
+                        board={board}
+                        events={events}
+                        onPersonEdit={(person) => setPersonForm({ open: true, person })}
+                        selectedPersonId={selectedPersonId}
+                        onSelectPerson={setSelectedPersonId}
+                    />
                 </main>
             )}
 
             {tab === 'chronicle' && (
-                <main className="mx-auto max-w-2xl p-5">
-                    <div className="rounded-xl border border-[#E4E1D8] bg-white p-5">
-                        <ChroniclePanel events={events} />
-                    </div>
+                <main className="p-5">
+                    <ChronicleTab board={board} events={events} />
                 </main>
             )}
 
