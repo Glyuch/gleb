@@ -33,7 +33,10 @@ export default function SectorCard({ object, board, onAssignClick, onPersonDrop,
                 e.preventDefault();
                 const personId = Number(e.dataTransfer.getData('personId'));
                 const assignmentId = e.dataTransfer.getData('assignmentId');
-                if (personId) onPersonDrop(personId, assignmentId ? Number(assignmentId) : null, object.id);
+
+                if (personId) {
+                    onPersonDrop(personId, assignmentId ? Number(assignmentId) : null, object.id);
+                }
             }}
         >
             <div className="mb-2 flex items-center justify-between">
@@ -47,6 +50,7 @@ export default function SectorCard({ object, board, onAssignClick, onPersonDrop,
                             key={m.id}
                             type="button"
                             title={`${m.name}${m.value_text ? `: ${m.value_text}` : ''}`}
+                            aria-label={m.name}
                             onClick={() => onMetricClick(m.id)}
                             className={`h-3 w-3 cursor-pointer rounded-full ${STATUS_DOT[m.status]}`}
                         />
@@ -56,6 +60,7 @@ export default function SectorCard({ object, board, onAssignClick, onPersonDrop,
             <div className="flex flex-wrap gap-2">
                 {object.assignments.map((a) => {
                     const person = board.people.find((p) => p.id === a.person_id);
+
                     return person ? (
                         <PersonChip
                             key={a.id}
@@ -68,7 +73,15 @@ export default function SectorCard({ object, board, onAssignClick, onPersonDrop,
                             }}
                             onClick={() => onPersonClick(a.id)}
                         />
-                    ) : null;
+                    ) : (
+                        <span
+                            key={a.id}
+                            className="flex items-center gap-1 self-start rounded-lg px-2 py-1 text-[10px] font-semibold text-white"
+                            style={{ backgroundColor: a.person_color ?? '#94A3B8' }}
+                        >
+                            {a.person_initials ?? '?'} {a.person_name ?? '—'} · {a.role_label}
+                        </span>
+                    );
                 })}
                 <button
                     type="button"

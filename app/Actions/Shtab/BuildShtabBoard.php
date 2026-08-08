@@ -34,7 +34,7 @@ class BuildShtabBoard
         return [
             'people' => $people->map(function (ShtabPerson $person) use ($today, $threshold): array {
                 $hotCount = $person->activeAssignments
-                    ->filter(fn (ShtabAssignment $a): bool => ($a->object?->focus_level ?? 0) >= 1)
+                    ->filter(fn (ShtabAssignment $a): bool => $a->object->focus_level >= 1)
                     ->count();
 
                 return [

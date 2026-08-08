@@ -11,11 +11,11 @@ const TYPE_META: Record<string, { dot: string; label: (e: ChronicleEvent) => str
     },
     metric_status_changed: {
         dot: 'bg-red-500',
-        label: (e) => `${e.metric?.name ?? '—'}: ${String(e.payload?.from)} → ${String(e.payload?.to)}`,
+        label: (e) => `${e.metric?.name ?? '—'}: ${String(e.payload?.from ?? '?')} → ${String(e.payload?.to ?? '?')}`,
     },
     focus_level_changed: {
         dot: 'bg-orange-500',
-        label: (e) => `Фокус ${e.object?.name ?? '—'}: ${String(e.payload?.from)} → ${String(e.payload?.to)}`,
+        label: (e) => `Фокус ${e.object?.name ?? '—'}: ${String(e.payload?.from ?? '?')} → ${String(e.payload?.to ?? '?')}`,
     },
     person_created: { dot: 'bg-blue-400', label: (e) => `Добавлен ${e.person?.name ?? '—'}` },
     person_archived: { dot: 'bg-slate-400', label: (e) => `В архив: ${e.person?.name ?? '—'}` },
@@ -26,8 +26,15 @@ const TYPE_META: Record<string, { dot: string; label: (e: ChronicleEvent) => str
 function formatWhen(iso: string): string {
     const d = new Date(iso);
     const days = Math.floor((Date.now() - d.getTime()) / 86_400_000);
-    if (days === 0) return `сегодня, ${d.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}`;
-    if (days === 1) return 'вчера';
+
+    if (days === 0) {
+        return `сегодня, ${d.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}`;
+    }
+
+    if (days === 1) {
+        return 'вчера';
+    }
+
     return `${d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' })} · ${days} дн назад`;
 }
 
@@ -39,6 +46,7 @@ export default function ChroniclePanel({ events, limit }: { events: ChronicleEve
             {shown.length === 0 && <p className="text-xs text-gray-400">Пока пусто — первое назначение появится здесь.</p>}
             {shown.map((e) => {
                 const meta = TYPE_META[e.type] ?? { dot: 'bg-gray-300', label: () => e.type };
+
                 return (
                     <div key={e.id} className="flex gap-2">
                         <span className={`mt-1 h-2 w-2 shrink-0 rounded-full ${meta.dot}`} />

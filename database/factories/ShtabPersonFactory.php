@@ -6,10 +6,16 @@ use App\Models\ShtabPerson;
 use Illuminate\Database\Eloquent\Factories\Factory;
 use Illuminate\Support\Str;
 
+/**
+ * @extends Factory<ShtabPerson>
+ */
 class ShtabPersonFactory extends Factory
 {
     protected $model = ShtabPerson::class;
 
+    /**
+     * @return array<string, mixed>
+     */
     public function definition(): array
     {
         $name = fake()->firstName();

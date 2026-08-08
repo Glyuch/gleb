@@ -76,7 +76,7 @@ export interface ChronicleEvent {
     created_at: string;
 }
 
-export const FIRE: Record<number, string> = { 0: '', 1: '🔥', 2: '🔥🔥' };
+export const FIRE: Record<BoardObject['focus_level'], string> = { 0: '', 1: '🔥', 2: '🔥🔥' };
 export const STATUS_DOT: Record<MetricStatus, string> = {
     green: 'bg-green-500',
     yellow: 'bg-yellow-500',

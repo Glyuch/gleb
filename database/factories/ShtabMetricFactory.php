@@ -6,10 +6,16 @@ use App\Models\ShtabMetric;
 use App\Models\ShtabObject;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
+/**
+ * @extends Factory<ShtabMetric>
+ */
 class ShtabMetricFactory extends Factory
 {
     protected $model = ShtabMetric::class;
 
+    /**
+     * @return array<string, mixed>
+     */
     public function definition(): array
     {
         return [

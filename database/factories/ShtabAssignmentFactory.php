@@ -7,10 +7,16 @@ use App\Models\ShtabObject;
 use App\Models\ShtabPerson;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
+/**
+ * @extends Factory<ShtabAssignment>
+ */
 class ShtabAssignmentFactory extends Factory
 {
     protected $model = ShtabAssignment::class;
 
+    /**
+     * @return array<string, mixed>
+     */
     public function definition(): array
     {
         return [

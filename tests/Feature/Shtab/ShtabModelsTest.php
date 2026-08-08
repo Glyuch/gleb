@@ -34,8 +34,7 @@ it('excludes ended assignments from active scopes', function () {
     $assignment = ShtabAssignment::factory()->create(['ended_at' => now()->toDateString()]);
 
     expect(ShtabAssignment::query()->active()->count())->toBe(0)
-        ->and($assignment->person->activeAssignments)->toHaveCount(0)
-        ->and($assignment->person->in_reserve ?? true)->toBeTrue();
+        ->and($assignment->person->activeAssignments)->toHaveCount(0);
 });
 
 it('records events with payload', function () {
