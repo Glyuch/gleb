@@ -20,6 +20,12 @@ class MetricsController extends Controller
             'comment' => ['nullable', 'string', 'max:1000'],
         ]);
 
+        $newValueText = $data['value_text'] ?? $metric->value_text;
+
+        if ($metric->status === $data['status'] && $newValueText === $metric->value_text) {
+            return redirect()->back();
+        }
+
         DB::transaction(function () use ($metric, $data): void {
             $from = $metric->status;
             $metric->update([

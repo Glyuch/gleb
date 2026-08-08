@@ -101,6 +101,19 @@ it('moves an assignment: ends the old one and starts a new one atomically', func
         ->toBe(['assignment_ended', 'assignment_started']);
 });
 
+it('rejects moving onto an object where the person is already active', function () {
+    $assignment = ShtabAssignment::factory()->create();
+    $target = ShtabObject::factory()->create();
+    ShtabAssignment::factory()->create(['person_id' => $assignment->person_id, 'object_id' => $target->id]);
+
+    $this->actingAs(shtabAdmin())
+        ->from('/shtab')
+        ->post("/shtab/assignments/{$assignment->id}/move", ['object_id' => $target->id, 'role_label' => 'дубль'])
+        ->assertSessionHasErrors('object_id');
+
+    expect($assignment->refresh()->ended_at)->toBeNull();
+});
+
 it('forbids non-admins from all assignment routes', function () {
     $assignment = ShtabAssignment::factory()->create();
     $user = User::factory()->create();

@@ -9,6 +9,7 @@ use Carbon\CarbonImmutable;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 
 class AssignmentsController extends Controller
@@ -16,8 +17,8 @@ class AssignmentsController extends Controller
     public function store(Request $request): RedirectResponse
     {
         $data = $request->validate([
-            'person_id' => ['required', 'integer', 'exists:shtab_people,id'],
-            'object_id' => ['required', 'integer', 'exists:shtab_objects,id'],
+            'person_id' => ['required', 'integer', Rule::exists('shtab_people', 'id')->whereNull('archived_at')],
+            'object_id' => ['required', 'integer', Rule::exists('shtab_objects', 'id')->whereNull('archived_at')],
             'role_label' => ['required', 'string', 'max:100'],
             'comment' => ['nullable', 'string', 'max:1000'],
         ]);
@@ -64,10 +65,21 @@ class AssignmentsController extends Controller
     public function move(Request $request, ShtabAssignment $assignment): RedirectResponse
     {
         $data = $request->validate([
-            'object_id' => ['required', 'integer', 'exists:shtab_objects,id'],
+            'object_id' => ['required', 'integer', Rule::exists('shtab_objects', 'id')->whereNull('archived_at')],
             'role_label' => ['required', 'string', 'max:100'],
             'comment' => ['nullable', 'string', 'max:1000'],
         ]);
+
+        $duplicate = ShtabAssignment::query()->active()
+            ->where('person_id', $assignment->person_id)
+            ->where('object_id', $data['object_id'])
+            ->exists();
+
+        if ($duplicate) {
+            throw ValidationException::withMessages([
+                'object_id' => 'Этот человек уже назначен на эту территорию.',
+            ]);
+        }
 
         DB::transaction(function () use ($assignment, $data): void {
             $this->endAssignment($assignment, $data['comment'] ?? null);

@@ -19,6 +19,10 @@ class ObjectsController extends Controller
             'focus_level' => ['required', 'integer', Rule::in([0, 1, 2])],
         ]);
 
+        if ($object->focus_level === (int) $data['focus_level']) {
+            return redirect()->back();
+        }
+
         DB::transaction(function () use ($object, $data): void {
             $from = $object->focus_level;
             $object->update(['focus_level' => $data['focus_level']]);

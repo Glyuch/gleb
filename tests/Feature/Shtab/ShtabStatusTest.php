@@ -44,6 +44,18 @@ it('rejects unknown metric status', function () {
         ->assertSessionHasErrors('status');
 });
 
+it('writes no event when the posted metric status and value are unchanged', function () {
+    $metric = ShtabMetric::factory()->create(['status' => 'green', 'value_text' => '12%']);
+
+    $this->actingAs(statusAdmin())
+        ->patch("/shtab/metrics/{$metric->id}/status", ['status' => 'green', 'value_text' => '12%'])
+        ->assertRedirect();
+
+    expect(ShtabEvent::count())->toBe(0)
+        ->and($metric->refresh()->status)->toBe('green')
+        ->and($metric->value_text)->toBe('12%');
+});
+
 it('changes object focus level and records the change', function () {
     $object = ShtabObject::factory()->create(['focus_level' => 0]);
 
@@ -57,4 +69,15 @@ it('changes object focus level and records the change', function () {
     expect($event->type)->toBe('focus_level_changed')
         ->and($event->object_id)->toBe($object->id)
         ->and($event->payload)->toBe(['from' => 0, 'to' => 2]);
+});
+
+it('writes no event when the posted focus level is unchanged', function () {
+    $object = ShtabObject::factory()->create(['focus_level' => 1]);
+
+    $this->actingAs(statusAdmin())
+        ->patch("/shtab/objects/{$object->id}/focus", ['focus_level' => 1])
+        ->assertRedirect();
+
+    expect(ShtabEvent::count())->toBe(0)
+        ->and($object->refresh()->focus_level)->toBe(1);
 });
