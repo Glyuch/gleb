@@ -41,4 +41,38 @@ class MetricsController extends Controller
 
         return redirect()->back();
     }
+
+    public function store(Request $request): RedirectResponse
+    {
+        ShtabMetric::query()->create($this->validated($request));
+
+        return redirect()->back();
+    }
+
+    public function update(Request $request, ShtabMetric $metric): RedirectResponse
+    {
+        $metric->update($this->validated($request));
+
+        return redirect()->back();
+    }
+
+    public function destroy(ShtabMetric $metric): RedirectResponse
+    {
+        $metric->delete();
+
+        return redirect()->back();
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function validated(Request $request): array
+    {
+        return $request->validate([
+            'object_id' => ['nullable', 'integer', 'exists:shtab_objects,id'],
+            'name' => ['required', 'string', 'max:100'],
+            'status' => ['sometimes', Rule::in(['green', 'yellow', 'red'])],
+            'value_text' => ['nullable', 'string', 'max:100'],
+        ]);
+    }
 }

@@ -12,6 +12,7 @@ use App\Http\Controllers\NutritionStatsController;
 use App\Http\Controllers\Shtab\AssignmentsController;
 use App\Http\Controllers\Shtab\MetricsController;
 use App\Http\Controllers\Shtab\ObjectsController;
+use App\Http\Controllers\Shtab\PeopleController;
 use App\Http\Controllers\Shtab\ShtabController;
 use Illuminate\Support\Facades\Route;
 
@@ -66,6 +67,18 @@ Route::middleware(['auth', 'admin'])->prefix('shtab')->name('shtab.')->group(fun
     Route::post('/assignments/{assignment}/move', [AssignmentsController::class, 'move'])->name('assignments.move');
     Route::patch('/metrics/{metric}/status', [MetricsController::class, 'status'])->name('metrics.status');
     Route::patch('/objects/{object}/focus', [ObjectsController::class, 'focus'])->name('objects.focus');
+
+    Route::post('/people', [PeopleController::class, 'store'])->name('people.store');
+    Route::put('/people/{person}', [PeopleController::class, 'update'])->name('people.update');
+    Route::post('/people/{person}/archive', [PeopleController::class, 'archive'])->name('people.archive');
+
+    Route::post('/objects', [ObjectsController::class, 'store'])->name('objects.store');
+    Route::put('/objects/{object}', [ObjectsController::class, 'update'])->name('objects.update');
+    Route::post('/objects/{object}/archive', [ObjectsController::class, 'archive'])->name('objects.archive');
+
+    Route::post('/metrics', [MetricsController::class, 'store'])->name('metrics.store');
+    Route::put('/metrics/{metric}', [MetricsController::class, 'update'])->name('metrics.update');
+    Route::delete('/metrics/{metric}', [MetricsController::class, 'destroy'])->name('metrics.destroy');
 });
 
 Route::post('/nutrition-bot/webhook', [NutritionBotController::class, 'webhook'])
