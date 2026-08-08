@@ -29,6 +29,15 @@ const TYPE_META: Record<string, { dot: string; label: (e: ChronicleEvent) => str
     person_archived: { dot: 'bg-slate-400', label: (e) => `В архив: ${e.person?.name ?? '—'}` },
     object_created: { dot: 'bg-blue-400', label: (e) => `Новая территория: ${e.object?.name ?? '—'}` },
     object_archived: { dot: 'bg-slate-400', label: (e) => `Территория в архиве: ${e.object?.name ?? '—'}` },
+    ai_digest: {
+        dot: 'bg-violet-500',
+        label: (e) => {
+            const unparsed = e.payload?.unparsed;
+            const unparsedCount = Array.isArray(unparsed) ? unparsed.length : 0;
+
+            return `🤖 ИИ-разбор: применено ${String(e.payload?.applied ?? '?')}, не разобрано ${String(unparsedCount)}`;
+        },
+    },
 };
 
 function formatWhen(iso: string): string {

@@ -6,6 +6,7 @@ import type { AssignIntent } from './components/assign-dialog';
 import AssignmentDialog from './components/assignment-dialog';
 import ChroniclePanel from './components/chronicle-panel';
 import ChronicleTab from './components/chronicle-tab';
+import DigestDialog from './components/digest-dialog';
 import MetricDialog from './components/metric-dialog';
 import ObjectFormDialog from './components/object-form-dialog';
 import PeopleTab from './components/people-tab';
@@ -58,6 +59,7 @@ export default function ShtabIndex({ board, events }: Props) {
     const [objectForm, setObjectForm] = useState<{ open: boolean; object: BoardObject | null }>({ open: false, object: null });
     const [selectedPersonId, setSelectedPersonId] = useState<number | null>(null);
     const [tasksObjectId, setTasksObjectId] = useState<number | null>(null);
+    const [digestOpen, setDigestOpen] = useState(false);
     const reserve = board.people.filter((p) => p.in_reserve);
 
     useEffect(() => {
@@ -121,8 +123,15 @@ export default function ShtabIndex({ board, events }: Props) {
                     </button>
                     <button
                         type="button"
+                        onClick={() => setDigestOpen(true)}
+                        className="ml-3 cursor-pointer rounded-full border border-violet-300 bg-violet-50 px-2 py-0.5 text-[10px] font-bold text-violet-700 hover:border-violet-500 hover:text-violet-900"
+                    >
+                        🤖 Рассказать штабу
+                    </button>
+                    <button
+                        type="button"
                         onClick={() => setPersonForm({ open: true, person: null })}
-                        className="ml-3 cursor-pointer rounded-full border border-gray-300 px-2 py-0.5 text-[10px] font-bold text-gray-600 hover:border-gray-500 hover:text-gray-900"
+                        className="cursor-pointer rounded-full border border-gray-300 px-2 py-0.5 text-[10px] font-bold text-gray-600 hover:border-gray-500 hover:text-gray-900"
                     >
                         + персонаж
                     </button>
@@ -219,6 +228,7 @@ export default function ShtabIndex({ board, events }: Props) {
                 board={board}
                 onClose={() => setPersonForm({ open: false, person: null })}
             />
+            <DigestDialog key={String(digestOpen)} open={digestOpen} onClose={() => setDigestOpen(false)} />
             <ObjectFormDialog
                 key={objectForm.object?.id ?? 'new-o'}
                 open={objectForm.open}
