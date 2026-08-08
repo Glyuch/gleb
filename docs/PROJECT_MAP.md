@@ -67,9 +67,10 @@ Behind `auth` + `admin`. **Blade.** Live and data-driven (rebuilt from the stati
 - **URLs:** `/shtab` (Inertia SPA: табы Карта / Люди / Хроника); мутации `POST/PUT/PATCH/DELETE /shtab/{assignments,people,objects,metrics}/…` — все с redirect back.
 - **Controllers:** `app/Http/Controllers/Shtab/{ShtabController,AssignmentsController,PeopleController,ObjectsController,MetricsController}.php`.
 - **Board assembly:** `App\Actions\Shtab\BuildShtabBoard` (reserve / overload / uncovered-days flags). Порог перегруза: `config/shtab.php`.
-- **Models / tables:** `ShtabPerson`→`shtab_people`, `ShtabObject`→`shtab_objects` (products/projects/enablers, `focus_level` 0-2), `ShtabAssignment`→`shtab_assignments` (история через `ended_at`), `ShtabMetric`→`shtab_metrics`, `ShtabEvent`→`shtab_events` (Хроника; пишется транзакционно при каждой мутации).
+- **Models / tables:** `ShtabPerson`→`shtab_people`, `ShtabObject`→`shtab_objects` (products/projects/enablers, `focus_level` 0-2), `ShtabAssignment`→`shtab_assignments` (история через `ended_at`), `ShtabMetric`→`shtab_metrics`, `ShtabEvent`→`shtab_events` (Хроника; пишется транзакционно при каждой мутации), `ShtabTask`→`shtab_tasks` (чек-листы задач территорий, ⭐ ключевая задача).
+- **AI digest:** `POST /shtab/ai/{digest,apply}` — свободный текст → операции через Claude (`app/Support/Shtab/{ClaudeDigest,ApplyOperations}.php`, модель из `config/shtab.php`, превью-подтверждение в UI).
 - **Frontend: Inertia + React** — `resources/js/pages/shtab/` (index + components + types).
-- **Spec:** `docs/specs/2026-08-08-shtab-management-cockpit-design.md` (+ мокап в `docs/specs/assets/`).
+- **Spec:** `docs/specs/2026-08-08-shtab-management-cockpit-design.md` (+ мокап в `docs/specs/assets/`); v1.1: `docs/specs/2026-08-08-shtab-v11-tasks-ai-design.md`.
 
 ## Adding a new project
 Append a section under **Projects** using this stub:
