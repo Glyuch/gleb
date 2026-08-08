@@ -3244,6 +3244,99 @@ git add -A && git commit -m "docs(shtab): register project in PROJECT_MAP"
 
 ---
 
+## v1.1 — Tasks 13–14 (spec: docs/specs/2026-08-08-shtab-v11-tasks-ai-design.md)
+
+### Task 13: Territory tasks — backend
+
+**Files:** new migration `create_shtab_tasks_table`; `app/Models/ShtabTask.php` + factory; modify `app/Actions/Shtab/BuildShtabBoard.php`; new `app/Http/Controllers/Shtab/TasksController.php`; routes; test `tests/Feature/Shtab/ShtabTasksTest.php`. TDD, conventions addendum applies (generics, @property, phpstan clean).
+
+Migration:
+
+```php
+Schema::create('shtab_tasks', function (Blueprint $table) {
+    $table->id();
+    $table->foreignId('object_id')->constrained('shtab_objects')->cascadeOnDelete();
+    $table->string('title', 500);
+    $table->boolean('is_done')->default(false);
+    $table->timestamp('done_at')->nullable();
+    $table->foreignId('assignee_person_id')->nullable()->constrained('shtab_people')->nullOnDelete();
+    $table->boolean('is_key')->default(false);
+    $table->unsignedInteger('sort')->default(0);
+    $table->timestamps();
+    $table->index(['object_id', 'is_done']);
+});
+```
+
+Model `ShtabTask`: fillable all above; casts `is_done` bool, `done_at` datetime; `object()` BelongsTo ShtabObject, `assignee()` BelongsTo ShtabPerson (`assignee_person_id`); `scopeOpen($q)` → `where('is_done', false)`.
+
+`TasksController` (routes: `POST /tasks`, `PATCH /tasks/{task}`, `DELETE /tasks/{task}`; add to shtab group + `route:cache`):
+- `store`: validate `object_id` (exists active), `title` (required, max 500), `assignee_person_id` (nullable, exists non-archived), `is_key` (boolean). Transaction: if `is_key` → unset `is_key` on other tasks of the object; create; if assignee set → `ShtabEvent::record('task_assigned', ['person_id' => assignee, 'object_id' => ..., 'payload' => ['title' => ...]])`. Creation itself writes NO event (spec).
+- `update`: validate `title` sometimes, `is_done` sometimes boolean, `assignee_person_id` sometimes nullable exists non-archived, `is_key` sometimes boolean. Guards: `is_done` true→true or false→false is a no-op (no event); marking done sets `done_at=now()` + `ShtabEvent::record('task_done', ['object_id', 'person_id' => assignee, 'payload' => ['title']])`; un-done clears `done_at`, no event. Changing assignee to a non-null NEW value → `task_assigned` event. Setting `is_key=true` unsets other keys on the same object (transaction, no error).
+- `destroy`: plain delete, no event.
+
+`BuildShtabBoard` additions (eager-load `tasks.assignee`): each object gets `'tasks' => [...]` (id, title, is_done, is_key, assignee `{id, name, initials, color}|null`; order: open first, `is_key` desc, sort, id) plus `'open_tasks'`/`'total_tasks'` counts; each person gets `'key_tasks' => [...]` (open tasks with `is_key=true` assigned to them: object_name, object_emoji, title).
+
+Tests (helper `tasksAdmin()`): create with assignee writes task_assigned; done writes task_done with title payload; repeat done posts zero new events; new key task unsets previous key on same object (both persisted correctly); delete removes; board object payload carries tasks+counts; board person payload carries key_tasks; access 403 for non-admin.
+
+### Task 13b: Territory tasks — frontend
+
+**Files:** `types.ts` (BoardTask, `tasks`/`open_tasks`/`total_tasks` on BoardObject, `key_tasks` on BoardPerson); new `components/tasks-dialog.tsx`; modify `sector-card.tsx` (key-task line under description: ⭐ title + assignee mini-avatar; counter pill «задачи N/M» → `onTasksClick(objectId)`; show «+ задача» when none), `index.tsx` (tasksDialog state + handler), `people-tab.tsx` (key_tasks lines: ⭐ {emoji} {object}: {title}), `chronicle-panel.tsx` (TYPE_META: `task_done` → «✅ Задача закрыта: „{title}" — {object}», `task_assigned` → «{person} ← задача „{title}"»), `chronicle-tab.tsx` (filter pill «задачи» → `e.type.startsWith('task_')`).
+
+`tasks-dialog.tsx`: Dialog per object; add-row (Input + submit → POST /shtab/tasks); list of open tasks: checkbox (PATCH is_done), title, ⭐ toggle (PATCH is_key), assignee button (avatar or «+») opening inline picker of board.people (PATCH assignee_person_id; «снять» → null), × delete with confirm; collapsed «показать закрытые (K)» section with un-done checkboxes. All mutations `preserveScroll`, double-submit guard per repo pattern. eslint/tsc/build clean.
+
+### Task 14: AI digest — backend
+
+**Files:** `config/shtab.php` (+`'anthropic_key'`, reuse the SAME env var Nutrition uses — check `config/nutrition.php`; +`'ai_model' => 'claude-opus-5'`); new `app/Support/Shtab/ClaudeDigest.php` (raw HTTP via Laravel `Http`, modeled on `app/Support/Nutrition/Claude.php` — read it first, follow its style); new `app/Support/Shtab/ApplyOperations.php`; new `app/Http/Controllers/Shtab/AiController.php`; routes `POST /shtab/ai/digest`, `POST /shtab/ai/apply` (JSON responses, not Inertia redirects); tests `ShtabAiTest.php` with `Http::fake()`.
+
+`ClaudeDigest::propose(string $text, array $context): array` — POST to `https://api.anthropic.com/v1/messages`, headers per Nutrition client, timeout ≥180s, body: `model` from config, `max_tokens => 16000`, forced tool-use:
+
+```php
+'tools' => [[
+    'name' => 'propose_operations',
+    'description' => 'Разложи свободный текст руководителя в конкретные операции над штабом.',
+    'input_schema' => [
+        'type' => 'object',
+        'properties' => [
+            'operations' => ['type' => 'array', 'items' => ['type' => 'object', 'properties' => [
+                'type' => ['type' => 'string', 'enum' => ['assign','end_assignment','move_assignment','metric_status','focus_level','update_description','task_add','task_done','task_assign','task_key']],
+                'summary' => ['type' => 'string', 'description' => 'Человекочитаемая формулировка операции по-русски'],
+                'person_id' => ['type' => 'integer'], 'object_id' => ['type' => 'integer'],
+                'assignment_id' => ['type' => 'integer'], 'task_id' => ['type' => 'integer'], 'metric_id' => ['type' => 'integer'],
+                'role_label' => ['type' => 'string'], 'title' => ['type' => 'string'],
+                'status' => ['type' => 'string', 'enum' => ['green','yellow','red']], 'value_text' => ['type' => 'string'],
+                'focus_level' => ['type' => 'integer'], 'description_append' => ['type' => 'string'],
+                'comment' => ['type' => 'string'],
+            ], 'required' => ['type', 'summary']]],
+            'unparsed' => ['type' => 'array', 'items' => ['type' => 'object', 'properties' => [
+                'text' => ['type' => 'string'], 'reason' => ['type' => 'string']],
+                'required' => ['text', 'reason']]],
+        ],
+        'required' => ['operations', 'unparsed'],
+    ],
+]],
+'tool_choice' => ['type' => 'tool', 'name' => 'propose_operations'],
+'system' => <<<'PROMPT' ... PROMPT,
+'messages' => [['role' => 'user', 'content' => "Состояние штаба (JSON):\n".json_encode($context, JSON_UNESCAPED_UNICODE)."\n\nРассказ руководителя:\n".$text]],
+```
+
+System prompt (RU): «Ты — ассистент управленческого штаба Глеба…» — explain the entity model (территории/персонажи/назначения/метрики/задачи), the op types and their required fields, the rule «если не уверен в сущности или намерении — клади в unparsed с причиной, НЕ выдумывай id», and «ссылайся только на id из переданного состояния». Handle `stop_reason === 'refusal'` and HTTP failure → throw RuntimeException; check content blocks for `type === 'tool_use'` and return its `input`.
+
+`ApplyOperations::apply(array $operations): array` — for each op (own try/transaction so one failure doesn't kill the batch): map to the SAME mutations+guards the manual controllers use (duplicate-active check for assign/move, no-op guards for metric_status/focus_level, is_key uniqueness for task_key, archived checks), write the SAME chronicle events but with `comment` prefixed `'ИИ-разбор: '` + op summary/comment. Returns `['applied' => [...indices], 'failed' => [['index','summary','reason'], ...]]`. After the loop: `ShtabEvent::record('ai_digest', ['payload' => ['applied' => n, 'failed' => m, 'unparsed' => $request->unparsed], 'comment' => mb_substr($originalText, 0, 1000)])`.
+
+`AiController`: `digest()` — validate `text` required max 8000; context = BuildShtabBoard + tasks are already in board; call ClaudeDigest; return `response()->json(['operations' => ..., 'unparsed' => ...])`; on RuntimeException → 503 json `{error}`. `apply()` — validate `operations` array + `unparsed` array + `text` string; run ApplyOperations; return json result. CSRF: these are same-session POSTs — follow how the repo's Blade game code posts JSON (`/game/event`) or use the XSRF-TOKEN cookie header; verify in tests via actingAs.
+
+Chronicle: add `ai_digest` to frontend TYPE_META in Task 14b («🤖 ИИ-разбор: применено N, не разобрано M»).
+
+Tests (`Http::fake()` returning a canned tool_use response): digest returns parsed operations and sends model/tool_choice/text in request (assert via `Http::assertSent`); digest 503 on API failure; apply executes assign+task_add+metric_status with prefixed comments and events; apply continues past a failing op (duplicate assign) and reports it in `failed`; ai_digest event written with payload counts; non-admin 403. NO live API calls in tests.
+
+### Task 14b: AI digest — frontend
+
+**Files:** new `components/digest-dialog.tsx`; modify `index.tsx` (header button «🤖 Рассказать штабу» → dialog), `chronicle-panel.tsx` (+`ai_digest` TYPE_META), `types.ts` if needed.
+
+`digest-dialog.tsx` states: `input` (textarea, placeholder «Вика уходит с Обмена на KYC, маржа просела…», кнопка «Разобрать») → `loading` (спиннер, «Claude раскладывает…») → `preview`: checklist of operations (checkbox default on + `summary`), amber block «Не разнесено» (text+reason list), buttons «Применить выбранное» / «Отмена» → POST apply → `result`: applied/failed summary (failed with reasons), кнопка «Готово» → `router.reload({ preserveScroll: true })` + close. POSTs via the repo-appropriate JSON fetch (XSRF cookie header), double-submit guard, error toast on 503 («ИИ недоступен, попробуй позже»).
+
+### Task 15 (finale v1.1): PROJECT_MAP §6 update (tasks + AI), spec/plan sync, full suite, smoke.
+
 ## Deviations from spec (approved during planning)
 
 1. **Inertia instead of REST API + refetch** — repo is Inertia v3; mutations are POSTs with `redirect()->back()`, props auto-refresh. Same UX, idiomatic stack.
