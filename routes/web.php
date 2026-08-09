@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Admin\DocsController;
 use App\Http\Controllers\Admin\GameContentController;
 use App\Http\Controllers\Admin\GameResultsDashboardController;
 use App\Http\Controllers\Admin\GameReturnsController;
@@ -51,6 +52,11 @@ Route::middleware(['auth', 'admin'])->prefix('admin')->name('admin.')->group(fun
         Route::get('/returns', [GameReturnsController::class, 'edit'])->name('returns');
         Route::put('/returns', [GameReturnsController::class, 'update'])->name('returns.update');
         Route::redirect('/stats', '/admin/dashboards/gameresults');
+    });
+
+    Route::prefix('docs')->name('docs.')->group(function () {
+        Route::get('/', [DocsController::class, 'index'])->name('index');
+        Route::get('/{slug}', [DocsController::class, 'show'])->where('slug', '[A-Za-z0-9\-_/]+')->name('show');
     });
 
     Route::prefix('nutrition')->name('nutrition.')->group(function () {

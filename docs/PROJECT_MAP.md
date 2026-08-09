@@ -72,6 +72,13 @@ Behind `auth` + `admin`. **Blade.** Live and data-driven (rebuilt from the stati
 - **Frontend: Inertia + React** — `resources/js/pages/shtab/` (index + components + types).
 - **Spec:** `docs/specs/2026-08-08-shtab-management-cockpit-design.md` (+ мокап в `docs/specs/assets/`); v1.1: `docs/specs/2026-08-08-shtab-v11-tasks-ai-design.md`.
 
+### 7. Документы (`/admin/docs`)
+Читалка markdown-файлов из `docs/` прямо на сайте. Глеб работает на сервере через Claude Code с ноутбука и телефона — файл на диске ему не открыть, ссылку открыть можно. Поэтому **любой длинный артефакт для чтения/согласования кладётся в `docs/` и отдаётся ссылкой**, а не стеной текста в чат.
+- **URLs:** `/admin/docs` (список, сгруппирован по подпапке), `/admin/docs/{slug}` (slug = путь внутри `docs/` без `.md`, вложенность через `/`).
+- **Controller:** `app/Http/Controllers/Admin/DocsController.php` — рендер через `Str::markdown` (`html_input=strip`), `realpath`-проверка не выпускает за пределы `docs/`.
+- **Views:** `resources/views/admin/docs/{index,show}.blade.php`; ссылка в сайдбаре `admin/layout.blade.php`.
+- Хранилища нет: источник правды — сами файлы в репозитории, новые документы появляются в списке сразу после `git pull`.
+
 ## Adding a new project
 Append a section under **Projects** using this stub:
 
