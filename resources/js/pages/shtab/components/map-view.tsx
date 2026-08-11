@@ -314,11 +314,9 @@ export default function MapView({ board, filters, ...handlers }: Props) {
                 o.parent_id === null &&
                 (o.type === 'product' || o.type === 'enabler'),
         )
-        .sort((a, b) =>
-            filters.sort === 'focus'
-                ? TYPE_ORDER[a.type] - TYPE_ORDER[b.type] || compare(a, b)
-                : compare(a, b),
-        );
+        // Тип на порядок не влияет: горячий энейблер стоит выше спокойного
+        // продукта — сортировка сквозная, как и внутри разделов.
+        .sort(compare);
     const rendered = new Set<number>();
 
     const sections = roots
