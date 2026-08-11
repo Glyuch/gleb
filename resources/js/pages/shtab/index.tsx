@@ -47,7 +47,42 @@ export default function ShtabIndex({ board, events }: Props) {
     const [tasksObjectId, setTasksObjectId] = useState<number | null>(null);
     const [digestOpen, setDigestOpen] = useState(false);
     const [filters, setFilters] = useState<MapFilters>(DEFAULT_FILTERS);
+    // Оптимистичный порядок карточек живёт до ответа сервера: как только в
+    // пропсах приехал новый порядок (from !== serverOrder), локальный уходит.
+    const [dragOrder, setDragOrder] = useState<{
+        ids: number[];
+        from: string;
+    } | null>(null);
     const reserve = board.people.filter((p) => p.in_reserve);
+    const serverOrder = board.objects.map((o) => o.id).join(',');
+    const orderedObjects =
+        dragOrder && dragOrder.from === serverOrder
+            ? dragOrder.ids
+                  .map((id) => board.objects.find((o) => o.id === id))
+                  .filter((o): o is BoardObject => Boolean(o))
+            : board.objects;
+    const mapBoard = { ...board, objects: orderedObjects };
+
+    const reorderObjects = (
+        draggedObjectId: number,
+        targetObjectId: number,
+    ) => {
+        const ids = orderedObjects.map((o) => o.id);
+        const from = ids.indexOf(draggedObjectId);
+        const to = ids.indexOf(targetObjectId);
+
+        if (from < 0 || to < 0 || from === to) {
+            return;
+        }
+
+        ids.splice(to, 0, ids.splice(from, 1)[0]);
+        setDragOrder({ ids, from: serverOrder });
+        router.post(
+            '/shtab/objects/reorder',
+            { ids },
+            { preserveScroll: true, preserveState: true },
+        );
+    };
 
     useEffect(() => {
         const first = Object.values(errors ?? {})[0];
@@ -196,8 +231,9 @@ export default function ShtabIndex({ board, events }: Props) {
                             </div>
                         ) : (
                             <MapView
-                                board={board}
+                                board={mapBoard}
                                 filters={filters}
+                                onReorder={reorderObjects}
                                 onAssignClick={(objectId) =>
                                     setAssignIntent({
                                         objectId,
@@ -256,6 +292,17 @@ export default function ShtabIndex({ board, events }: Props) {
                         }
                         selectedPersonId={selectedPersonId}
                         onSelectPerson={setSelectedPersonId}
+                        onAssignmentClick={(assignmentId) =>
+                            setOpenAssignmentId(assignmentId)
+                        }
+                        onTasksClick={(objectId) => setTasksObjectId(objectId)}
+                        onAddAssignment={(personId) =>
+                            setAssignIntent({
+                                objectId: null,
+                                personId,
+                                moveAssignmentId: null,
+                            })
+                        }
                     />
                 </main>
             )}

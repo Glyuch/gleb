@@ -9,6 +9,9 @@ interface Props {
     onPersonEdit: (person: BoardPerson) => void;
     selectedPersonId: number | null;
     onSelectPerson: (id: number | null) => void;
+    onAssignmentClick: (assignmentId: number) => void;
+    onTasksClick: (objectId: number) => void;
+    onAddAssignment: (personId: number) => void;
 }
 
 type PeopleGroup = 'load' | 'class' | 'direct';
@@ -61,12 +64,18 @@ function PersonCardLarge({
     onEdit,
     onSelect,
     selected,
+    onAssignmentClick,
+    onTasksClick,
+    onAddAssignment,
 }: {
     person: BoardPerson;
     capacity: number;
     onEdit: () => void;
     onSelect: () => void;
     selected: boolean;
+    onAssignmentClick: (assignmentId: number) => void;
+    onTasksClick: (objectId: number) => void;
+    onAddAssignment: () => void;
 }) {
     return (
         <div
@@ -126,9 +135,15 @@ function PersonCardLarge({
 
             <div className="mt-2 space-y-1">
                 {person.assignments.map((a) => (
-                    <div
+                    <button
                         key={a.id}
-                        className="flex items-center gap-1 rounded-md bg-gray-50 px-2 py-1 text-[10px] text-gray-700"
+                        type="button"
+                        title="Открыть роль и нагрузку"
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            onAssignmentClick(a.id);
+                        }}
+                        className="flex w-full cursor-pointer items-center gap-1 rounded-md bg-gray-50 px-2 py-1 text-left text-[10px] text-gray-700 transition hover:bg-gray-100 hover:text-gray-900"
                     >
                         <span>{ROLE_ICON[a.role_type]}</span>
                         <span className="truncate">
@@ -138,22 +153,46 @@ function PersonCardLarge({
                         <span className="ml-auto shrink-0 font-extrabold text-gray-500">
                             {a.load_percent}%
                         </span>
-                    </div>
+                    </button>
                 ))}
                 {person.key_tasks.map((t) => (
-                    <div
+                    <button
                         key={t.id}
-                        className="rounded-md bg-amber-50 px-2 py-1 text-[10px] text-gray-700"
+                        type="button"
+                        disabled={!t.object_id}
+                        title={
+                            t.object_id
+                                ? 'Открыть задачи территории'
+                                : undefined
+                        }
+                        onClick={(e) => {
+                            e.stopPropagation();
+
+                            if (t.object_id) {
+                                onTasksClick(t.object_id);
+                            }
+                        }}
+                        className="block w-full rounded-md bg-amber-50 px-2 py-1 text-left text-[10px] text-gray-700 transition enabled:cursor-pointer enabled:hover:bg-amber-100 enabled:hover:text-gray-900"
                     >
                         ⭐ {t.object_emoji} <b>{t.object_name ?? '—'}</b>:{' '}
                         {t.title}
-                    </div>
+                    </button>
                 ))}
                 {person.in_reserve && (
                     <div className="text-center text-[10px] font-bold text-amber-600">
                         без территорий!
                     </div>
                 )}
+                <button
+                    type="button"
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        onAddAssignment();
+                    }}
+                    className="w-full cursor-pointer rounded-md border border-dashed border-gray-300 px-2 py-1 text-[10px] font-semibold text-gray-400 transition hover:border-gray-500 hover:text-gray-700"
+                >
+                    + территория
+                </button>
             </div>
 
             <button
@@ -176,6 +215,9 @@ export default function PeopleTab({
     onPersonEdit,
     selectedPersonId,
     onSelectPerson,
+    onAssignmentClick,
+    onTasksClick,
+    onAddAssignment,
 }: Props) {
     const [group, setGroup] = useState<PeopleGroup>('load');
     const personEvents = selectedPersonId
@@ -197,6 +239,9 @@ export default function PeopleTab({
                         onSelectPerson(p.id === selectedPersonId ? null : p.id)
                     }
                     onEdit={() => onPersonEdit(p)}
+                    onAssignmentClick={onAssignmentClick}
+                    onTasksClick={onTasksClick}
+                    onAddAssignment={() => onAddAssignment(p.id)}
                 />
             ))}
         </div>

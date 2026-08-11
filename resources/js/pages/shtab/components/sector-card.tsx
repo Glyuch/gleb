@@ -17,6 +17,8 @@ interface Props {
     onMetricClick: (metricId: number) => void;
     onEditClick: (objectId: number) => void;
     onTasksClick: (objectId: number) => void;
+    /** Карточку перетащили на эту: сюда прилетает id перетащенной. */
+    onReorder: (draggedObjectId: number) => void;
 }
 
 const STATUS_PILL: Record<MetricStatus, string> = {
@@ -34,8 +36,10 @@ export default function SectorCard({
     onMetricClick,
     onEditClick,
     onTasksClick,
+    onReorder,
 }: Props) {
-    const [dragOver, setDragOver] = useState(false);
+    const [dragOver, setDragOver] = useState<'person' | 'object' | null>(null);
+    const [dragging, setDragging] = useState(false);
     const uncoveredHot = object.is_uncovered && object.focus_level >= 1;
     const keyTask = object.tasks.find((t) => !t.is_done && t.is_key);
     const parent = object.parent_id
@@ -52,20 +56,40 @@ export default function SectorCard({
 
     return (
         <div
-            className={`rounded-xl border-[1.5px] p-3 ${object.is_uncovered ? 'border-dashed' : ''}`}
+            className={`rounded-xl border-[1.5px] p-3 transition-opacity ${object.is_uncovered ? 'border-dashed' : ''} ${dragging ? 'opacity-40' : ''}`}
             style={{
                 ...borderStyle,
-                outline: dragOver ? `2px solid ${accentColor}` : undefined,
+                outline: dragOver
+                    ? dragOver === 'object'
+                        ? '2px dashed #3B475C'
+                        : `2px solid ${accentColor}`
+                    : undefined,
                 outlineOffset: '2px',
             }}
             onDragOver={(e) => {
                 e.preventDefault();
-                setDragOver(true);
+                setDragOver(
+                    e.dataTransfer.types.includes('objectid')
+                        ? 'object'
+                        : 'person',
+                );
             }}
-            onDragLeave={() => setDragOver(false)}
+            onDragLeave={() => setDragOver(null)}
             onDrop={(e) => {
                 e.preventDefault();
-                setDragOver(false);
+                setDragOver(null);
+                const draggedObjectId = Number(
+                    e.dataTransfer.getData('objectId'),
+                );
+
+                if (draggedObjectId) {
+                    if (draggedObjectId !== object.id) {
+                        onReorder(draggedObjectId);
+                    }
+
+                    return;
+                }
+
                 const personId = Number(e.dataTransfer.getData('personId'));
                 const assignmentId = e.dataTransfer.getData('assignmentId');
 
@@ -85,6 +109,22 @@ export default function SectorCard({
             }}
         >
             <div className="mb-1 flex items-start gap-2">
+                <span
+                    role="button"
+                    tabIndex={-1}
+                    aria-label="Перетащить территорию"
+                    title="Перетащи, чтобы поменять порядок"
+                    draggable
+                    onDragStart={(e) => {
+                        e.dataTransfer.setData('objectId', String(object.id));
+                        e.dataTransfer.effectAllowed = 'move';
+                        setDragging(true);
+                    }}
+                    onDragEnd={() => setDragging(false)}
+                    className="mt-px cursor-grab text-[11px] leading-none text-gray-400 select-none hover:text-gray-700 active:cursor-grabbing"
+                >
+                    ⠿
+                </span>
                 <button
                     type="button"
                     onClick={() => onEditClick(object.id)}

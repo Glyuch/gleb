@@ -32,7 +32,7 @@ class BuildShtabBoard
 
         $objects = ShtabObject::query()->active()
             ->with(['metrics', 'activeAssignments.person:id,name,initials,class,color', 'tasks.assignee:id,name,initials,color'])
-            ->orderByDesc('focus_level')->orderBy('sort')->orderBy('name')
+            ->orderBy('sort')->orderBy('name')
             ->get();
 
         $keyTasksByPerson = ShtabTask::query()->open()
@@ -83,6 +83,7 @@ class BuildShtabBoard
                     'key_tasks' => $keyTasksByPerson->get($person->id, collect())
                         ->map(fn (ShtabTask $task): array => [
                             'id' => $task->id,
+                            'object_id' => $task->object_id,
                             'object_name' => $task->object?->name,
                             'object_emoji' => $task->object?->emoji,
                             'title' => $task->title,

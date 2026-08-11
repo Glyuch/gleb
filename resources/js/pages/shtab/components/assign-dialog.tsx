@@ -14,7 +14,7 @@ import { LOAD_TONE } from '../types';
 import RoleFields from './role-fields';
 
 export interface AssignIntent {
-    objectId: number;
+    objectId: number | null; // null → показать пикер территорий
     personId: number | null; // null → показать пикер людей
     moveAssignmentId: number | null; // задан → это перенос с другой территории
 }
@@ -27,6 +27,7 @@ interface Props {
 
 export default function AssignDialog({ intent, board, onClose }: Props) {
     const [personId, setPersonId] = useState<number | null>(null);
+    const [objectId, setObjectId] = useState<number | null>(null);
     const [roleLabel, setRoleLabel] = useState('');
     const [roleType, setRoleType] = useState<RoleType>('owner');
     const [loadPercent, setLoadPercent] = useState(
@@ -39,13 +40,22 @@ export default function AssignDialog({ intent, board, onClose }: Props) {
         return null;
     }
 
-    const object = board.objects.find((o) => o.id === intent.objectId);
+    const chosenObjectId = intent.objectId ?? objectId;
+    const object = board.objects.find((o) => o.id === chosenObjectId);
     const chosenPersonId = intent.personId ?? personId;
     const alreadyThere = new Set(object?.assignments.map((a) => a.person_id));
     const candidates = board.people.filter((p) => !alreadyThere.has(p.id));
+    // Пикер территорий (заход из «Людей»): территории, где человек уже сидит, скрываем.
+    const busyObjectIds = new Set(
+        intent.personId
+            ? board.people
+                  .find((p) => p.id === intent.personId)
+                  ?.assignments.map((a) => a.object_id)
+            : [],
+    );
 
     const submit = () => {
-        if (!chosenPersonId) {
+        if (!chosenPersonId || !chosenObjectId) {
             return;
         }
 
@@ -54,7 +64,7 @@ export default function AssignDialog({ intent, board, onClose }: Props) {
             role_type: roleType,
             load_percent: loadPercent,
             comment: comment.trim() || null,
-            object_id: intent.objectId,
+            object_id: chosenObjectId,
         };
         const opts = {
             preserveScroll: true,
@@ -86,9 +96,27 @@ export default function AssignDialog({ intent, board, onClose }: Props) {
                         {intent.moveAssignmentId
                             ? 'Перенос на'
                             : 'Назначение на'}{' '}
-                        {object?.emoji} {object?.name}
+                        {object
+                            ? `${object.emoji ?? ''} ${object.name}`
+                            : 'территорию'}
                     </DialogTitle>
                 </DialogHeader>
+                {intent.objectId === null && (
+                    <div className="flex flex-wrap gap-2">
+                        {board.objects
+                            .filter((o) => !busyObjectIds.has(o.id))
+                            .map((o) => (
+                                <button
+                                    key={o.id}
+                                    type="button"
+                                    onClick={() => setObjectId(o.id)}
+                                    className={`cursor-pointer rounded-full border px-2 py-1 text-xs font-bold ${objectId === o.id ? 'border-gray-900 bg-gray-900 text-white' : 'border-gray-300'}`}
+                                >
+                                    {o.emoji} {o.name}
+                                </button>
+                            ))}
+                    </div>
+                )}
                 {intent.personId === null && (
                     <div className="flex flex-wrap gap-2">
                         {candidates.map((p) => (
@@ -150,7 +178,9 @@ export default function AssignDialog({ intent, board, onClose }: Props) {
                     </div>
                     <Button
                         type="submit"
-                        disabled={!chosenPersonId || submitting}
+                        disabled={
+                            !chosenPersonId || !chosenObjectId || submitting
+                        }
                         className="w-full"
                     >
                         {intent.moveAssignmentId ? 'Перенести' : 'Назначить'}

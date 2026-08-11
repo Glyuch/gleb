@@ -39,11 +39,32 @@ class ObjectsController extends Controller
         return redirect()->back();
     }
 
+    /**
+     * Ручной порядок территорий на Карте: клиент присылает id в том порядке,
+     * в котором карточки лежат после перетаскивания.
+     */
+    public function reorder(Request $request): RedirectResponse
+    {
+        $data = $request->validate([
+            'ids' => ['required', 'array', 'min:1'],
+            'ids.*' => ['integer', 'distinct', 'exists:shtab_objects,id'],
+        ]);
+
+        DB::transaction(function () use ($data): void {
+            foreach ($data['ids'] as $index => $id) {
+                ShtabObject::query()->whereKey($id)->update(['sort' => $index + 1]);
+            }
+        });
+
+        return redirect()->back();
+    }
+
     public function store(Request $request): RedirectResponse
     {
         $data = $this->validated($request);
 
         DB::transaction(function () use ($data): void {
+            $data['sort'] = (int) ShtabObject::query()->max('sort') + 1;
             $object = ShtabObject::query()->create($data);
             ShtabEvent::record('object_created', ['object_id' => $object->id]);
         });

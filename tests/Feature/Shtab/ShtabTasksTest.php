@@ -202,6 +202,7 @@ it('puts open key tasks into the board person payload', function () {
 
     expect($row['key_tasks'])->toBe([[
         'id' => $keyTask->id,
+        'object_id' => $object->id,
         'object_name' => 'Обмен',
         'object_emoji' => '💱',
         'title' => 'Запустить обмен USDT',
