@@ -2,9 +2,11 @@ import type { Board, BoardObject } from '../types';
 import { LOAD_TONE, TYPE_LABEL } from '../types';
 
 export type GroupMode = 'tree' | 'type' | 'focus' | 'person';
+export type SortMode = 'focus' | 'type' | 'load' | 'people' | 'tasks' | 'name';
 
 export interface MapFilters {
     group: GroupMode;
+    sort: SortMode;
     types: BoardObject['type'][];
     hotOnly: boolean;
     unownedOnly: boolean;
@@ -14,6 +16,7 @@ export interface MapFilters {
 
 export const DEFAULT_FILTERS: MapFilters = {
     group: 'tree',
+    sort: 'focus',
     types: ['product', 'project', 'enabler'],
     hotOnly: false,
     unownedOnly: false,
@@ -26,6 +29,15 @@ const GROUPS: Array<[GroupMode, string]> = [
     ['type', 'По типам'],
     ['focus', 'По фокусу'],
     ['person', 'По людям'],
+];
+
+const SORTS: Array<[SortMode, string]> = [
+    ['focus', '🔥 по фокусу'],
+    ['type', 'по типу'],
+    ['load', 'по нагрузке'],
+    ['people', 'по числу людей'],
+    ['tasks', 'по открытым задачам'],
+    ['name', 'по алфавиту'],
 ];
 
 interface Props {
@@ -94,6 +106,20 @@ export default function MapToolbar({
                 ))}
             </div>
 
+            <select
+                aria-label="Сортировка карточек"
+                title="Порядок карточек внутри разделов"
+                value={filters.sort}
+                onChange={(e) => set({ sort: e.target.value as SortMode })}
+                className="rounded-full bg-white px-2 py-1 text-[11px] font-bold text-gray-600 ring-1 ring-[#E4E1D8]"
+            >
+                {SORTS.map(([key, label]) => (
+                    <option key={key} value={key}>
+                        {label}
+                    </option>
+                ))}
+            </select>
+
             <div className="flex gap-1">
                 {(['product', 'project', 'enabler'] as const).map((type) => (
                     <Pill
@@ -161,7 +187,9 @@ export default function MapToolbar({
                     </span>
                 )}
                 показано {shown} из {total}
-                {(shown !== total || filters.group !== 'tree') && (
+                {(shown !== total ||
+                    filters.group !== 'tree' ||
+                    filters.sort !== 'focus') && (
                     <button
                         type="button"
                         onClick={() => onChange(DEFAULT_FILTERS)}

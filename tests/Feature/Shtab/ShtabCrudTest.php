@@ -154,32 +154,6 @@ it('puts a new object at the end of the manual order', function () {
     expect(ShtabObject::query()->where('name', 'Обмен')->sole()->sort)->toBe(8);
 });
 
-it('reorders objects by the ids the map sends', function () {
-    $first = ShtabObject::factory()->create(['sort' => 1]);
-    $second = ShtabObject::factory()->create(['sort' => 2]);
-    $third = ShtabObject::factory()->create(['sort' => 3]);
-
-    $this->actingAs(crudAdmin())
-        ->post('/shtab/objects/reorder', ['ids' => [$third->id, $first->id, $second->id]])
-        ->assertRedirect();
-
-    expect([$third->refresh()->sort, $first->refresh()->sort, $second->refresh()->sort])->toBe([1, 2, 3]);
-});
-
-it('rejects a reorder with unknown or duplicated ids', function () {
-    $object = ShtabObject::factory()->create();
-
-    $this->actingAs(crudAdmin())
-        ->from('/shtab')
-        ->post('/shtab/objects/reorder', ['ids' => [$object->id, $object->id]])
-        ->assertSessionHasErrors('ids.1');
-
-    $this->actingAs(crudAdmin())
-        ->from('/shtab')
-        ->post('/shtab/objects/reorder', ['ids' => [$object->id + 999]])
-        ->assertSessionHasErrors('ids.0');
-});
-
 it('blocks archiving an object with active assignments', function () {
     $assignment = ShtabAssignment::factory()->create();
 

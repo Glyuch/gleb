@@ -82,7 +82,6 @@ Route::middleware(['auth', 'admin'])->prefix('shtab')->name('shtab.')->group(fun
     Route::post('/people/{person}/archive', [PeopleController::class, 'archive'])->name('people.archive');
 
     Route::post('/objects', [ObjectsController::class, 'store'])->name('objects.store');
-    Route::post('/objects/reorder', [ObjectsController::class, 'reorder'])->name('objects.reorder');
     Route::put('/objects/{object}', [ObjectsController::class, 'update'])->name('objects.update');
     Route::post('/objects/{object}/archive', [ObjectsController::class, 'archive'])->name('objects.archive');
 

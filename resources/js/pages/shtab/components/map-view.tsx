@@ -1,6 +1,6 @@
 import type { Board, BoardObject, BoardPerson } from '../types';
 import { FIRE, LOAD_TONE, ROLE_ICON, TYPE_LABEL } from '../types';
-import type { MapFilters } from './map-toolbar';
+import type { MapFilters, SortMode } from './map-toolbar';
 import SectorCard from './sector-card';
 
 export interface SectorHandlers {
@@ -14,7 +14,6 @@ export interface SectorHandlers {
     onMetricClick: (metricId: number) => void;
     onEditClick: (objectId: number) => void;
     onTasksClick: (objectId: number) => void;
-    onReorder: (draggedObjectId: number, targetObjectId: number) => void;
 }
 
 interface Props extends SectorHandlers {
@@ -58,6 +57,37 @@ export function matchesFilters(
 
     return true;
 }
+
+const TYPE_ORDER: Record<BoardObject['type'], number> = {
+    product: 0,
+    project: 1,
+    enabler: 2,
+};
+
+/**
+ * Порядок карточек внутри разделов задаётся в тулбаре. Везде, где значение
+ * может совпасть, доводим сравнение фокусом и именем — чтобы порядок не прыгал
+ * между рендерами.
+ */
+const byName = (a: BoardObject, b: BoardObject) => a.name.localeCompare(b.name);
+const byFocusThenName = (a: BoardObject, b: BoardObject) =>
+    b.focus_level - a.focus_level || byName(a, b);
+
+const COMPARATORS: Record<
+    SortMode,
+    (a: BoardObject, b: BoardObject) => number
+> = {
+    focus: byFocusThenName,
+    type: (a, b) =>
+        TYPE_ORDER[a.type] - TYPE_ORDER[b.type] || byFocusThenName(a, b),
+    load: (a, b) => b.load_total - a.load_total || byFocusThenName(a, b),
+    people: (a, b) =>
+        b.assignments.length - a.assignments.length || byFocusThenName(a, b),
+    tasks: (a, b) => b.open_tasks - a.open_tasks || byFocusThenName(a, b),
+    name: byName,
+};
+
+export const sorter = (sort: SortMode) => COMPARATORS[sort] ?? byFocusThenName;
 
 function Section({
     title,
@@ -139,39 +169,19 @@ function PersonMeta({
  * Карта территорий в четырёх разрезах: дерево продуктов (проекты и энейблеры
  * внутри своих родителей), по типам, по уровню фокуса и по людям.
  */
-export default function MapView({
-    board,
-    filters,
-    onReorder,
-    ...handlers
-}: Props) {
+export default function MapView({ board, filters, ...handlers }: Props) {
     const visible = board.objects.filter((o) => matchesFilters(o, filters));
+    const compare = sorter(filters.sort);
     const visibleIds = new Set(visible.map((o) => o.id));
 
-    /**
-     * Порядок карточек ручной (`shtab_objects.sort`), поэтому внутри разделов
-     * ничего не пересортировываем — `board.objects` уже приходит в нём.
-     * Перетаскивать можно только внутри раздела: бросок на карточку из другой
-     * группы игнорируем, иначе порядок менялся бы вслепую.
-     */
-    const card = (object: BoardObject, groupIds: number[]) => (
+    const card = (object: BoardObject) => (
         <SectorCard
             key={object.id}
             object={object}
             board={board}
             {...handlers}
-            onReorder={(draggedObjectId) => {
-                if (groupIds.includes(draggedObjectId)) {
-                    onReorder(draggedObjectId, object.id);
-                }
-            }}
         />
     );
-    const cards = (group: BoardObject[]) => {
-        const ids = group.map((o) => o.id);
-
-        return group.map((object) => card(object, ids));
-    };
 
     if (visible.length === 0) {
         return (
@@ -185,7 +195,9 @@ export default function MapView({
         return (
             <div className="space-y-6">
                 {(['product', 'project', 'enabler'] as const).map((type) => {
-                    const group = visible.filter((o) => o.type === type);
+                    const group = visible
+                        .filter((o) => o.type === type)
+                        .sort(compare);
 
                     return group.length === 0 ? null : (
                         <Section
@@ -193,7 +205,7 @@ export default function MapView({
                             title={`${TYPE_LABEL[type]}ы`}
                             meta={<GroupMeta objects={group} />}
                         >
-                            {cards(group)}
+                            {group.map(card)}
                         </Section>
                     );
                 })}
@@ -205,9 +217,9 @@ export default function MapView({
         return (
             <div className="space-y-6">
                 {([2, 1, 0] as const).map((level) => {
-                    const group = visible.filter(
-                        (o) => o.focus_level === level,
-                    );
+                    const group = visible
+                        .filter((o) => o.focus_level === level)
+                        .sort(compare);
 
                     return group.length === 0 ? null : (
                         <Section
@@ -217,7 +229,7 @@ export default function MapView({
                             }
                             meta={<GroupMeta objects={group} />}
                         >
-                            {cards(group)}
+                            {group.map(card)}
                         </Section>
                     );
                 })}
@@ -234,9 +246,13 @@ export default function MapView({
         return (
             <div className="space-y-6">
                 {people.map((person) => {
-                    const group = visible.filter((o) =>
-                        o.assignments.some((a) => a.person_id === person.id),
-                    );
+                    const group = visible
+                        .filter((o) =>
+                            o.assignments.some(
+                                (a) => a.person_id === person.id,
+                            ),
+                        )
+                        .sort(compare);
 
                     return group.length === 0 ? null : (
                         <Section
@@ -261,7 +277,7 @@ export default function MapView({
                                 />
                             }
                         >
-                            {cards(group)}
+                            {group.map(card)}
                         </Section>
                     );
                 })}
@@ -270,7 +286,7 @@ export default function MapView({
                         title="Без людей"
                         meta={<GroupMeta objects={orphans} />}
                     >
-                        {cards(orphans)}
+                        {orphans.map(card)}
                     </Section>
                 )}
             </div>
@@ -279,7 +295,7 @@ export default function MapView({
 
     // tree: продукты и корневые энейблеры как разделы, внутри — их проекты.
     const childrenOf = (parentId: number) =>
-        visible.filter((o) => o.parent_id === parentId);
+        visible.filter((o) => o.parent_id === parentId).sort(compare);
     // Проекты могут висеть на энейблере, который сам вложен в продукт — берём два уровня.
     const descendantsOf = (parentId: number) => {
         const direct = childrenOf(parentId);
@@ -292,13 +308,17 @@ export default function MapView({
                 all.findIndex((o) => o.id === object.id) === index,
         );
     };
-    const roots = board.objects.filter(
-        (o) =>
-            o.parent_id === null &&
-            (o.type === 'product' || o.type === 'enabler'),
-    );
-    // Корни тянутся друг на друга — так раздел целиком встаёт на новое место.
-    const rootIds = roots.map((o) => o.id);
+    const roots = board.objects
+        .filter(
+            (o) =>
+                o.parent_id === null &&
+                (o.type === 'product' || o.type === 'enabler'),
+        )
+        .sort((a, b) =>
+            filters.sort === 'focus'
+                ? TYPE_ORDER[a.type] - TYPE_ORDER[b.type] || compare(a, b)
+                : compare(a, b),
+        );
     const rendered = new Set<number>();
 
     const sections = roots
@@ -334,15 +354,14 @@ export default function MapView({
                         />
                     }
                 >
-                    {rootVisible &&
-                        card(root, [...rootIds, ...kids.map((k) => k.id)])}
-                    {cards(kids)}
+                    {rootVisible && card(root)}
+                    {kids.map(card)}
                 </Section>
             );
         })
         .filter(Boolean);
 
-    const rest = visible.filter((o) => !rendered.has(o.id));
+    const rest = visible.filter((o) => !rendered.has(o.id)).sort(compare);
 
     return (
         <div className="space-y-6">
@@ -352,7 +371,7 @@ export default function MapView({
                     title="Самостоятельные"
                     meta={<GroupMeta objects={rest} />}
                 >
-                    {cards(rest)}
+                    {rest.map(card)}
                 </Section>
             )}
         </div>

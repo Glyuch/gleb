@@ -67,7 +67,7 @@ Behind `auth` + `admin`. **Blade.** Live and data-driven (rebuilt from the stati
 - **URLs:** `/shtab` (Inertia SPA: табы Карта / Люди / Хроника); мутации `POST/PUT/PATCH/DELETE /shtab/{assignments,people,objects,metrics}/…` — все с redirect back.
 - **Controllers:** `app/Http/Controllers/Shtab/{ShtabController,AssignmentsController,PeopleController,ObjectsController,MetricsController}.php`.
 - **Board assembly:** `App\Actions\Shtab\BuildShtabBoard` (reserve / overload / uncovered-days flags). Порог перегруза: `config/shtab.php`.
-- **Порядок карточек на Карте:** ручной — `shtab_objects.sort`, drag & drop за ручку `⠿` → `POST /shtab/objects/reorder` (`ids` в новом порядке); внутри разрезов ничего не пересортировывается, фокус на порядок не влияет, новые территории уходят в конец.
+- **Порядок карточек на Карте:** сортировка выбирается в тулбаре (`MapFilters.sort`): по фокусу (по умолчанию), типу, нагрузке, числу людей, открытым задачам, алфавиту. Считается на клиенте внутри каждого раздела; вручную порядок не задаётся.
 - **Models / tables:** `ShtabPerson`→`shtab_people`, `ShtabObject`→`shtab_objects` (products/projects/enablers, `focus_level` 0-2), `ShtabAssignment`→`shtab_assignments` (история через `ended_at`), `ShtabMetric`→`shtab_metrics`, `ShtabEvent`→`shtab_events` (Хроника; пишется транзакционно при каждой мутации), `ShtabTask`→`shtab_tasks` (чек-листы задач территорий, ⭐ ключевая задача).
 - **AI digest:** `POST /shtab/ai/{digest,apply}` — свободный текст → операции через Claude (`app/Support/Shtab/{ClaudeDigest,ApplyOperations}.php`, модель из `config/shtab.php`, превью-подтверждение в UI).
 - **Frontend: Inertia + React** — `resources/js/pages/shtab/` (index + components + types).

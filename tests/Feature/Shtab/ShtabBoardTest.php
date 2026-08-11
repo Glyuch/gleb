@@ -75,15 +75,15 @@ it('reports days on object for active assignments', function () {
         ->and($row['assignments'][0]['days'])->toBe(51);
 });
 
-it('orders objects by the manual sort and separates business metrics', function () {
-    $second = ShtabObject::factory()->create(['focus_level' => 2, 'sort' => 2]);
-    $first = ShtabObject::factory()->create(['focus_level' => 0, 'sort' => 1]);
+it('orders objects by focus level desc and separates business metrics', function () {
+    $background = ShtabObject::factory()->create(['focus_level' => 0]);
+    $hot = ShtabObject::factory()->create(['focus_level' => 2]);
     ShtabMetric::factory()->create(['object_id' => null, 'name' => 'выручка']);
 
     $result = board();
 
-    expect($result['objects'][0]['id'])->toBe($first->id)
-        ->and($result['objects'][1]['id'])->toBe($second->id)
+    expect($result['objects'][0]['id'])->toBe($hot->id)
+        ->and($result['objects'][1]['id'])->toBe($background->id)
         ->and($result['business_metrics'][0]['name'])->toBe('выручка');
 });
 
