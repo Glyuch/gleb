@@ -139,6 +139,21 @@ it('rejects making an object its own parent', function () {
         ->assertSessionHasErrors('parent_id');
 });
 
+it('puts a new object at the end of the manual order', function () {
+    ShtabObject::factory()->create(['sort' => 7]);
+
+    $this->actingAs(crudAdmin())
+        ->post('/shtab/objects', [
+            'type' => 'product',
+            'name' => 'Обмен',
+            'focus_level' => 0,
+            'color' => '#14B8A6',
+        ])
+        ->assertRedirect();
+
+    expect(ShtabObject::query()->where('name', 'Обмен')->sole()->sort)->toBe(8);
+});
+
 it('blocks archiving an object with active assignments', function () {
     $assignment = ShtabAssignment::factory()->create();
 

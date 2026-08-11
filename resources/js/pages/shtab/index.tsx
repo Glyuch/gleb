@@ -256,6 +256,17 @@ export default function ShtabIndex({ board, events }: Props) {
                         }
                         selectedPersonId={selectedPersonId}
                         onSelectPerson={setSelectedPersonId}
+                        onAssignmentClick={(assignmentId) =>
+                            setOpenAssignmentId(assignmentId)
+                        }
+                        onTasksClick={(objectId) => setTasksObjectId(objectId)}
+                        onAddAssignment={(personId) =>
+                            setAssignIntent({
+                                objectId: null,
+                                personId,
+                                moveAssignmentId: null,
+                            })
+                        }
                     />
                 </main>
             )}

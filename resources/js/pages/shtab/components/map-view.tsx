@@ -1,6 +1,6 @@
 import type { Board, BoardObject, BoardPerson } from '../types';
 import { FIRE, LOAD_TONE, ROLE_ICON, TYPE_LABEL } from '../types';
-import type { MapFilters } from './map-toolbar';
+import type { MapFilters, SortMode } from './map-toolbar';
 import SectorCard from './sector-card';
 
 export interface SectorHandlers {
@@ -58,8 +58,36 @@ export function matchesFilters(
     return true;
 }
 
-const byFocus = (a: BoardObject, b: BoardObject) =>
-    b.focus_level - a.focus_level || a.name.localeCompare(b.name);
+const TYPE_ORDER: Record<BoardObject['type'], number> = {
+    product: 0,
+    project: 1,
+    enabler: 2,
+};
+
+/**
+ * Порядок карточек внутри разделов задаётся в тулбаре. Везде, где значение
+ * может совпасть, доводим сравнение фокусом и именем — чтобы порядок не прыгал
+ * между рендерами.
+ */
+const byName = (a: BoardObject, b: BoardObject) => a.name.localeCompare(b.name);
+const byFocusThenName = (a: BoardObject, b: BoardObject) =>
+    b.focus_level - a.focus_level || byName(a, b);
+
+const COMPARATORS: Record<
+    SortMode,
+    (a: BoardObject, b: BoardObject) => number
+> = {
+    focus: byFocusThenName,
+    type: (a, b) =>
+        TYPE_ORDER[a.type] - TYPE_ORDER[b.type] || byFocusThenName(a, b),
+    load: (a, b) => b.load_total - a.load_total || byFocusThenName(a, b),
+    people: (a, b) =>
+        b.assignments.length - a.assignments.length || byFocusThenName(a, b),
+    tasks: (a, b) => b.open_tasks - a.open_tasks || byFocusThenName(a, b),
+    name: byName,
+};
+
+export const sorter = (sort: SortMode) => COMPARATORS[sort] ?? byFocusThenName;
 
 function Section({
     title,
@@ -143,6 +171,7 @@ function PersonMeta({
  */
 export default function MapView({ board, filters, ...handlers }: Props) {
     const visible = board.objects.filter((o) => matchesFilters(o, filters));
+    const compare = sorter(filters.sort);
     const visibleIds = new Set(visible.map((o) => o.id));
 
     const card = (object: BoardObject) => (
@@ -168,7 +197,7 @@ export default function MapView({ board, filters, ...handlers }: Props) {
                 {(['product', 'project', 'enabler'] as const).map((type) => {
                     const group = visible
                         .filter((o) => o.type === type)
-                        .sort(byFocus);
+                        .sort(compare);
 
                     return group.length === 0 ? null : (
                         <Section
@@ -190,7 +219,7 @@ export default function MapView({ board, filters, ...handlers }: Props) {
                 {([2, 1, 0] as const).map((level) => {
                     const group = visible
                         .filter((o) => o.focus_level === level)
-                        .sort((a, b) => a.name.localeCompare(b.name));
+                        .sort(compare);
 
                     return group.length === 0 ? null : (
                         <Section
@@ -223,7 +252,7 @@ export default function MapView({ board, filters, ...handlers }: Props) {
                                 (a) => a.person_id === person.id,
                             ),
                         )
-                        .sort(byFocus);
+                        .sort(compare);
 
                     return group.length === 0 ? null : (
                         <Section
@@ -266,7 +295,7 @@ export default function MapView({ board, filters, ...handlers }: Props) {
 
     // tree: продукты и корневые энейблеры как разделы, внутри — их проекты.
     const childrenOf = (parentId: number) =>
-        visible.filter((o) => o.parent_id === parentId).sort(byFocus);
+        visible.filter((o) => o.parent_id === parentId).sort(compare);
     // Проекты могут висеть на энейблере, который сам вложен в продукт — берём два уровня.
     const descendantsOf = (parentId: number) => {
         const direct = childrenOf(parentId);
@@ -285,7 +314,9 @@ export default function MapView({ board, filters, ...handlers }: Props) {
                 o.parent_id === null &&
                 (o.type === 'product' || o.type === 'enabler'),
         )
-        .sort((a, b) => a.type.localeCompare(b.type) || byFocus(a, b));
+        // Тип на порядок не влияет: горячий энейблер стоит выше спокойного
+        // продукта — сортировка сквозная, как и внутри разделов.
+        .sort(compare);
     const rendered = new Set<number>();
 
     const sections = roots
@@ -328,7 +359,7 @@ export default function MapView({ board, filters, ...handlers }: Props) {
         })
         .filter(Boolean);
 
-    const rest = visible.filter((o) => !rendered.has(o.id)).sort(byFocus);
+    const rest = visible.filter((o) => !rendered.has(o.id)).sort(compare);
 
     return (
         <div className="space-y-6">

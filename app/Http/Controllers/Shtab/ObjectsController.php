@@ -44,6 +44,7 @@ class ObjectsController extends Controller
         $data = $this->validated($request);
 
         DB::transaction(function () use ($data): void {
+            $data['sort'] = (int) ShtabObject::query()->max('sort') + 1;
             $object = ShtabObject::query()->create($data);
             ShtabEvent::record('object_created', ['object_id' => $object->id]);
         });
