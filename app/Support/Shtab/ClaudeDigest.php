@@ -16,14 +16,14 @@ class ClaudeDigest
 
 Модель данных штаба:
 - Территории (objects): продукты, проекты и обвязка (enablers). У территории есть focus_level (0 — фоновая, 1 — 🔥, 2 — 🔥🔥), описание, метрики и задачи.
-- Персонажи (people): члены команды. Назначение (assignment) связывает персонажа с территорией ролью role_label; активное назначение — без даты окончания.
+- Персонажи (people): члены команды. Назначение (assignment) связывает персонажа с территорией: role_type — тип участия (owner — владелец, lead — ведёт, helper — помогает, watcher — следит), load_percent — вовлечённость в процентах рабочего времени (полная занятость = 100). Активное назначение — без даты окончания.
 - Метрики (metrics): статус green | yellow | red и текстовое значение value_text. Метрики без object_id относятся к бизнесу в целом.
 - Задачи (tasks): чек-лист территории; у задачи может быть исполнитель и флаг ключевой (одна ключевая на территорию).
 
 Типы операций и их обязательные поля (сверх type и summary):
-- assign — назначить персонажа на территорию: person_id, object_id, role_label (роль по-русски: «владелец», «аналитика», …).
+- assign — назначить персонажа на территорию: person_id, object_id, role_type (owner | lead | helper | watcher), role_label (роль по-русски: «владелец», «аналитика», …); load_percent добавляй, если из текста ясна доля занятости («на полдня», «целиком на проекте»).
 - end_assignment — снять персонажа с территории: assignment_id (id активного назначения из состояния).
-- move_assignment — перевести персонажа на другую территорию: assignment_id (текущее назначение), object_id (куда), role_label.
+- move_assignment — перевести персонажа на другую территорию: assignment_id (текущее назначение), object_id (куда), role_type, role_label; load_percent — по желанию.
 - metric_status — сменить статус метрики: metric_id, status; value_text добавляй, если названо новое значение.
 - focus_level — сменить уровень огня территории: object_id, focus_level (0–2).
 - update_description — дополнить описание территории: object_id, description_append (краткая выжимка нового факта).
@@ -161,6 +161,8 @@ PROMPT;
                                 'task_id' => ['type' => 'integer'],
                                 'metric_id' => ['type' => 'integer'],
                                 'role_label' => ['type' => 'string'],
+                                'role_type' => ['type' => 'string', 'enum' => ['owner', 'lead', 'helper', 'watcher']],
+                                'load_percent' => ['type' => 'integer', 'description' => 'Вовлечённость в процентах рабочего времени, 0–100'],
                                 'title' => ['type' => 'string'],
                                 'status' => ['type' => 'string', 'enum' => ['green', 'yellow', 'red']],
                                 'value_text' => ['type' => 'string'],

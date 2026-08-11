@@ -23,6 +23,8 @@ class ShtabAssignmentFactory extends Factory
             'person_id' => ShtabPerson::factory(),
             'object_id' => ShtabObject::factory(),
             'role_label' => fake()->randomElement(['владелец', 'аналитика', 'разработка']),
+            'role_type' => fake()->randomElement(['owner', 'lead', 'helper', 'watcher']),
+            'load_percent' => fake()->randomElement([10, 25, 50, 100]),
             'started_at' => now()->toDateString(),
             'ended_at' => null,
         ];
