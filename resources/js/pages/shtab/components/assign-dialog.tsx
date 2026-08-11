@@ -1,10 +1,17 @@
 import { router } from '@inertiajs/react';
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import {
+    Dialog,
+    DialogContent,
+    DialogHeader,
+    DialogTitle,
+} from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import type { Board } from '../types';
+import type { Board, RoleType } from '../types';
+import { LOAD_TONE } from '../types';
+import RoleFields from './role-fields';
 
 export interface AssignIntent {
     objectId: number;
@@ -21,6 +28,10 @@ interface Props {
 export default function AssignDialog({ intent, board, onClose }: Props) {
     const [personId, setPersonId] = useState<number | null>(null);
     const [roleLabel, setRoleLabel] = useState('');
+    const [roleType, setRoleType] = useState<RoleType>('owner');
+    const [loadPercent, setLoadPercent] = useState(
+        board.roles.find((r) => r.key === 'owner')?.default_load ?? 50,
+    );
     const [comment, setComment] = useState('');
     const [submitting, setSubmitting] = useState(false);
 
@@ -34,11 +45,17 @@ export default function AssignDialog({ intent, board, onClose }: Props) {
     const candidates = board.people.filter((p) => !alreadyThere.has(p.id));
 
     const submit = () => {
-        if (!chosenPersonId || !roleLabel.trim()) {
+        if (!chosenPersonId) {
             return;
         }
 
-        const payload = { role_label: roleLabel.trim(), comment: comment.trim() || null, object_id: intent.objectId };
+        const payload = {
+            role_label: roleLabel.trim() || null,
+            role_type: roleType,
+            load_percent: loadPercent,
+            comment: comment.trim() || null,
+            object_id: intent.objectId,
+        };
         const opts = {
             preserveScroll: true,
             onStart: () => setSubmitting(true),
@@ -47,18 +64,29 @@ export default function AssignDialog({ intent, board, onClose }: Props) {
         };
 
         if (intent.moveAssignmentId) {
-            router.post(`/shtab/assignments/${intent.moveAssignmentId}/move`, payload, opts);
+            router.post(
+                `/shtab/assignments/${intent.moveAssignmentId}/move`,
+                payload,
+                opts,
+            );
         } else {
-            router.post('/shtab/assignments', { ...payload, person_id: chosenPersonId }, opts);
+            router.post(
+                '/shtab/assignments',
+                { ...payload, person_id: chosenPersonId },
+                opts,
+            );
         }
     };
 
     return (
         <Dialog open onOpenChange={(open) => !open && onClose()}>
-            <DialogContent className="max-w-sm">
+            <DialogContent className="max-h-[85vh] max-w-sm overflow-y-auto">
                 <DialogHeader>
                     <DialogTitle>
-                        {intent.moveAssignmentId ? 'Перенос на' : 'Назначение на'} {object?.emoji} {object?.name}
+                        {intent.moveAssignmentId
+                            ? 'Перенос на'
+                            : 'Назначение на'}{' '}
+                        {object?.emoji} {object?.name}
                     </DialogTitle>
                 </DialogHeader>
                 {intent.personId === null && (
@@ -70,7 +98,16 @@ export default function AssignDialog({ intent, board, onClose }: Props) {
                                 onClick={() => setPersonId(p.id)}
                                 className={`cursor-pointer rounded-full border px-2 py-1 text-xs font-bold ${personId === p.id ? 'border-gray-900 bg-gray-900 text-white' : 'border-gray-300'}`}
                             >
-                                {p.name}
+                                {p.name}{' '}
+                                <span
+                                    className={
+                                        personId === p.id
+                                            ? 'text-gray-300'
+                                            : LOAD_TONE[p.load_status].text
+                                    }
+                                >
+                                    {p.load_percent}%
+                                </span>
                             </button>
                         ))}
                     </div>
@@ -82,15 +119,40 @@ export default function AssignDialog({ intent, board, onClose }: Props) {
                         submit();
                     }}
                 >
+                    <RoleFields
+                        roles={board.roles}
+                        roleType={roleType}
+                        loadPercent={loadPercent}
+                        onRoleType={setRoleType}
+                        onLoadPercent={setLoadPercent}
+                    />
                     <div>
-                        <Label htmlFor="role_label">Роль на территории</Label>
-                        <Input id="role_label" value={roleLabel} onChange={(e) => setRoleLabel(e.target.value)} placeholder="владелец / аналитика / ведёт…" />
+                        <Label htmlFor="role_label">
+                            Уточнение роли (необязательно)
+                        </Label>
+                        <Input
+                            id="role_label"
+                            value={roleLabel}
+                            onChange={(e) => setRoleLabel(e.target.value)}
+                            placeholder="аналитика / переговоры с НРД…"
+                        />
                     </div>
                     <div>
-                        <Label htmlFor="assign_comment">Почему (для Хроники)</Label>
-                        <Input id="assign_comment" value={comment} onChange={(e) => setComment(e.target.value)} placeholder="на месяц, до релиза" />
+                        <Label htmlFor="assign_comment">
+                            Почему (для Хроники)
+                        </Label>
+                        <Input
+                            id="assign_comment"
+                            value={comment}
+                            onChange={(e) => setComment(e.target.value)}
+                            placeholder="на месяц, до релиза"
+                        />
                     </div>
-                    <Button type="submit" disabled={!chosenPersonId || !roleLabel.trim() || submitting} className="w-full">
+                    <Button
+                        type="submit"
+                        disabled={!chosenPersonId || submitting}
+                        className="w-full"
+                    >
                         {intent.moveAssignmentId ? 'Перенести' : 'Назначить'}
                     </Button>
                 </form>

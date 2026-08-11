@@ -92,6 +92,53 @@ it('creates a project inside a product and validates type', function () {
         ->assertSessionHasErrors('type');
 });
 
+it('attaches a project to an enabler', function () {
+    $enabler = ShtabObject::factory()->create(['type' => 'enabler']);
+
+    $this->actingAs(crudAdmin())
+        ->post('/shtab/objects', [
+            'type' => 'project',
+            'parent_id' => $enabler->id,
+            'name' => 'Регламент отчётности',
+            'emoji' => '📊',
+            'focus_level' => 0,
+            'color' => '#14B8A6',
+        ])
+        ->assertRedirect();
+
+    expect(ShtabObject::query()->where('name', 'Регламент отчётности')->sole()->parent->is($enabler))->toBeTrue();
+});
+
+it('rejects a project attached to another project', function () {
+    $project = ShtabObject::factory()->create(['type' => 'project']);
+
+    $this->actingAs(crudAdmin())
+        ->from('/shtab')
+        ->post('/shtab/objects', [
+            'type' => 'project',
+            'parent_id' => $project->id,
+            'name' => 'Подпроект',
+            'focus_level' => 0,
+            'color' => '#14B8A6',
+        ])
+        ->assertSessionHasErrors('parent_id');
+});
+
+it('rejects making an object its own parent', function () {
+    $enabler = ShtabObject::factory()->create(['type' => 'enabler']);
+
+    $this->actingAs(crudAdmin())
+        ->from('/shtab')
+        ->put("/shtab/objects/{$enabler->id}", [
+            'type' => 'enabler',
+            'parent_id' => $enabler->id,
+            'name' => $enabler->name,
+            'focus_level' => 0,
+            'color' => '#14B8A6',
+        ])
+        ->assertSessionHasErrors('parent_id');
+});
+
 it('blocks archiving an object with active assignments', function () {
     $assignment = ShtabAssignment::factory()->create();
 

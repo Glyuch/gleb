@@ -1,12 +1,24 @@
 import { router } from '@inertiajs/react';
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import {
+    Dialog,
+    DialogContent,
+    DialogHeader,
+    DialogTitle,
+} from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import type { Board, BoardObject } from '../types';
 
-const COLORS = ['#5B6EE8', '#0EA5E9', '#14B8A6', '#F59E0B', '#EC4899', '#64748B'];
+const COLORS = [
+    '#5B6EE8',
+    '#0EA5E9',
+    '#14B8A6',
+    '#F59E0B',
+    '#EC4899',
+    '#64748B',
+];
 
 // prettier-ignore
 const EMOJIS = [
@@ -22,14 +34,25 @@ interface Props {
     onClose: () => void;
 }
 
-export default function ObjectFormDialog({ open, object, board, onClose }: Props) {
-    const [type, setType] = useState<BoardObject['type']>(object?.type ?? 'product');
+export default function ObjectFormDialog({
+    open,
+    object,
+    board,
+    onClose,
+}: Props) {
+    const [type, setType] = useState<BoardObject['type']>(
+        object?.type ?? 'product',
+    );
     const [name, setName] = useState(object?.name ?? '');
     const [description, setDescription] = useState(object?.description ?? '');
     const [emoji, setEmoji] = useState(object?.emoji ?? '🏰');
-    const [focusLevel, setFocusLevel] = useState<0 | 1 | 2>(object?.focus_level ?? 0);
+    const [focusLevel, setFocusLevel] = useState<0 | 1 | 2>(
+        object?.focus_level ?? 0,
+    );
     const [color, setColor] = useState(object?.color ?? COLORS[0]);
-    const [parentId, setParentId] = useState<number | null>(object?.parent_id ?? null);
+    const [parentId, setParentId] = useState<number | null>(
+        object?.parent_id ?? null,
+    );
     const [submitting, setSubmitting] = useState(false);
 
     if (!open) {
@@ -62,15 +85,23 @@ export default function ObjectFormDialog({ open, object, board, onClose }: Props
 
     const archive = () => {
         if (object) {
-            router.post(`/shtab/objects/${object.id}/archive`, {}, { preserveScroll: true, onSuccess: onClose });
+            router.post(
+                `/shtab/objects/${object.id}/archive`,
+                {},
+                { preserveScroll: true, onSuccess: onClose },
+            );
         }
     };
 
     return (
         <Dialog open onOpenChange={(o) => !o && onClose()}>
-            <DialogContent className="max-w-sm">
+            <DialogContent className="max-h-[85vh] max-w-sm overflow-y-auto">
                 <DialogHeader>
-                    <DialogTitle>{object ? `Территория: ${object.name}` : 'Новая территория'}</DialogTitle>
+                    <DialogTitle>
+                        {object
+                            ? `Территория: ${object.name}`
+                            : 'Новая территория'}
+                    </DialogTitle>
                 </DialogHeader>
                 <form
                     className="space-y-3"
@@ -99,7 +130,11 @@ export default function ObjectFormDialog({ open, object, board, onClose }: Props
                     </div>
                     <div>
                         <Label htmlFor="o_name">Название</Label>
-                        <Input id="o_name" value={name} onChange={(e) => setName(e.target.value)} />
+                        <Input
+                            id="o_name"
+                            value={name}
+                            onChange={(e) => setName(e.target.value)}
+                        />
                     </div>
                     <div>
                         <Label htmlFor="o_desc">Контекст / описание</Label>
@@ -160,21 +195,46 @@ export default function ObjectFormDialog({ open, object, board, onClose }: Props
                     </div>
                     {type !== 'product' && (
                         <div>
-                            <Label htmlFor="o_parent">Часть продукта</Label>
+                            <Label htmlFor="o_parent">Часть чего</Label>
                             <select
                                 id="o_parent"
                                 className="w-full rounded-md border border-gray-300 p-2 text-sm"
                                 value={parentId ?? ''}
-                                onChange={(e) => setParentId(e.target.value ? Number(e.target.value) : null)}
+                                onChange={(e) =>
+                                    setParentId(
+                                        e.target.value
+                                            ? Number(e.target.value)
+                                            : null,
+                                    )
+                                }
                             >
                                 <option value="">— самостоятельный</option>
-                                {board.objects
-                                    .filter((o) => o.type === 'product' && o.id !== object?.id)
-                                    .map((o) => (
-                                        <option key={o.id} value={o.id}>
-                                            {o.emoji} {o.name}
-                                        </option>
-                                    ))}
+                                <optgroup label="Продукты">
+                                    {board.objects
+                                        .filter(
+                                            (o) =>
+                                                o.type === 'product' &&
+                                                o.id !== object?.id,
+                                        )
+                                        .map((o) => (
+                                            <option key={o.id} value={o.id}>
+                                                {o.emoji} {o.name}
+                                            </option>
+                                        ))}
+                                </optgroup>
+                                <optgroup label="Энейблеры">
+                                    {board.objects
+                                        .filter(
+                                            (o) =>
+                                                o.type === 'enabler' &&
+                                                o.id !== object?.id,
+                                        )
+                                        .map((o) => (
+                                            <option key={o.id} value={o.id}>
+                                                {o.emoji} {o.name}
+                                            </option>
+                                        ))}
+                                </optgroup>
                             </select>
                         </div>
                     )}
@@ -190,12 +250,21 @@ export default function ObjectFormDialog({ open, object, board, onClose }: Props
                             />
                         ))}
                     </div>
-                    <Button type="submit" disabled={!name.trim() || submitting} className="w-full">
+                    <Button
+                        type="submit"
+                        disabled={!name.trim() || submitting}
+                        className="w-full"
+                    >
                         Сохранить
                     </Button>
                 </form>
                 {object && (
-                    <Button type="button" variant="outline" onClick={archive} className="w-full">
+                    <Button
+                        type="button"
+                        variant="outline"
+                        onClick={archive}
+                        className="w-full"
+                    >
                         В архив (если пуста)
                     </Button>
                 )}

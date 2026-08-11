@@ -19,9 +19,13 @@ class AssignmentsController extends Controller
         $data = $request->validate([
             'person_id' => ['required', 'integer', Rule::exists('shtab_people', 'id')->whereNull('archived_at')],
             'object_id' => ['required', 'integer', Rule::exists('shtab_objects', 'id')->whereNull('archived_at')],
-            'role_label' => ['required', 'string', 'max:100'],
+            'role_label' => ['nullable', 'string', 'max:100'],
+            'role_type' => ['required', Rule::in(ShtabAssignment::roleTypes())],
+            'load_percent' => ['nullable', 'integer', 'min:0', 'max:100'],
             'comment' => ['nullable', 'string', 'max:1000'],
         ]);
+
+        $data = $this->withRoleDefaults($data);
 
         $duplicate = ShtabAssignment::query()->active()
             ->where('person_id', $data['person_id'])
@@ -43,7 +47,58 @@ class AssignmentsController extends Controller
             ShtabEvent::record('assignment_started', [
                 'person_id' => $data['person_id'],
                 'object_id' => $data['object_id'],
-                'payload' => ['role_label' => $data['role_label']],
+                'payload' => [
+                    'role_label' => $data['role_label'],
+                    'role_type' => $data['role_type'],
+                    'load_percent' => $data['load_percent'],
+                ],
+                'comment' => $data['comment'] ?? null,
+            ]);
+        });
+
+        return redirect()->back();
+    }
+
+    /**
+     * Меняет роль и вовлечённость, не снимая человека с территории.
+     */
+    public function update(Request $request, ShtabAssignment $assignment): RedirectResponse
+    {
+        if ($assignment->ended_at !== null) {
+            throw ValidationException::withMessages([
+                'assignment' => 'Назначение уже завершено.',
+            ]);
+        }
+
+        $data = $request->validate([
+            'role_label' => ['nullable', 'string', 'max:100'],
+            'role_type' => ['required', Rule::in(ShtabAssignment::roleTypes())],
+            'load_percent' => ['nullable', 'integer', 'min:0', 'max:100'],
+            'comment' => ['nullable', 'string', 'max:1000'],
+        ]);
+
+        $data = $this->withRoleDefaults($data);
+        $before = ['role_type' => $assignment->role_type, 'load_percent' => $assignment->load_percent];
+
+        if ($before['role_type'] === $data['role_type'] && $before['load_percent'] === $data['load_percent'] && $assignment->role_label === $data['role_label']) {
+            return redirect()->back();
+        }
+
+        DB::transaction(function () use ($assignment, $data, $before): void {
+            $assignment->update([
+                'role_label' => $data['role_label'],
+                'role_type' => $data['role_type'],
+                'load_percent' => $data['load_percent'],
+            ]);
+
+            ShtabEvent::record('assignment_role_changed', [
+                'person_id' => $assignment->person_id,
+                'object_id' => $assignment->object_id,
+                'payload' => [
+                    'from' => $before,
+                    'to' => ['role_type' => $data['role_type'], 'load_percent' => $data['load_percent']],
+                    'role_label' => $data['role_label'],
+                ],
                 'comment' => $data['comment'] ?? null,
             ]);
         });
@@ -66,9 +121,13 @@ class AssignmentsController extends Controller
     {
         $data = $request->validate([
             'object_id' => ['required', 'integer', Rule::exists('shtab_objects', 'id')->whereNull('archived_at')],
-            'role_label' => ['required', 'string', 'max:100'],
+            'role_label' => ['nullable', 'string', 'max:100'],
+            'role_type' => ['required', Rule::in(ShtabAssignment::roleTypes())],
+            'load_percent' => ['nullable', 'integer', 'min:0', 'max:100'],
             'comment' => ['nullable', 'string', 'max:1000'],
         ]);
+
+        $data = $this->withRoleDefaults($data);
 
         $duplicate = ShtabAssignment::query()->active()
             ->where('person_id', $assignment->person_id)
@@ -88,6 +147,8 @@ class AssignmentsController extends Controller
                 'person_id' => $assignment->person_id,
                 'object_id' => $data['object_id'],
                 'role_label' => $data['role_label'],
+                'role_type' => $data['role_type'],
+                'load_percent' => $data['load_percent'],
                 'comment' => $data['comment'] ?? null,
                 'started_at' => now()->toDateString(),
             ]);
@@ -95,12 +156,36 @@ class AssignmentsController extends Controller
             ShtabEvent::record('assignment_started', [
                 'person_id' => $assignment->person_id,
                 'object_id' => $data['object_id'],
-                'payload' => ['role_label' => $data['role_label']],
+                'payload' => [
+                    'role_label' => $data['role_label'],
+                    'role_type' => $data['role_type'],
+                    'load_percent' => $data['load_percent'],
+                ],
                 'comment' => $data['comment'] ?? null,
             ]);
         });
 
         return redirect()->back();
+    }
+
+    /**
+     * Роль-подпись и вовлечённость необязательны: без них берём значения по умолчанию
+     * для выбранного типа участия из config('shtab.roles').
+     *
+     * @param  array<string, mixed>  $data
+     * @return array<string, mixed>
+     */
+    private function withRoleDefaults(array $data): array
+    {
+        $roleType = (string) $data['role_type'];
+        $label = isset($data['role_label']) ? trim((string) $data['role_label']) : '';
+
+        $data['role_label'] = $label !== '' ? $label : ShtabAssignment::roleLabelFor($roleType);
+        $data['load_percent'] = isset($data['load_percent'])
+            ? (int) $data['load_percent']
+            : ShtabAssignment::defaultLoad($roleType);
+
+        return $data;
     }
 
     private function endAssignment(ShtabAssignment $assignment, ?string $comment): void

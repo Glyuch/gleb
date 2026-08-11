@@ -87,6 +87,35 @@ it('orders objects by focus level desc and separates business metrics', function
         ->and($result['business_metrics'][0]['name'])->toBe('выручка');
 });
 
+it('sums load per person and flags overload above capacity', function () {
+    $person = ShtabPerson::factory()->create();
+    ShtabAssignment::factory()->create(['person_id' => $person->id, 'role_type' => 'owner', 'load_percent' => 70]);
+    ShtabAssignment::factory()->create(['person_id' => $person->id, 'role_type' => 'helper', 'load_percent' => 50]);
+
+    $board = (new BuildShtabBoard)->handle();
+
+    expect($board['people'][0]['load_percent'])->toBe(120)
+        ->and($board['people'][0]['load_status'])->toBe('over')
+        ->and($board['people'][0]['owner_count'])->toBe(1)
+        ->and($board['people'][0]['is_overloaded'])->toBeTrue()
+        ->and($board['capacity_percent'])->toBe(100);
+});
+
+it('reports the owner and the total load of an object', function () {
+    $object = ShtabObject::factory()->create();
+    $owner = ShtabPerson::factory()->create(['name' => 'Паша']);
+    ShtabAssignment::factory()->create(['object_id' => $object->id, 'person_id' => $owner->id, 'role_type' => 'owner', 'load_percent' => 50]);
+    ShtabAssignment::factory()->create(['object_id' => $object->id, 'role_type' => 'watcher', 'load_percent' => 10]);
+
+    $card = collect((new BuildShtabBoard)->handle()['objects'])->firstWhere('id', $object->id);
+
+    expect($card['has_owner'])->toBeTrue()
+        ->and($card['owner_name'])->toBe('Паша')
+        ->and($card['load_total'])->toBe(60)
+        // Владелец всегда первым в списке назначений на карточке.
+        ->and($card['assignments'][0]['role_type'])->toBe('owner');
+});
+
 it('hides archived people and objects from the board', function () {
     ShtabPerson::factory()->create(['archived_at' => now()]);
     ShtabObject::factory()->create(['archived_at' => now()]);

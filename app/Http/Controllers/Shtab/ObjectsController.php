@@ -53,7 +53,7 @@ class ObjectsController extends Controller
 
     public function update(Request $request, ShtabObject $object): RedirectResponse
     {
-        $data = $this->validated($request);
+        $data = $this->validated($request, $object);
         $from = $object->focus_level;
 
         DB::transaction(function () use ($object, $data, $from): void {
@@ -89,7 +89,7 @@ class ObjectsController extends Controller
     /**
      * @return array<string, mixed>
      */
-    private function validated(Request $request): array
+    private function validated(Request $request, ?ShtabObject $object = null): array
     {
         $data = $request->validate([
             'type' => ['required', Rule::in(['product', 'project', 'enabler'])],
@@ -101,10 +101,45 @@ class ObjectsController extends Controller
             'color' => ['required', 'string', 'max:7'],
         ]);
 
+        // Продукт — всегда корень. Проект и энейблер могут висеть на продукте
+        // или на энейблере (например, проекты внутри «Отчётности бизнес-линии»).
         if ($data['type'] === 'product') {
             $data['parent_id'] = null;
+
+            return $data;
+        }
+
+        if ($data['parent_id'] !== null) {
+            $parent = ShtabObject::query()->find($data['parent_id']);
+
+            if (! $parent instanceof ShtabObject || ! in_array($parent->type, ['product', 'enabler'], true)) {
+                throw ValidationException::withMessages([
+                    'parent_id' => 'Родителем может быть только продукт или энейблер.',
+                ]);
+            }
+
+            if ($object !== null && $this->wouldLoop($object, $parent)) {
+                throw ValidationException::withMessages([
+                    'parent_id' => 'Нельзя вложить территорию саму в себя.',
+                ]);
+            }
         }
 
         return $data;
+    }
+
+    private function wouldLoop(ShtabObject $object, ShtabObject $parent): bool
+    {
+        $cursor = $parent;
+
+        for ($depth = 0; $cursor !== null && $depth < 10; $depth++) {
+            if ($cursor->id === $object->id) {
+                return true;
+            }
+
+            $cursor = $cursor->parent;
+        }
+
+        return false;
     }
 }

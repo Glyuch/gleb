@@ -71,6 +71,7 @@ Route::middleware(['auth', 'admin'])->prefix('admin')->name('admin.')->group(fun
 Route::middleware(['auth', 'admin'])->prefix('shtab')->name('shtab.')->group(function () {
     Route::get('/', [ShtabController::class, 'index'])->name('index');
     Route::post('/assignments', [AssignmentsController::class, 'store'])->name('assignments.store');
+    Route::patch('/assignments/{assignment}', [AssignmentsController::class, 'update'])->name('assignments.update');
     Route::post('/assignments/{assignment}/end', [AssignmentsController::class, 'end'])->name('assignments.end');
     Route::post('/assignments/{assignment}/move', [AssignmentsController::class, 'move'])->name('assignments.move');
     Route::patch('/metrics/{metric}/status', [MetricsController::class, 'status'])->name('metrics.status');

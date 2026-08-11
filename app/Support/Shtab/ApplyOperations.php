@@ -106,7 +106,7 @@ class ApplyOperations
         $object = $this->object($this->intField($operation, 'object_id', 'территория (object_id)'));
         $roleLabel = $this->maxLength($this->stringField($operation, 'role_label', 'роль (role_label)'), 'role_label', 100);
 
-        $this->startAssignment($person->id, $object->id, $roleLabel, $comment);
+        $this->startAssignment($person->id, $object->id, $roleLabel, $this->roleType($operation), $this->loadPercent($operation), $comment);
     }
 
     /**
@@ -139,7 +139,7 @@ class ApplyOperations
         }
 
         $this->endAssignmentRow($assignment, $comment);
-        $this->startAssignment($assignment->person_id, $object->id, $roleLabel, $comment);
+        $this->startAssignment($assignment->person_id, $object->id, $roleLabel, $this->roleType($operation, $assignment->role_type), $this->loadPercent($operation, $assignment->load_percent), $comment);
     }
 
     /**
@@ -314,7 +314,34 @@ class ApplyOperations
         $task->save();
     }
 
-    private function startAssignment(int $personId, int $objectId, string $roleLabel, ?string $comment): void
+    /**
+     * Тип участия из операции ИИ; неизвестное значение — не повод падать, берём
+     * дефолт (для переноса — прежний тип назначения).
+     *
+     * @param  array<string, mixed>  $operation
+     */
+    private function roleType(array $operation, string $fallback = 'helper'): string
+    {
+        $value = $operation['role_type'] ?? null;
+
+        return is_string($value) && in_array($value, ShtabAssignment::roleTypes(), true) ? $value : $fallback;
+    }
+
+    /**
+     * @param  array<string, mixed>  $operation
+     */
+    private function loadPercent(array $operation, ?int $fallback = null): int
+    {
+        $value = $operation['load_percent'] ?? null;
+
+        if (is_int($value) && $value >= 0 && $value <= 100) {
+            return $value;
+        }
+
+        return $fallback ?? ShtabAssignment::defaultLoad($this->roleType($operation));
+    }
+
+    private function startAssignment(int $personId, int $objectId, string $roleLabel, string $roleType, int $loadPercent, ?string $comment): void
     {
         $duplicate = ShtabAssignment::query()->active()
             ->where('person_id', $personId)
@@ -329,6 +356,8 @@ class ApplyOperations
             'person_id' => $personId,
             'object_id' => $objectId,
             'role_label' => $roleLabel,
+            'role_type' => $roleType,
+            'load_percent' => $loadPercent,
             'comment' => $comment,
             'started_at' => now()->toDateString(),
         ]);
@@ -336,7 +365,7 @@ class ApplyOperations
         ShtabEvent::record('assignment_started', [
             'person_id' => $personId,
             'object_id' => $objectId,
-            'payload' => ['role_label' => $roleLabel],
+            'payload' => ['role_label' => $roleLabel, 'role_type' => $roleType, 'load_percent' => $loadPercent],
             'comment' => $comment,
         ]);
     }
