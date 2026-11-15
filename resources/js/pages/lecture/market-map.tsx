@@ -38,6 +38,30 @@ function connection(from: MarketNode, to: MarketNode): string {
     return `M ${x1} ${y1} C ${x1 + dx * 0.35} ${y1 + bend}, ${x2 - dx * 0.35} ${y2 + bend}, ${x2} ${y2}`;
 }
 
+function functionLines(node: MarketNode): string[] {
+    if (node.id === 'ncc') {
+        return ['Клиринг и', 'центральный контрагент'];
+    }
+
+    const lines: string[] = [];
+    let currentLine = '';
+
+    for (const word of node.functionLabel.split(' ')) {
+        if (currentLine && currentLine.length + word.length + 1 > 20) {
+            lines.push(currentLine);
+            currentLine = word;
+        } else {
+            currentLine = currentLine ? `${currentLine} ${word}` : word;
+        }
+    }
+
+    if (currentLine) {
+        lines.push(currentLine);
+    }
+
+    return lines;
+}
+
 export default function MarketMap({ stage, onStageChange }: MarketMapProps) {
     const safeStage = Math.max(0, Math.min(7, stage));
     const [selection, setSelection] = useState({ stage: -1, id: 'exchange' });
@@ -307,7 +331,7 @@ export default function MarketMap({ stage, onStageChange }: MarketMapProps) {
                                                     ? -5 + lineIndex * 26
                                                     : 8
                                             }
-                                            className={`mm-node-name ${node.id === 'institutions' ? 'mm-node-name-small' : ''}`}
+                                            className={`mm-node-name ${line.length >= 14 ? 'mm-node-name-small' : ''}`}
                                         >
                                             {line}
                                         </text>
@@ -317,23 +341,18 @@ export default function MarketMap({ stage, onStageChange }: MarketMapProps) {
                                             y={core ? 84 : 59}
                                             className="mm-node-function"
                                         >
-                                            {node.functionLabel.length > 26 ? (
-                                                <>
-                                                    <tspan x="0">
-                                                        {node.functionLabel
-                                                            .split(' ')
-                                                            .slice(0, 2)
-                                                            .join(' ')}
+                                            {functionLines(node).map(
+                                                (line, index) => (
+                                                    <tspan
+                                                        key={line}
+                                                        x="0"
+                                                        dy={
+                                                            index === 0 ? 0 : 22
+                                                        }
+                                                    >
+                                                        {line}
                                                     </tspan>
-                                                    <tspan x="0" dy="21">
-                                                        {node.functionLabel
-                                                            .split(' ')
-                                                            .slice(2)
-                                                            .join(' ')}
-                                                    </tspan>
-                                                </>
-                                            ) : (
-                                                node.functionLabel
+                                                ),
                                             )}
                                         </text>
                                     )}
