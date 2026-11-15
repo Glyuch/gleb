@@ -88,18 +88,23 @@
     min-height: 0;
     display: grid;
     grid-template-columns: minmax(0, 1fr) 360px;
+    grid-template-rows: minmax(0, 1fr);
     gap: 24px;
     padding-top: 14px;
 }
 .mm-canvas {
     min-width: 0;
+    min-height: 0;
+    height: 100%;
     position: relative;
 }
 .mm-canvas svg {
+    position: absolute;
+    inset: 0;
     width: 100%;
-    height: 100%;
+    height: calc(100% - 28px);
     display: block;
-    overflow: visible;
+    overflow: hidden;
 }
 .mm-core-label {
     fill: #c59eab;
@@ -140,7 +145,7 @@
     animation-delay: calc(var(--mm-order) * 60ms);
 }
 .mm-node.is-dimmed {
-    opacity: 0.2;
+    opacity: 0.58;
 }
 .mm-node-shape {
     fill: #a99ceb;
@@ -191,12 +196,12 @@
     fill: #eef8ff;
 }
 .mm-node-name-small {
-    font-size: 17px;
+    font-size: 20.5px;
 }
 .mm-node-function {
     text-anchor: middle;
-    fill: #b7c1d5;
-    font-size: 15px;
+    fill: #c2cde0;
+    font-size: 21px;
     font-weight: 450;
     pointer-events: none;
 }
@@ -249,10 +254,14 @@
     color: #8494af;
 }
 .mm-detail {
+    min-height: 0;
+    overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: #4c607c transparent;
     align-self: stretch;
     position: relative;
     border-left: 1px solid #ffffff17;
-    padding: 17px 4px 42px 27px;
+    padding: 14px 5px 8px 24px;
     display: flex;
     flex-direction: column;
 }
@@ -285,8 +294,8 @@
     margin: 0 0 9px;
 }
 .mm-role {
-    font-size: 21px;
-    line-height: 1.45;
+    font-size: 20px;
+    line-height: 1.4;
     margin: 0 0 24px;
     color: #d5dceb;
 }
@@ -314,9 +323,8 @@
     line-height: 1.45;
 }
 .mm-node-counter {
-    position: absolute;
-    bottom: 6px;
-    left: 27px;
+    margin-top: 12px;
+    flex-shrink: 0;
     color: #687c9b;
     font-size: 13px;
 }
