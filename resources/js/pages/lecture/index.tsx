@@ -15,6 +15,7 @@ import {
 import { useCallback, useEffect, useState } from 'react';
 import type { CSSProperties } from 'react';
 import { presenter } from '@/actions/App/Http/Controllers/LectureController';
+import { FinuslugiLogo } from './brand';
 import {
     Funding,
     Goals,
@@ -23,7 +24,6 @@ import {
     Platform,
     SavingsCalculator,
     School,
-    Statements,
 } from './interactions';
 import MarketMap from './market-map';
 import { clickerDirection, nextCue, stepCount } from './presentation';
@@ -219,9 +219,18 @@ function Cover({ room }: { room: Room | null }) {
                 <div className="cover-orbit orbit-two" />
                 <div className="cover-orbit orbit-three" />
                 <div className="network-core">КАПИТАЛ</div>
-                <div className="network-node node-one">Рынок</div>
-                <div className="network-node node-two">Накопления</div>
-                <div className="network-node node-three">Бизнес</div>
+                <div className="network-node node-one">
+                    <span>01</span>
+                    <b>Рынок</b>
+                </div>
+                <div className="network-node node-two">
+                    <span>02</span>
+                    <b>Накопления</b>
+                </div>
+                <div className="network-node node-three">
+                    <span>03</span>
+                    <b>Бизнес</b>
+                </div>
                 <div className="orbit-particle" />
                 {room && !room.ended && (
                     <div className="cover-join" aria-hidden="false">
@@ -447,10 +456,11 @@ export default function Lecture({
                 >
                     <header className="lecture-header">
                         <button
-                            className="lecture-wordmark"
+                            className="lecture-brand"
+                            aria-label="Финуслуги — к началу лекции"
                             onClick={() => go(0)}
                         >
-                            gleb<span>.finance</span>
+                            <FinuslugiLogo />
                         </button>
                         <nav aria-label="Блоки презентации">
                             {[1, 2, 3].map((b) => (
@@ -571,9 +581,6 @@ export default function Lecture({
                                     )}
                                     {scene.kind === 'funding' && (
                                         <Funding {...presentationProps} />
-                                    )}
-                                    {scene.kind === 'statements' && (
-                                        <Statements {...presentationProps} />
                                     )}
                                     {scene.kind === 'pitch' && (
                                         <Pitch {...presentationProps} />

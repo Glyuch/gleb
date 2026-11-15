@@ -219,10 +219,10 @@ export function SavingsCalculator({
                             x2="0"
                             y2="1"
                         >
-                            <stop stopColor="#98ebcf" stopOpacity=".25" />
+                            <stop stopColor="#e00000" stopOpacity=".25" />
                             <stop
                                 offset="1"
-                                stopColor="#98ebcf"
+                                stopColor="#e00000"
                                 stopOpacity="0"
                             />
                         </linearGradient>
@@ -234,7 +234,7 @@ export function SavingsCalculator({
                             x2="880"
                             y1={50 + i * 100}
                             y2={50 + i * 100}
-                            stroke="#ffffff14"
+                            stroke="#24242616"
                         />
                     ))}
                     <path
@@ -244,14 +244,14 @@ export function SavingsCalculator({
                     <path
                         d={ownPath}
                         fill="none"
-                        stroke="#8e9ab6"
+                        stroke="#74747b"
                         strokeWidth="4"
                         strokeDasharray="10 8"
                     />
                     <path
                         d={path}
                         fill="none"
-                        stroke="#98ebcf"
+                        stroke="#e00000"
                         strokeWidth="6"
                     />
                     <text x="30" y="390">

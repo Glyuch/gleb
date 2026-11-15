@@ -1,6 +1,7 @@
 import { Head, Link } from '@inertiajs/react';
 import { ArrowRight, Check, Radio, ShieldCheck } from 'lucide-react';
 import { show } from '@/actions/App/Http/Controllers/LectureController';
+import { FinuslugiLogo } from './brand';
 import { formatVoteCount, useLectureRoom } from './room-client';
 import type { Room } from './types';
 import './lecture.css';
@@ -20,9 +21,7 @@ export default function Join({ room: initialRoom }: { room: Room }) {
             <Head title="Голосование — Деньги. Рынок. Вы." />
             <main className="audience-page">
                 <header>
-                    <span className="lecture-wordmark">
-                        gleb<span>.finance</span>
-                    </span>
+                    <FinuslugiLogo />
                     <span className="room-badge">{room.code}</span>
                 </header>
                 <div className="audience-intro">
