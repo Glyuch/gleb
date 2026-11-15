@@ -1,0 +1,278 @@
+<?php
+
+use App\Models\User;
+use App\Support\LectureRooms;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\File;
+use Inertia\Testing\AssertableInertia as Assert;
+
+beforeEach(function () {
+    $this->withoutVite();
+    $this->withCredentials();
+    $this->lectureCachePath = sys_get_temp_dir().'/gleb-lecture-test-'.bin2hex(random_bytes(8));
+    config(['lecture.cache_path' => $this->lectureCachePath]);
+});
+
+afterEach(function () {
+    File::deleteDirectory($this->lectureCachePath);
+});
+
+function lectureOwner(): User
+{
+    return User::factory()->create(['is_admin' => true]);
+}
+
+/** @return array<string, mixed> */
+function openLectureRoom(User $owner, string $question = 'exchange'): array
+{
+    $rooms = app(LectureRooms::class);
+    $room = $rooms->create($owner);
+    $rooms->change($room['code'], $owner, 'question', $question);
+
+    return $rooms->change($room['code'], $owner, 'open', null);
+}
+
+/** @return array<string, int|string> */
+function lectureVote(array $room, int $option = 0): array
+{
+    return ['questionId' => $room['questionId'], 'revision' => $room['revision'], 'option' => $option];
+}
+
+it('requires admin authentication for every presenter action', function () {
+    $this->get('/admin/lecture')->assertRedirect('/login');
+    $this->postJson('/admin/lecture/rooms')->assertUnauthorized();
+    $this->patchJson('/admin/lecture/rooms/ABC234', ['action' => 'open'])->assertUnauthorized();
+
+    $this->actingAs(User::factory()->create());
+    $this->get('/admin/lecture')->assertForbidden();
+    $this->postJson('/admin/lecture/rooms')->assertForbidden();
+    $this->patchJson('/admin/lecture/rooms/ABC234', ['action' => 'open'])->assertForbidden();
+});
+
+it('creates a room and restores it only for its owning presenter', function () {
+    $owner = lectureOwner();
+    $created = $this->actingAs($owner)->postJson('/admin/lecture/rooms')->assertCreated();
+    $code = $created->json('code');
+    $created->assertJsonPath('canManage', true)
+        ->assertJsonPath('question', null)
+        ->assertJsonPath('open', false)
+        ->assertJsonPath('totalVotes', 0)
+        ->assertJsonMissingPath('ownerId')
+        ->assertJsonMissingPath('polls')
+        ->assertJsonPath('qrUrl', route('lecture.qr', ['code' => $code]));
+
+    $this->get('/admin/lecture')->assertInertia(fn (Assert $page) => $page
+        ->component('lecture/index', false)
+        ->where('isPresenter', true)
+        ->where('room.code', $code)
+        ->missing('questions.0.correctIndex')
+        ->missing('questions.0.explanation'));
+
+    $this->actingAs(lectureOwner())->patchJson('/admin/lecture/rooms/'.$code, ['action' => 'end'])->assertForbidden();
+});
+
+it('does not publish answer keys in the public presentation props', function () {
+    $this->get('/lecture')->assertInertia(fn (Assert $page) => $page
+        ->component('lecture/index', false)
+        ->where('isPresenter', false)
+        ->where('room', null)
+        ->where('createRoomUrl', null)
+        ->has('questions', 6)
+        ->missing('questions.1.correctIndex')
+        ->missing('questions.1.explanation'));
+});
+
+it('issues a persistent encrypted participant cookie without registration and renders the QR locally', function () {
+    $room = openLectureRoom(lectureOwner());
+    $response = $this->get('https://localhost/lecture/join/'.$room['code'])
+        ->assertSuccessful()
+        ->assertCookie('lecture_participant')
+        ->assertInertia(fn (Assert $page) => $page
+            ->component('lecture/join', false)
+            ->where('room.canManage', false)
+            ->where('room.counts', null)
+            ->missing('room.question.correctIndex'));
+    $cookie = $response->getCookie('lecture_participant');
+    expect($cookie->isHttpOnly())->toBeTrue()
+        ->and($cookie->isSecure())->toBeTrue()
+        ->and($cookie->getPath())->toBe('/lecture')
+        ->and($cookie->getSameSite())->toBe('lax')
+        ->and($cookie->getValue())->toMatch('/\A[a-f0-9]{64}\z/');
+
+    $this->get('/lecture/rooms/'.$room['code'].'/qr.svg')
+        ->assertSuccessful()->assertHeader('Content-Type', 'image/svg+xml')
+        ->assertSee('<svg', false);
+});
+
+it('accepts a single browser vote and hides results and the answer until reveal', function () {
+    $owner = lectureOwner();
+    $room = openLectureRoom($owner);
+    $token = str_repeat('a', 64);
+    $url = '/lecture/rooms/'.$room['code'];
+
+    $this->withCookie('lecture_participant', $token)
+        ->postJson($url.'/vote', lectureVote($room))
+        ->assertSuccessful()->assertJsonPath('myVote', 0)->assertJsonPath('totalVotes', 1)
+        ->assertJsonPath('counts', null)->assertJsonMissingPath('question.correctIndex');
+    $this->postJson($url.'/vote', lectureVote($room, 1))->assertConflict();
+    $this->getJson($url.'/state')->assertJsonPath('totalVotes', 1)->assertJsonPath('myVote', 0);
+
+    $this->actingAs($owner)->getJson($url.'/state')
+        ->assertJsonPath('counts', [1, 0, 0, 0])->assertJsonMissingPath('question.correctIndex');
+
+    $this->patchJson('/admin/lecture/rooms/'.$room['code'], ['action' => 'reveal'])
+        ->assertSuccessful()->assertJsonPath('open', false)->assertJsonPath('revealed', true);
+    auth()->logout();
+
+    $this->getJson($url.'/state')
+        ->assertJsonPath('counts', [1, 0, 0, 0])
+        ->assertJsonPath('question.correctIndex', 0)
+        ->assertJsonStructure(['question' => ['explanation']]);
+});
+
+it('keeps votes isolated across browsers questions and rooms', function () {
+    $owner = lectureOwner();
+    $first = openLectureRoom($owner);
+    $second = openLectureRoom($owner);
+    $this->withCookie('lecture_participant', str_repeat('b', 64))
+        ->postJson('/lecture/rooms/'.$first['code'].'/vote', lectureVote($first, 1))->assertSuccessful();
+    $this->withCookie('lecture_participant', str_repeat('c', 64))
+        ->postJson('/lecture/rooms/'.$first['code'].'/vote', lectureVote($first, 2))->assertJsonPath('totalVotes', 2);
+    $this->postJson('/lecture/rooms/'.$second['code'].'/vote', lectureVote($second, 3))->assertJsonPath('totalVotes', 1);
+
+    $rooms = app(LectureRooms::class);
+    $rooms->change($first['code'], $owner, 'question', 'experience');
+    $changed = $rooms->change($first['code'], $owner, 'open', null);
+    $this->postJson('/lecture/rooms/'.$first['code'].'/vote', lectureVote($changed, 0))->assertJsonPath('totalVotes', 1);
+    $rooms->change($first['code'], $owner, 'question', 'exchange');
+    $this->getJson('/lecture/rooms/'.$first['code'].'/state')->assertJsonPath('myVote', 2)->assertJsonPath('totalVotes', 2);
+});
+
+it('rejects missing forged and malformed participant cookies', function (?string $token) {
+    $room = openLectureRoom(lectureOwner());
+    if ($token !== null) {
+        $this->withCookie('lecture_participant', $token);
+    }
+    $this->postJson('/lecture/rooms/'.$room['code'].'/vote', lectureVote($room))->assertForbidden();
+})->with([null, 'chosen-name', 'abc', str_repeat('z', 64)]);
+
+it('rejects out of range options and unknown questions without recording a vote', function (array $invalid) {
+    $room = openLectureRoom(lectureOwner(), 'cashflow');
+    $this->withCookie('lecture_participant', str_repeat('d', 64))
+        ->postJson('/lecture/rooms/'.$room['code'].'/vote', array_merge(lectureVote($room), $invalid))
+        ->assertUnprocessable();
+    $this->getJson('/lecture/rooms/'.$room['code'].'/state')->assertJsonPath('totalVotes', 0);
+})->with([
+    [['option' => -1]],
+    [['option' => 3]],
+    [['option' => 9]],
+    [['option' => 'free text']],
+    [['questionId' => 'invented']],
+    [['revision' => -1]],
+]);
+
+it('rejects stale closed and ended votes and does not reopen a revealed question', function () {
+    $owner = lectureOwner();
+    $room = openLectureRoom($owner);
+    $url = '/lecture/rooms/'.$room['code'];
+    $rooms = app(LectureRooms::class);
+    $this->withCookie('lecture_participant', str_repeat('e', 64));
+
+    $rooms->change($room['code'], $owner, 'close', null);
+    $this->postJson($url.'/vote', lectureVote($room))->assertConflict();
+    $reopened = $rooms->change($room['code'], $owner, 'open', null);
+    $this->postJson($url.'/vote', lectureVote($room))->assertConflict();
+    $this->postJson($url.'/vote', lectureVote($reopened))->assertSuccessful();
+
+    $rooms->change($room['code'], $owner, 'question', 'secondary');
+    $next = $rooms->change($room['code'], $owner, 'open', null);
+    $this->postJson($url.'/vote', lectureVote($reopened))->assertConflict();
+
+    $this->actingAs($owner)->patchJson('/admin/lecture/rooms/'.$room['code'], ['action' => 'reveal'])->assertSuccessful();
+    $this->patchJson('/admin/lecture/rooms/'.$room['code'], ['action' => 'open'])->assertConflict();
+    $this->patchJson('/admin/lecture/rooms/'.$room['code'], ['action' => 'end'])->assertSuccessful();
+    $this->patchJson('/admin/lecture/rooms/'.$room['code'], ['action' => 'open'])->assertConflict();
+    auth()->logout();
+    $this->postJson($url.'/vote', lectureVote($next))->assertConflict();
+    $this->getJson($url.'/state')->assertJsonPath('ended', true);
+});
+
+it('preserves the fixed expiration while rooms are active', function () {
+    $owner = lectureOwner();
+    $room = openLectureRoom($owner);
+    $this->travel(11)->hours();
+    $rooms = app(LectureRooms::class);
+    $changed = $rooms->change($room['code'], $owner, 'close', null);
+    expect($changed['expiresAt'])->toBe($room['expiresAt']);
+    $this->travel(2)->hours();
+
+    $this->getJson('/lecture/rooms/'.$room['code'].'/state')->assertNotFound();
+    $this->get('/lecture/join/'.$room['code'])->assertNotFound();
+    $this->get('/lecture/rooms/'.$room['code'].'/qr.svg')->assertNotFound();
+    $this->withCookie('lecture_participant', str_repeat('f', 64))
+        ->postJson('/lecture/rooms/'.$room['code'].'/vote', lectureVote($room))->assertNotFound();
+    $this->actingAs($owner)->patchJson('/admin/lecture/rooms/'.$room['code'], ['action' => 'open'])->assertNotFound();
+});
+
+it('rate limits repeated voting attempts per browser without blocking another audience browser', function () {
+    $room = openLectureRoom(lectureOwner());
+    $url = '/lecture/rooms/'.$room['code'].'/vote';
+    $this->withCookie('lecture_participant', str_repeat('1', 64));
+    $this->postJson($url, lectureVote($room))->assertSuccessful();
+    for ($attempt = 0; $attempt < 11; $attempt++) {
+        $this->postJson($url, lectureVote($room))->assertConflict();
+    }
+    $this->postJson($url, lectureVote($room))->assertTooManyRequests()->assertHeader('Retry-After');
+    $this->withCookie('lecture_participant', str_repeat('2', 64))
+        ->postJson($url, lectureVote($room))->assertSuccessful()->assertJsonPath('totalVotes', 2);
+});
+
+it('validates moderator commands and only opens a selected question', function () {
+    $owner = lectureOwner();
+    $room = app(LectureRooms::class)->create($owner);
+    $url = '/admin/lecture/rooms/'.$room['code'];
+    $this->actingAs($owner)->patchJson($url, ['action' => 'open'])->assertConflict();
+    $this->patchJson($url, ['action' => 'question'])->assertUnprocessable();
+    $this->patchJson($url, ['action' => 'question', 'questionId' => 'anything'])->assertUnprocessable();
+    $this->patchJson($url, ['action' => 'delete'])->assertUnprocessable();
+    $this->patchJson($url, ['action' => 'question', 'questionId' => 'experience'])
+        ->assertSuccessful()->assertJsonPath('question.id', 'experience')->assertJsonPath('open', false);
+    $this->patchJson($url, ['action' => 'open'])->assertSuccessful()->assertJsonPath('open', true);
+});
+
+it('rejects an unencrypted forged cookie and preserves duplicate protection when reopening', function () {
+    $owner = lectureOwner();
+    $room = openLectureRoom($owner);
+    $url = '/lecture/rooms/'.$room['code'].'/vote';
+    $token = str_repeat('3', 64);
+    $this->withUnencryptedCookie('lecture_participant', $token)
+        ->postJson($url, lectureVote($room))->assertForbidden();
+    $this->unencryptedCookies = [];
+    $this->withCookie('lecture_participant', $token)
+        ->postJson($url, lectureVote($room))->assertSuccessful();
+    $rooms = app(LectureRooms::class);
+    $rooms->change($room['code'], $owner, 'close', null);
+    $reopened = $rooms->change($room['code'], $owner, 'open', null);
+    $this->postJson($url, lectureVote($reopened, 2))->assertConflict();
+});
+
+it('returns a retry response while another vote owns the room lock', function () {
+    $room = openLectureRoom(lectureOwner());
+    $cache = Cache::build([
+        'driver' => 'file',
+        'path' => config('lecture.cache_path'),
+        'lock_path' => config('lecture.cache_path'),
+    ]);
+    $lock = $cache->lock('room-lock:'.$room['code'], 10);
+    expect($lock->get())->toBeTrue();
+
+    try {
+        $this->withCookie('lecture_participant', str_repeat('4', 64))
+            ->postJson('/lecture/rooms/'.$room['code'].'/vote', lectureVote($room))
+            ->assertTooManyRequests()->assertHeader('Retry-After', '3');
+    } finally {
+        $lock->release();
+    }
+    $this->getJson('/lecture/rooms/'.$room['code'].'/state')->assertJsonPath('totalVotes', 0);
+    $this->postJson('/lecture/rooms/'.$room['code'].'/vote', lectureVote($room))->assertSuccessful();
+});

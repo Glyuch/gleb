@@ -80,6 +80,15 @@ Behind `auth` + `admin`. **Blade.** Live and data-driven (rebuilt from the stati
 - **Views:** `resources/views/admin/docs/{index,show}.blade.php`; ссылка в сайдбаре `admin/layout.blade.php`.
 - Хранилища нет: источник правды — сами файлы в репозитории, новые документы появляются в списке сразу после `git pull`.
 
+### 8. Интерактивная лекция (`/lecture`)
+- **URLs:** `/lecture` — презентация; `/admin/lecture` — ведущий (`auth` + `admin`); `/lecture/join/{code}` — подключение аудитории без регистрации.
+- **API:** `POST /admin/lecture/rooms`, `PATCH /admin/lecture/rooms/{code}`; `GET /lecture/rooms/{code}/state`, `POST /lecture/rooms/{code}/vote`, `GET /lecture/rooms/{code}/qr.svg`.
+- **Controller / state:** `LectureController`, `App\Support\LectureRooms`; фиксированные вопросы и срок комнаты в `config/lecture.php`.
+- **Storage:** отдельный file cache `storage/framework/cache/lecture`, срок 12 часов; общая блокировка комнаты для голосов и управления. База данных и миграции не добавляются.
+- **Voting:** только заданные варианты, один ответ на вопрос с cookie браузера; ответы и пояснения раскрывает ведущий, управление ограничено владельцем комнаты. Закрытие/смена вопроса отменяет устаревшие запросы через revision.
+- **Frontend:** Inertia + React — `resources/js/pages/lecture/{index,join}.tsx`.
+- **Tests:** `tests/Feature/LectureTest.php`.
+
 ## Adding a new project
 Append a section under **Projects** using this stub:
 

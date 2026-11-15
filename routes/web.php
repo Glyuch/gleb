@@ -8,6 +8,7 @@ use App\Http\Controllers\Admin\GameSurveyController;
 use App\Http\Controllers\Admin\NutritionAdminController;
 use App\Http\Controllers\Admin\SiteDashboardController;
 use App\Http\Controllers\GameController;
+use App\Http\Controllers\LectureController;
 use App\Http\Controllers\NutritionBotController;
 use App\Http\Controllers\NutritionStatsController;
 use App\Http\Controllers\Shtab\AiController;
@@ -20,6 +21,18 @@ use App\Http\Controllers\Shtab\TasksController;
 use Illuminate\Support\Facades\Route;
 
 Route::inertia('/', 'welcome')->name('home');
+
+Route::get('/lecture', [LectureController::class, 'show'])->name('lecture');
+Route::get('/lecture/join/{code}', [LectureController::class, 'join'])->where('code', '[A-Z2-9]{6}')->name('lecture.join');
+Route::get('/lecture/rooms/{code}/state', [LectureController::class, 'state'])->where('code', '[A-Z2-9]{6}')->name('lecture.state');
+Route::get('/lecture/rooms/{code}/qr.svg', [LectureController::class, 'qr'])->where('code', '[A-Z2-9]{6}')->name('lecture.qr');
+Route::post('/lecture/rooms/{code}/vote', [LectureController::class, 'vote'])->where('code', '[A-Z2-9]{6}')->name('lecture.vote');
+
+Route::middleware(['auth', 'admin'])->group(function () {
+    Route::get('/admin/lecture', [LectureController::class, 'presenter'])->name('lecture.presenter');
+    Route::post('/admin/lecture/rooms', [LectureController::class, 'create'])->name('lecture.rooms.store');
+    Route::patch('/admin/lecture/rooms/{code}', [LectureController::class, 'update'])->where('code', '[A-Z2-9]{6}')->name('lecture.rooms.update');
+});
 
 Route::middleware(['auth', 'verified'])->group(function () {
     Route::inertia('dashboard', 'dashboard')->name('dashboard');
