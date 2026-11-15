@@ -131,29 +131,41 @@ export function useLectureRoom(initialRoom: Room | null) {
             clearTimeout(timer);
         };
     }, [stateUrl, ended, accept]);
-    const send = async (url: string, method: string, body: object) => {
-        if (mutating.current) {
-            return;
-        }
+    const send = useCallback(
+        async (
+            url: string,
+            method: string,
+            body: object,
+        ): Promise<Room | null> => {
+            if (mutating.current) {
+                return null;
+            }
 
-        generation.current += 1;
-        mutating.current = true;
-        setBusy(true);
-        setError('');
+            generation.current += 1;
+            mutating.current = true;
+            setBusy(true);
+            setError('');
 
-        try {
-            accept(await roomRequest(url, method, body));
-        } catch (reason) {
-            setError(
-                reason instanceof Error
-                    ? reason.message
-                    : 'Не удалось сохранить ответ. Попробуйте ещё раз.',
-            );
-        } finally {
-            mutating.current = false;
-            setBusy(false);
-        }
-    };
+            try {
+                const next = await roomRequest(url, method, body);
+                accept(next);
+
+                return next;
+            } catch (reason) {
+                setError(
+                    reason instanceof Error
+                        ? reason.message
+                        : 'Не удалось сохранить ответ. Попробуйте ещё раз.',
+                );
+
+                return null;
+            } finally {
+                mutating.current = false;
+                setBusy(false);
+            }
+        },
+        [accept],
+    );
 
     return { room, error, busy, send };
 }

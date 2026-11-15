@@ -198,7 +198,7 @@
     padding: 0 80px;
     border-top: 1px solid #ffffff14;
 }
-.lecture-footer > div:first-child {
+.lecture-footer .lecture-tools {
     display: flex;
     align-items: center;
     gap: 22px;
@@ -1778,4 +1778,101 @@ body:has(.audience-page) {
         transition: none !important;
         scroll-behavior: auto !important;
     }
+}
+
+/* A single click starts the session; all further actions follow the clicker. */
+.lecture-header .launch-lecture {
+    background: #98ebcf;
+    color: #122c2c;
+    font-weight: 600;
+    padding: 12px 18px;
+    white-space: nowrap;
+}
+.clicker-badge {
+    color: #98ebcf;
+    font-size: 17px;
+    white-space: nowrap;
+}
+.clicker-mode .lecture-header {
+    gap: 32px;
+}
+.clicker-mode .lecture-header nav {
+    gap: 25px;
+}
+.clicker-mode .lecture-header nav button {
+    font-size: 19px;
+}
+.lecture-footer .clicker-cue {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 5px;
+    min-width: 275px;
+    max-width: 320px;
+    color: #98ebcf;
+    font-size: 18px;
+}
+.clicker-cue small {
+    font-size: 14px;
+    color: #8996ad;
+}
+.clicker-mode .lecture-footer {
+    gap: 24px;
+}
+.clicker-mode .lecture-progress {
+    gap: 4px;
+}
+.clicker-mode .lecture-progress button {
+    width: 17px;
+}
+.cover-join {
+    position: absolute;
+    bottom: 5px;
+    left: 60px;
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    text-align: left;
+    padding: 18px;
+    border-radius: 16px;
+    background: #0c1424ed;
+    border: 1px solid #98ebcf55;
+}
+.cover-join img {
+    width: 150px;
+    height: 150px;
+    background: white;
+    border-radius: 8px;
+}
+.cover-join div {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+.cover-join b {
+    font-size: 23px;
+}
+.cover-join span {
+    color: #a3afc5;
+    font-size: 18px;
+}
+.cover-join strong {
+    font-size: 26px;
+    color: #98ebcf;
+    letter-spacing: 0.14em;
+}
+.launch-explanation {
+    margin: 20px 0;
+    padding: 22px;
+    border: 1px solid #98ebcf55;
+    border-radius: 16px;
+}
+.launch-explanation p,
+.clicker-panel-note {
+    font-size: 23px;
+    color: #a3afc5;
+    margin-bottom: 20px !important;
+}
+.clicker-mode [hidden] {
+    display: none !important;
 }

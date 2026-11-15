@@ -26,9 +26,11 @@ import {
     Statements,
 } from './interactions';
 import MarketMap from './market-map';
+import { clickerDirection, nextCue, stepCount } from './presentation';
 import { formatVoteCount, useLectureRoom } from './room-client';
 import { blocks, scenes, sources } from './scenes';
 import type { LectureProps, Question, Room } from './types';
+import { usePresentation } from './use-presentation';
 import './lecture.css';
 
 function Poll({
@@ -37,12 +39,16 @@ function Poll({
     isPresenter,
     busy,
     onAction,
+    clicker = false,
+    step = 0,
 }: {
     question: Question;
     room: Room | null;
     isPresenter: boolean;
     busy: boolean;
     onAction: (action: string, questionId?: string) => void;
+    clicker?: boolean;
+    step?: number;
 }) {
     const active = room?.question?.id === question.id && !room.ended;
     const results = active && room.revealed;
@@ -64,7 +70,9 @@ function Poll({
                             ? 'Голосование открыто'
                             : results
                               ? 'Результаты голосования'
-                              : 'Ожидаем открытия'}
+                              : clicker && step === 2
+                                ? 'Голосование закрыто'
+                                : 'Ожидаем открытия'}
                     {active && <b>{formatVoteCount(room.totalVotes)}</b>}
                 </div>
                 {question.options.map((option, index) => {
@@ -110,8 +118,8 @@ function Poll({
                         {room.question.explanation}
                     </p>
                 )}
-                {isPresenter && room && !room.ended && (
-                    <div className="poll-control-buttons">
+                {isPresenter && !clicker && room && !room.ended && (
+                    <div className="poll-control-buttons" hidden={clicker}>
                         {!active ? (
                             <button
                                 disabled={busy}
@@ -182,7 +190,7 @@ function Poll({
         </div>
     );
 }
-function Cover() {
+function Cover({ room }: { room: Room | null }) {
     return (
         <div className="cover-layout">
             <div>
@@ -206,7 +214,7 @@ function Cover() {
                     <span>Ваше участие</span>
                 </div>
             </div>
-            <div className="cover-network" aria-hidden="true">
+            <div className="cover-network">
                 <div className="cover-orbit orbit-one" />
                 <div className="cover-orbit orbit-two" />
                 <div className="cover-orbit orbit-three" />
@@ -215,6 +223,19 @@ function Cover() {
                 <div className="network-node node-two">Накопления</div>
                 <div className="network-node node-three">Бизнес</div>
                 <div className="orbit-particle" />
+                {room && !room.ended && (
+                    <div className="cover-join" aria-hidden="false">
+                        <img
+                            src={room.qrUrl}
+                            alt="QR-код подключения к лекции"
+                        />
+                        <div>
+                            <b>Подключайтесь к лекции</b>
+                            <span>Один QR на всё выступление</span>
+                            <strong>{room.code}</strong>
+                        </div>
+                    </div>
+                )}
             </div>
         </div>
     );
@@ -225,49 +246,34 @@ export default function Lecture({
     room: initialRoom,
     createRoomUrl,
 }: LectureProps) {
-    const [slide, setSlide] = useState(0);
     const [scale, setScale] = useState(1);
     const [panel, setPanel] = useState(false);
     const [notes, setNotes] = useState(false);
     const [contents, setContents] = useState(false);
     const [sourceOpen, setSourceOpen] = useState(false);
     const [help, setHelp] = useState(false);
-    const [running, setRunning] = useState(false);
     const [elapsed, setElapsed] = useState(0);
     const [fullscreenError, setFullscreenError] = useState('');
     const [endConfirm, setEndConfirm] = useState(false);
     const { room, error, busy, send } = useLectureRoom(initialRoom);
+    const playback = usePresentation(room, send, createRoomUrl, isPresenter);
+    const { slide, step, active: clicker, go, move } = playback;
+    const [running, setRunning] = useState(playback.active);
     const scene = scenes[slide];
-    const go = useCallback((target: number) => {
-        const next = Math.max(0, Math.min(scenes.length - 1, target));
-        setSlide(next);
-        window.history.replaceState(null, '', '#slide-' + (next + 1));
-    }, []);
+    const presentationProps = clicker
+        ? { presentationStep: step, onPresentationStepChange: playback.setStep }
+        : {};
+    const controlsBusy = busy || playback.transitioning;
     useEffect(() => {
-        const readHash = () => {
-            const match = window.location.hash.match(/^#slide-(\d+)$/);
-            setSlide(
-                Math.max(
-                    0,
-                    Math.min(
-                        scenes.length - 1,
-                        match ? Number(match[1]) - 1 : 0,
-                    ),
-                ),
-            );
-        };
         const resize = () =>
             setScale(
                 Math.min(window.innerWidth / 1920, window.innerHeight / 1080),
             );
-        readHash();
         resize();
         window.addEventListener('resize', resize);
-        window.addEventListener('hashchange', readHash);
 
         return () => {
             window.removeEventListener('resize', resize);
-            window.removeEventListener('hashchange', readHash);
         };
     }, []);
     const full = useCallback(async () => {
@@ -285,6 +291,26 @@ export default function Lecture({
             );
         }
     }, []);
+    const launch = async () => {
+        if (controlsBusy) {
+            return;
+        }
+
+        if (!document.fullscreenElement) {
+            void full();
+        }
+
+        if (await playback.start()) {
+            setRunning(true);
+            setElapsed(0);
+            setPanel(false);
+            setNotes(false);
+            setHelp(false);
+            setContents(false);
+            setSourceOpen(false);
+            (document.activeElement as HTMLElement | null)?.blur();
+        }
+    };
     useEffect(() => {
         const key = (event: KeyboardEvent) => {
             const target = event.target as HTMLElement;
@@ -309,21 +335,24 @@ export default function Lecture({
                 return;
             }
 
-            if (
-                event.key === ' ' &&
-                target.closest('button,a,[role="button"]')
-            ) {
+            const direction = clickerDirection(event.key);
+
+            if (direction) {
+                if (
+                    !clicker &&
+                    [' ', 'Enter'].includes(event.key) &&
+                    target.closest('button,a,[role="button"]')
+                ) {
+                    return;
+                }
+
+                event.preventDefault();
+
+                if (!event.repeat && !controlsBusy) {
+                    void move(direction);
+                }
+
                 return;
-            }
-
-            if (['ArrowRight', 'PageDown', ' '].includes(event.key)) {
-                event.preventDefault();
-                go(slide + 1);
-            }
-
-            if (['ArrowLeft', 'PageUp'].includes(event.key)) {
-                event.preventDefault();
-                go(slide - 1);
             }
 
             if (event.key === 'Home') {
@@ -351,9 +380,20 @@ export default function Lecture({
         window.addEventListener('keydown', key);
 
         return () => window.removeEventListener('keydown', key);
-    }, [slide, go, full, isPresenter, panel, contents, sourceOpen, help]);
+    }, [
+        clicker,
+        controlsBusy,
+        move,
+        go,
+        full,
+        isPresenter,
+        panel,
+        contents,
+        sourceOpen,
+        help,
+    ]);
     useEffect(() => {
-        if (!running) {
+        if (!running || room?.ended) {
             return;
         }
 
@@ -366,7 +406,7 @@ export default function Lecture({
         }, 1000);
 
         return () => clearInterval(interval);
-    }, [running]);
+    }, [running, room?.ended]);
     const action = (act: string, questionId?: string) => {
         if (room?.manageUrl) {
             void send(room.manageUrl, 'PATCH', {
@@ -400,7 +440,7 @@ export default function Lecture({
     return (
         <>
             <Head title="Деньги. Рынок. Вы. — интерактивная лекция" />
-            <div className="lecture-shell">
+            <div className={'lecture-shell' + (clicker ? ' clicker-mode' : '')}>
                 <main
                     className="lecture-stage"
                     style={{ '--lecture-scale': scale } as CSSProperties}
@@ -432,6 +472,23 @@ export default function Lecture({
                             ))}
                         </nav>
                         <div className="header-actions">
+                            {isPresenter && (!clicker || room?.ended) && (
+                                <button
+                                    className="launch-lecture"
+                                    disabled={controlsBusy}
+                                    onClick={() => void launch()}
+                                >
+                                    <Play size={21} />
+                                    {controlsBusy
+                                        ? 'Подключаем…'
+                                        : 'Начать лекцию'}
+                                </button>
+                            )}
+                            {clicker && !room?.ended && (
+                                <span className="clicker-badge">
+                                    Кликер · {timer}
+                                </span>
+                            )}
                             <button
                                 aria-label="Оглавление"
                                 title="Оглавление"
@@ -466,7 +523,7 @@ export default function Lecture({
                         aria-label={'Слайд ' + (slide + 1)}
                     >
                         {scene.kind === 'cover' ? (
-                            <Cover />
+                            <Cover room={clicker ? room : null} />
                         ) : (
                             <>
                                 <div className="slide-heading">
@@ -481,6 +538,7 @@ export default function Lecture({
                                         <MarketMap
                                             stage={scene.stage ?? 0}
                                             onStageChange={stageChange}
+                                            {...presentationProps}
                                         />
                                     )}
                                     {scene.kind === 'poll' && question && (
@@ -488,24 +546,38 @@ export default function Lecture({
                                             question={question}
                                             room={room}
                                             isPresenter={isPresenter}
-                                            busy={busy}
+                                            busy={controlsBusy}
                                             onAction={action}
+                                            clicker={clicker}
+                                            step={step}
                                         />
                                     )}
-                                    {scene.kind === 'goals' && <Goals />}
-                                    {scene.kind === 'calculator' && (
-                                        <SavingsCalculator />
+                                    {scene.kind === 'goals' && (
+                                        <Goals {...presentationProps} />
                                     )}
-                                    {scene.kind === 'platform' && <Platform />}
-                                    {scene.kind === 'moneybox' && <Moneybox />}
+                                    {scene.kind === 'calculator' && (
+                                        <SavingsCalculator
+                                            {...presentationProps}
+                                        />
+                                    )}
+                                    {scene.kind === 'platform' && (
+                                        <Platform {...presentationProps} />
+                                    )}
+                                    {scene.kind === 'moneybox' && (
+                                        <Moneybox {...presentationProps} />
+                                    )}
                                     {scene.kind === 'school' && (
                                         <School qrUrl="/media/lecture-course.svg" />
                                     )}
-                                    {scene.kind === 'funding' && <Funding />}
-                                    {scene.kind === 'statements' && (
-                                        <Statements />
+                                    {scene.kind === 'funding' && (
+                                        <Funding {...presentationProps} />
                                     )}
-                                    {scene.kind === 'pitch' && <Pitch />}
+                                    {scene.kind === 'statements' && (
+                                        <Statements {...presentationProps} />
+                                    )}
+                                    {scene.kind === 'pitch' && (
+                                        <Pitch {...presentationProps} />
+                                    )}
                                     {scene.kind === 'bridge' && (
                                         <div className="bridge-layout">
                                             <div>
@@ -625,7 +697,23 @@ export default function Lecture({
                         )}
                     </section>
                     <footer className="lecture-footer">
-                        <div>
+                        {clicker && (
+                            <div className="clicker-cue" aria-live="polite">
+                                <span>
+                                    {room?.ended
+                                        ? 'Спасибо за участие'
+                                        : controlsBusy
+                                          ? 'Синхронизация…'
+                                          : playback.retrying
+                                            ? '→ Повторить шаг'
+                                            : '→ ' + nextCue(scene, step)}
+                                </span>
+                                <small>
+                                    Шаг {step + 1} / {stepCount(scene)}
+                                </small>
+                            </div>
+                        )}
+                        <div className="lecture-tools">
                             <button
                                 onClick={() => setHelp(true)}
                                 aria-label="Как управлять презентацией"
@@ -665,15 +753,24 @@ export default function Lecture({
                             </span>
                             <button
                                 aria-label="Предыдущий слайд"
-                                disabled={slide === 0}
-                                onClick={() => go(slide - 1)}
+                                disabled={
+                                    controlsBusy ||
+                                    (slide === 0 && step === 0) ||
+                                    Boolean(clicker && room?.ended)
+                                }
+                                onClick={() => void playback.move(-1)}
                             >
                                 <ArrowLeft />
                             </button>
                             <button
                                 aria-label="Следующий слайд"
-                                disabled={slide === scenes.length - 1}
-                                onClick={() => go(slide + 1)}
+                                disabled={
+                                    controlsBusy ||
+                                    (slide === scenes.length - 1 &&
+                                        (!clicker ||
+                                            step === stepCount(scene) - 1))
+                                }
+                                onClick={() => void playback.move(1)}
                             >
                                 <ArrowRight />
                             </button>
@@ -682,6 +779,8 @@ export default function Lecture({
                     {(error || fullscreenError) && (
                         <div className="lecture-toast" role="status">
                             {error || fullscreenError}
+                            {playback.retrying &&
+                                ' Нажмите «вперёд», чтобы повторить этот шаг.'}
                         </div>
                     )}
                     {notes && (
@@ -715,6 +814,31 @@ export default function Lecture({
                                 </button>
                                 <span className="eyebrow">Панель ведущего</span>
                                 <h2>Управление эфиром</h2>
+                                {!clicker && room && !room.ended && (
+                                    <div className="launch-explanation">
+                                        <p>
+                                            Один запуск — и дальше только
+                                            кликер. Вопрос, открытие, закрытие и
+                                            результаты идут отдельными шагами.
+                                        </p>
+                                        <button
+                                            className="primary-button"
+                                            disabled={controlsBusy}
+                                            onClick={() => void launch()}
+                                        >
+                                            <Play />
+                                            Начать лекцию
+                                        </button>
+                                    </div>
+                                )}
+                                {clicker && (
+                                    <p className="clicker-panel-note">
+                                        Режим кликера включён. Закройте панель и
+                                        нажимайте «вперёд». Голосования и
+                                        интерактивы переключаются вместе со
+                                        слайдами.
+                                    </p>
+                                )}
                                 <div className="presenter-timer">
                                     <span
                                         className={
@@ -734,23 +858,16 @@ export default function Lecture({
                                 {!room || room.ended ? (
                                     <>
                                         <p>
-                                            Создайте отдельный эфир для
-                                            аудитории. QR появится на слайдах с
-                                            вопросами.
+                                            Нажмите один раз: создадим эфир и
+                                            QR-код. Дальше лекцией управляет
+                                            кликер.
                                         </p>
                                         <button
                                             className="primary-button"
                                             disabled={busy || !createRoomUrl}
-                                            onClick={() =>
-                                                createRoomUrl &&
-                                                void send(
-                                                    createRoomUrl,
-                                                    'POST',
-                                                    {},
-                                                )
-                                            }
+                                            onClick={() => void launch()}
                                         >
-                                            Создать эфир
+                                            Начать лекцию
                                         </button>
                                     </>
                                 ) : (
@@ -779,7 +896,10 @@ export default function Lecture({
                                                 </small>
                                             </div>
                                         </div>
-                                        <label className="question-select">
+                                        <label
+                                            className="question-select"
+                                            hidden={clicker}
+                                        >
                                             Вопрос
                                             <select
                                                 value={room.question?.id ?? ''}
@@ -805,7 +925,10 @@ export default function Lecture({
                                             </select>
                                             <ChevronDown />
                                         </label>
-                                        <div className="poll-control-buttons">
+                                        <div
+                                            className="poll-control-buttons"
+                                            hidden={clicker}
+                                        >
                                             <button
                                                 disabled={
                                                     busy ||
@@ -1007,20 +1130,24 @@ export default function Lecture({
                                 </button>
                                 <h2>Управление со сцены</h2>
                                 <p>
-                                    <kbd>→</kbd> <kbd>Пробел</kbd> следующий
-                                    слайд
+                                    <kbd>→</kbd> <kbd>Page Down</kbd>{' '}
+                                    <kbd>Пробел</kbd> следующий шаг
                                 </p>
                                 <p>
-                                    <kbd>←</kbd> предыдущий слайд
+                                    <kbd>←</kbd> <kbd>Page Up</kbd> предыдущий
+                                    шаг
                                 </p>
                                 <p>
                                     <kbd>F</kbd> полный экран · <kbd>N</kbd>{' '}
                                     заметки · <kbd>P</kbd> эфир
                                 </p>
                                 <p>
-                                    На карте нажимайте участников, переключайте
-                                    слои и маршруты. Голосования открывайте и
-                                    раскрывайте вручную.
+                                    Нажмите «Начать лекцию» один раз. На
+                                    вопросах: вопрос и QR → открыть голосование
+                                    → закрыть → показать результаты → дальше.
+                                    Карта и примеры раскрываются тем же
+                                    кликером. На финальном слайде следующее
+                                    нажатие завершит эфир.
                                 </p>
                                 <p className="fine">
                                     Рабочий формат — 1920 × 1080. Встроенный

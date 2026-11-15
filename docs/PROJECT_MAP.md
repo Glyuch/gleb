@@ -87,7 +87,8 @@ Behind `auth` + `admin`. **Blade.** Live and data-driven (rebuilt from the stati
 - **Storage:** отдельный file cache `storage/framework/cache/lecture`, срок 12 часов; общая блокировка комнаты для голосов и управления. База данных и миграции не добавляются.
 - **Voting:** только заданные варианты, один ответ на вопрос с cookie браузера; ответы и пояснения раскрывает ведущий, управление ограничено владельцем комнаты. Закрытие/смена вопроса отменяет устаревшие запросы через revision.
 - **Frontend:** Inertia + React — `resources/js/pages/lecture/{index,join}.tsx`; 24 сцены и тайминг 40 минут в `scenes.ts`, интерактивы в `interactions.tsx`, карта Miro и маршруты в `market-{map,data}`. Формат сцены 1920×1080; телефон аудитории получает отдельный адаптивный экран.
-- **Tests:** `tests/Feature/LectureTest.php`; формула накоплений и тайминг — `node --test tests/Unit/lecture-math.test.mjs`.
+- **Clicker:** «Начать лекцию» создаёт или восстанавливает эфир и QR. Стрелки, Page Down/Page Up, пробел и Enter управляют шагами: вопрос → открыть → закрыть → результаты. Карта и примеры раскрываются последовательно; последний шаг завершает эфир. `presentation.ts` и `use-presentation.ts` управляют последовательностью, подтверждением сервером и повтором неуспешной команды. `PATCH action=present` атомарно выбирает вопрос/фазу и принимает идемпотентный UUID `commandId`.
+- **Tests:** `tests/Feature/LectureTest.php`; `node --test tests/Unit/lecture-*.test.mjs` — формула, тайминг, последовательность, задержки/повторы и рендер шагов компонентов.
 
 ## Adding a new project
 Append a section under **Projects** using this stub:
