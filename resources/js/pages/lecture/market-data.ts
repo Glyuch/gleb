@@ -300,6 +300,19 @@ export const marketNodes: MarketNode[] = [
     },
 ];
 
+export const secondarySeller: MarketNode = {
+    id: 'seller',
+    label: ['Другой инвестор', 'продавец'],
+    x: 815,
+    y: 390,
+    stage: 7,
+    kind: 'investor',
+    functionLabel: 'Продаёт свои бумаги',
+    role: 'Получает деньги при продаже ранее выпущенной бумаги на вторичном рынке.',
+    instruments: ['Акция'],
+    note: 'Контекстная роль в примере сделки, а не отдельный вид участника рынка.',
+};
+
 export const marketLinks: [string, string][] = [
     ['exchange', 'nsd'],
     ['exchange', 'ncc'],
@@ -363,10 +376,10 @@ export const marketFlows: {
             },
             {
                 title: '3. Деньги → продавцу',
-                text: 'При вторичной покупке деньги получает другой инвестор — продавец, а не компания, выпустившая акцию.',
-                nodes: ['investor', 'broker', 'ncc'],
-                from: 'broker',
-                to: 'ncc',
+                text: 'Через расчётную инфраструктуру деньги получает продавец — другой инвестор. Компания, выпустившая акцию, в этой сделке нового капитала не получает.',
+                nodes: ['investor', 'broker', 'ncc', 'seller'],
+                from: 'ncc',
+                to: 'seller',
                 kind: 'money',
             },
             {
@@ -431,11 +444,11 @@ export const marketFlows: {
             },
             {
                 title: '2. УК выбирает активы',
-                text: 'Управляющая компания размещает имущество ПИФа согласно его правилам и инвестиционной декларации.',
+                text: 'УК принимает инвестиционные решения и направляет поручения на сделки согласно правилам фонда. Приобретаемые активы входят в имущество ПИФа.',
                 nodes: ['uk', 'exchange'],
                 from: 'uk',
                 to: 'exchange',
-                kind: 'money',
+                kind: 'rights',
             },
             {
                 title: '3. Разделение ролей',

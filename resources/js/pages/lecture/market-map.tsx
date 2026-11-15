@@ -6,6 +6,7 @@ import {
     marketNodes,
     marketStages,
     marketSources,
+    secondarySeller,
 } from './market-data';
 import type { MarketNode } from './market-data';
 import './market-map.css';
@@ -15,7 +16,9 @@ interface MarketMapProps {
     onStageChange?: (stage: number) => void;
 }
 
-const nodeById = Object.fromEntries(marketNodes.map((node) => [node.id, node]));
+const nodeById = Object.fromEntries(
+    [...marketNodes, secondarySeller].map((node) => [node.id, node]),
+);
 
 function connection(from: MarketNode, to: MarketNode): string {
     const dx = to.x - from.x;
@@ -79,6 +82,10 @@ export default function MarketMap({ stage, onStageChange }: MarketMapProps) {
             : undefined;
     const step = flow?.steps[Math.min(flowStep, flow.steps.length - 1)];
     const activeNodes = step?.nodes ?? [];
+    const drawnNodes =
+        flow?.id === 'secondary'
+            ? [...marketNodes, secondarySeller]
+            : marketNodes;
     const visibleNodes = marketNodes.filter((node) => node.stage <= safeStage);
     const selectedLinks = marketLinks.filter(
         ([from, to]) => from === selected.id || to === selected.id,
@@ -246,7 +253,7 @@ export default function MarketMap({ stage, onStageChange }: MarketMapProps) {
                                 </circle>
                             </g>
                         )}
-                        {marketNodes.map((node, index) => {
+                        {drawnNodes.map((node, index) => {
                             const shown = node.stage <= safeStage;
                             const isSelected = !step && node.id === selected.id;
                             const active = step
@@ -265,12 +272,24 @@ export default function MarketMap({ stage, onStageChange }: MarketMapProps) {
                                             '--mm-order': index % 4,
                                         } as CSSProperties
                                     }
-                                    role="button"
-                                    tabIndex={shown ? 0 : -1}
+                                    role={
+                                        node.id === 'seller' ? 'img' : 'button'
+                                    }
+                                    tabIndex={
+                                        shown && node.id !== 'seller' ? 0 : -1
+                                    }
                                     aria-hidden={!shown}
                                     aria-label={`${node.label.join(' ')}. ${node.functionLabel}`}
-                                    aria-pressed={isSelected}
+                                    aria-pressed={
+                                        node.id === 'seller'
+                                            ? undefined
+                                            : isSelected
+                                    }
                                     onClick={() => {
+                                        if (node.id === 'seller') {
+                                            return;
+                                        }
+
                                         setSelection({
                                             stage: safeStage,
                                             id: node.id,
