@@ -5,6 +5,20 @@ import ts from 'typescript';
 import { scenes } from '../../resources/js/pages/lecture/scenes.ts';
 import * as flow from '../../resources/js/pages/lecture/presentation.ts';
 
+test('the revised deck omits the cashflow quiz and financial statements scenes', () => {
+    assert.equal(scenes.length, 22);
+    assert.equal(
+        scenes.some((scene) => scene.poll === 'cashflow'),
+        false,
+    );
+    assert.equal(
+        scenes.some((scene) => scene.kind === 'statements'),
+        false,
+    );
+    const funding = scenes.findIndex((scene) => scene.kind === 'funding');
+    assert.equal(scenes[funding + 1].kind, 'pitch');
+    assert.equal(scenes.at(-1).kind, 'finish');
+});
 test('every poll requires separate waiting, open, closed and results steps', () => {
     for (const scene of scenes.filter((s) => s.poll)) {
         assert.deepEqual(
@@ -33,7 +47,11 @@ test('complete forward run includes all scenes, all four money routes, and expli
         positions.filter((p) => scenes[p.slide].stage === 7).length,
         16,
     );
-    assert.deepEqual(positions.at(-1), { slide: 23, step: 1 });
+    assert.deepEqual(
+        [...new Set(positions.map((p) => p.slide))],
+        scenes.map((_, i) => i),
+    );
+    assert.deepEqual(positions.at(-1), { slide: scenes.length - 1, step: 1 });
     assert.equal(
         scenes.reduce((sum, s) => sum + s.minutes, 0),
         40,
@@ -69,7 +87,7 @@ test('clicker keys, bounded URL steps and content poll clearing', () => {
         step: 11,
     });
     assert.deepEqual(flow.clampPosition(scenes, { slide: 100, step: 100 }), {
-        slide: 23,
+        slide: scenes.length - 1,
         step: 1,
     });
     assert.deepEqual(flow.presentationTarget(scenes[2], 0), {
@@ -236,7 +254,7 @@ test('the final click ends the room and a new launch creates a fresh session', a
     )
         await h.render().move(1);
     assert.equal(h.sent.filter((c) => c.body.action === 'end').length, 1);
-    assert.equal(h.render().slide, 23);
+    assert.equal(h.render().slide, scenes.length - 1);
     assert.equal(h.render().step, 1);
     await h.render().start();
     assert.equal(h.sent.filter((c) => c.url === '/create').length, 1);

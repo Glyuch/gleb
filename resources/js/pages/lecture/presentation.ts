@@ -17,7 +17,6 @@ export function stepCount(scene: Scene): number {
                 platform: 4,
                 moneybox: 2,
                 funding: 5,
-                statements: 3,
                 pitch: 4,
                 finish: 2,
             } as Record<string, number>
