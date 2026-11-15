@@ -1,0 +1,471 @@
+.market-map {
+    --mm-bg: #0d1729;
+    --mm-lavender: #b6abff;
+    --mm-coral: #ff7c7c;
+    --mm-mint: #74edc0;
+    --mm-yellow: #f5df81;
+    width: 100%;
+    height: 740px;
+    display: flex;
+    flex-direction: column;
+    color: #f3f5fc;
+    font-family: inherit;
+}
+.market-map * {
+    box-sizing: border-box;
+}
+.mm-toolbar {
+    height: 58px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-bottom: 1px solid #ffffff12;
+    flex-shrink: 0;
+}
+.mm-stage-caption {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    font-size: 25px;
+    font-weight: 600;
+}
+.mm-stage-caption > span {
+    color: var(--mm-coral);
+    font-size: 18px;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0.08em;
+}
+.mm-layer-controls {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    color: #a4adc2;
+    font-size: 18px;
+}
+.mm-layer-controls button {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    border: 1px solid #ffffff20;
+    background: #ffffff04;
+    color: #a4adc2;
+    padding: 8px 13px;
+    border-radius: 9px;
+    cursor: pointer;
+}
+.mm-layer-controls button[aria-pressed='true'] {
+    color: #f1f3fa;
+    background: #ffffff0b;
+    border-color: #ffffff40;
+}
+.mm-layer-controls i,
+.mm-participant-key i {
+    display: inline-block;
+    width: 11px;
+    height: 11px;
+    background: var(--mm-lavender);
+    border-radius: 50%;
+}
+.mm-participant-key {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding-right: 10px;
+}
+.mm-layer-controls .mm-function-key {
+    background: transparent;
+    border: 1px solid #a4adc2;
+    width: 15px;
+    height: 7px;
+    border-radius: 6px;
+}
+.mm-layer-controls .mm-instrument-key {
+    background: var(--mm-yellow);
+    border-radius: 2px;
+}
+.mm-body {
+    flex: 1;
+    min-height: 0;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 360px;
+    gap: 24px;
+    padding-top: 14px;
+}
+.mm-canvas {
+    min-width: 0;
+    position: relative;
+}
+.mm-canvas svg {
+    width: 100%;
+    height: 100%;
+    display: block;
+    overflow: visible;
+}
+.mm-core-label {
+    fill: #c59eab;
+    font-size: 13px;
+    letter-spacing: 2.2px;
+    text-anchor: middle;
+}
+.mm-link {
+    fill: none;
+    stroke: #7a89a5;
+    stroke-width: 1.25;
+    opacity: 0;
+    transition:
+        opacity 0.5s,
+        stroke 0.3s;
+}
+.mm-link.is-visible {
+    opacity: 0.25;
+}
+.mm-link.is-connected {
+    stroke: #c8c2ee;
+    opacity: 0.55;
+    stroke-width: 1.8;
+}
+.mm-node {
+    cursor: pointer;
+    opacity: 0;
+    visibility: hidden;
+    outline: none;
+    transition:
+        opacity 0.6s,
+        filter 0.3s;
+}
+.mm-node.is-visible {
+    opacity: 1;
+    visibility: visible;
+    animation: mm-reveal 0.6s backwards;
+    animation-delay: calc(var(--mm-order) * 60ms);
+}
+.mm-node.is-dimmed {
+    opacity: 0.2;
+}
+.mm-node-shape {
+    fill: #a99ceb;
+    stroke: #d6d0ff;
+    stroke-width: 1.2;
+    transition:
+        fill 0.25s,
+        stroke-width 0.25s;
+}
+.mm-node-core .mm-node-shape {
+    fill: #ec656c;
+    stroke: #ff9c9b;
+}
+.mm-node-investor .mm-node-shape {
+    fill: #88ddbd;
+    stroke: #c1ffe8;
+}
+.mm-node-platform .mm-node-shape {
+    fill: #496a82;
+    stroke: #8ab5cc;
+}
+.mm-node-halo {
+    fill: none;
+    stroke: transparent;
+    stroke-width: 2;
+    transition: stroke 0.3s;
+}
+.mm-node.is-selected .mm-node-halo,
+.mm-node:focus-visible .mm-node-halo {
+    stroke: #e1dcff;
+}
+.mm-node:hover .mm-node-shape {
+    stroke: #fff;
+    stroke-width: 3;
+}
+.mm-node-name {
+    fill: #161b37;
+    font-size: 22px;
+    font-weight: 650;
+    text-anchor: middle;
+    pointer-events: none;
+}
+.mm-node-core .mm-node-name {
+    fill: #fff6f3;
+    font-size: 24px;
+}
+.mm-node-platform .mm-node-name {
+    fill: #eef8ff;
+}
+.mm-node-name-small {
+    font-size: 17px;
+}
+.mm-node-function {
+    text-anchor: middle;
+    fill: #b7c1d5;
+    font-size: 15px;
+    font-weight: 450;
+    pointer-events: none;
+}
+.mm-stickers {
+    pointer-events: none;
+    animation: mm-reveal 0.4s;
+}
+.mm-stickers rect {
+    fill: var(--mm-yellow);
+}
+.mm-stickers text {
+    fill: #403c26;
+    text-anchor: middle;
+    font-size: 14px;
+    font-weight: 600;
+}
+.mm-intro text {
+    fill: #ecedfc;
+    font-size: 45px;
+    font-weight: 550;
+}
+.mm-intro .mm-intro-small {
+    fill: #9ba9c1;
+    font-size: 21px;
+    font-weight: 400;
+}
+.mm-flow path {
+    fill: none;
+    stroke-width: 3.2;
+    stroke-dasharray: 10 5;
+    animation: mm-dash 1.5s linear infinite;
+}
+.mm-flow-money path {
+    stroke: var(--mm-mint);
+}
+.mm-flow-rights path {
+    stroke: var(--mm-lavender);
+}
+.mm-flow-money circle {
+    fill: var(--mm-mint);
+}
+.mm-flow-rights circle {
+    fill: var(--mm-lavender);
+}
+.mm-map-footnote {
+    position: absolute;
+    bottom: -2px;
+    left: 16px;
+    font-size: 14px;
+    color: #8494af;
+}
+.mm-detail {
+    align-self: stretch;
+    position: relative;
+    border-left: 1px solid #ffffff17;
+    padding: 17px 4px 42px 27px;
+    display: flex;
+    flex-direction: column;
+}
+.mm-detail-eyebrow {
+    color: var(--mm-lavender);
+    font-size: 15px;
+    letter-spacing: 0.05em;
+    margin-bottom: 13px;
+}
+.mm-kind-core {
+    color: var(--mm-coral);
+}
+.mm-kind-investor {
+    color: var(--mm-mint);
+}
+.mm-kind-platform {
+    color: #99c9df;
+}
+.mm-detail h3 {
+    font-size: 32px;
+    font-weight: 600;
+    line-height: 1.1;
+    margin: 0 0 24px;
+    letter-spacing: -0.035em;
+}
+.mm-detail-section {
+    font-size: 12px;
+    letter-spacing: 0.12em;
+    color: #7e8ca7;
+    margin: 0 0 9px;
+}
+.mm-role {
+    font-size: 21px;
+    line-height: 1.45;
+    margin: 0 0 24px;
+    color: #d5dceb;
+}
+.mm-detail-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 7px;
+    margin-bottom: 24px;
+}
+.mm-detail-chips span {
+    background: #f5df8112;
+    border: 1px solid #f5df8140;
+    border-radius: 5px;
+    padding: 6px 9px;
+    font-size: 16px;
+    color: #e9da9b;
+    line-height: 1.2;
+}
+.mm-detail-note {
+    margin: auto 0 0;
+    border-top: 1px solid #ffffff12;
+    padding-top: 17px;
+    color: #9caac2;
+    font-size: 17px;
+    line-height: 1.45;
+}
+.mm-node-counter {
+    position: absolute;
+    bottom: 6px;
+    left: 27px;
+    color: #687c9b;
+    font-size: 13px;
+}
+.mm-bottom-bar {
+    min-height: 65px;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 18px;
+    padding-top: 10px;
+}
+.mm-bottom-bar > p {
+    font-size: 20px;
+    color: #b3c0d4;
+    margin: 0;
+}
+.mm-stage-dots {
+    display: flex;
+    gap: 5px;
+    flex-shrink: 0;
+}
+.mm-stage-dots button {
+    width: 27px;
+    height: 27px;
+    border-radius: 50%;
+    border: 1px solid #ffffff20;
+    background: transparent;
+    color: #8b9bb5;
+    font-size: 13px;
+    cursor: pointer;
+}
+.mm-stage-dots button[aria-current='step'] {
+    background: #ff7c7c;
+    color: #192239;
+    border-color: #ff7c7c;
+}
+.mm-routes {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.mm-routes > span {
+    color: #7c8eaa;
+    font-size: 16px;
+    margin-right: 6px;
+}
+.mm-routes button {
+    color: #c6d0e3;
+    background: #ffffff05;
+    border: 1px solid #ffffff20;
+    border-radius: 8px;
+    padding: 10px 16px;
+    font-size: 18px;
+    cursor: pointer;
+}
+.mm-routes button.is-active {
+    border-color: #74edc088;
+    color: #9cf3d3;
+    background: #74edc00b;
+}
+.mm-flow-key {
+    display: flex;
+    gap: 9px;
+    align-items: center;
+    font-size: 16px;
+    margin: 2px 0 25px;
+    color: var(--mm-lavender);
+}
+.mm-flow-key i {
+    width: 32px;
+    height: 2px;
+    background: var(--mm-lavender);
+}
+.mm-flow-key-money {
+    color: var(--mm-mint);
+}
+.mm-flow-key-money i {
+    background: var(--mm-mint);
+}
+.mm-flow-progress {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 20px;
+}
+.mm-flow-progress button {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    border: 1px solid #ffffff25;
+    color: #aab8cf;
+    background: transparent;
+    font-size: 16px;
+    cursor: pointer;
+}
+.mm-flow-progress button[aria-current='step'] {
+    color: #0d1729;
+    background: #c4baff;
+    border-color: #c4baff;
+}
+.mm-next-step {
+    display: flex;
+    justify-content: space-between;
+    border: none;
+    border-radius: 9px;
+    background: #c4baff;
+    color: #172037;
+    padding: 13px 17px;
+    margin-bottom: 25px;
+    font-size: 18px;
+    font-weight: 600;
+    cursor: pointer;
+}
+.market-map button:focus-visible {
+    outline: 2px solid #fff;
+    outline-offset: 4px;
+}
+@keyframes mm-reveal {
+    from {
+        opacity: 0;
+    }
+    to {
+        opacity: 1;
+    }
+}
+@keyframes mm-dash {
+    to {
+        stroke-dashoffset: -30;
+    }
+}
+@media (prefers-reduced-motion: reduce) {
+    .market-map *,
+    .market-map *::before,
+    .market-map *::after {
+        animation: none !important;
+        transition: none !important;
+    }
+    .mm-moving-dot {
+        display: none;
+    }
+}
+
+.mm-source {
+    color: #91aacb;
+    text-decoration: none;
+    font-size: 12px;
+    margin-top: 10px;
+}
+.mm-source:hover {
+    color: white;
+    text-decoration: underline;
+}
