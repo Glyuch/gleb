@@ -12,8 +12,44 @@ import {
 import { useState } from 'react';
 import { projectSavings, rubles } from './finance';
 
-export function Goals() {
-    const [selected, select] = useState(0);
+export interface PresentationStepProps {
+    presentationStep?: number;
+    onPresentationStepChange?: (step: number) => void;
+}
+
+function presentationIndex(value: number, count: number): number {
+    return Number.isFinite(value)
+        ? Math.max(0, Math.min(count - 1, Math.floor(value)))
+        : 0;
+}
+
+function usePresentationStep(props: PresentationStepProps, count: number) {
+    const [manualStep, setManualStep] = useState(0);
+    const controlled = props.presentationStep !== undefined;
+    const step = presentationIndex(
+        controlled ? props.presentationStep! : manualStep,
+        count,
+    );
+
+    function setStep(next: number) {
+        const bounded = presentationIndex(next, count);
+
+        if (controlled) {
+            props.onPresentationStepChange?.(bounded);
+        } else {
+            setManualStep(bounded);
+        }
+    }
+
+    return [
+        step,
+        setStep,
+        controlled && !props.onPresentationStepChange,
+    ] as const;
+}
+
+export function Goals(props: PresentationStepProps = {}) {
+    const [selected, select, controlsLocked] = usePresentationStep(props, 3);
     const goals = [
         {
             icon: ShieldCheck,
@@ -47,6 +83,7 @@ export function Goals() {
             <div className="goal-options">
                 {goals.map((goal, index) => (
                     <button
+                        disabled={controlsLocked}
                         key={goal.title}
                         aria-pressed={selected === index}
                         onClick={() => select(index)}
@@ -74,10 +111,23 @@ export function Goals() {
         </div>
     );
 }
-export function SavingsCalculator() {
-    const [monthly, setMonthly] = useState(10000);
-    const [years, setYears] = useState(10);
-    const [rate, setRate] = useState(8);
+export function SavingsCalculator({
+    presentationStep,
+}: PresentationStepProps = {}) {
+    const [manualMonthly, setMonthly] = useState(10000);
+    const [manualYears, setYears] = useState(10);
+    const [manualRate, setRate] = useState(8);
+    const controlled = presentationStep !== undefined;
+    const presets = [
+        { monthly: 10000, years: 10, rate: 8 },
+        { monthly: 20000, years: 10, rate: 8 },
+        { monthly: 20000, years: 20, rate: 8 },
+    ];
+    const preset =
+        presets[presentationIndex(presentationStep ?? 0, presets.length)];
+    const monthly = controlled ? preset.monthly : manualMonthly;
+    const years = controlled ? preset.years : manualYears;
+    const rate = controlled ? preset.rate : manualRate;
     const initial = 100000;
     const result = projectSavings(initial, monthly, years, rate);
     const points = Array.from({ length: years + 1 }, (_, i) =>
@@ -116,6 +166,7 @@ export function SavingsCalculator() {
                     <input
                         aria-label="Ежемесячный взнос"
                         type="range"
+                        disabled={controlled}
                         min="1000"
                         max="50000"
                         step="1000"
@@ -128,6 +179,7 @@ export function SavingsCalculator() {
                     <input
                         aria-label="Срок накопления в годах"
                         type="range"
+                        disabled={controlled}
                         min="1"
                         max="25"
                         value={years}
@@ -139,6 +191,7 @@ export function SavingsCalculator() {
                     <input
                         aria-label="Расчётная годовая доходность"
                         type="range"
+                        disabled={controlled}
                         min="-5"
                         max="20"
                         value={rate}
@@ -224,8 +277,8 @@ export function SavingsCalculator() {
         </div>
     );
 }
-export function Platform() {
-    const [step, setStep] = useState(0);
+export function Platform(props: PresentationStepProps = {}) {
+    const [step, setStep, controlsLocked] = usePresentationStep(props, 4);
     const steps = ['Цель', 'Сравнение', 'Оформление', 'Накопление'];
 
     return (
@@ -246,6 +299,7 @@ export function Platform() {
                 <div className="platform-path">
                     {steps.map((s, i) => (
                         <button
+                            disabled={controlsLocked}
                             key={s}
                             className={step === i ? 'chosen' : ''}
                             onClick={() => setStep(i)}
@@ -326,6 +380,7 @@ export function Platform() {
                     </div>
                 </div>
                 <button
+                    disabled={controlsLocked}
                     className="primary-button"
                     onClick={() => setStep((step + 1) % 4)}
                 >
@@ -336,8 +391,9 @@ export function Platform() {
         </div>
     );
 }
-export function Moneybox() {
-    const [open, setOpen] = useState(false);
+export function Moneybox(props: PresentationStepProps = {}) {
+    const [step, setStep, controlsLocked] = usePresentationStep(props, 2);
+    const open = step === 1;
 
     return (
         <div className="moneybox-layout">
@@ -347,7 +403,8 @@ export function Moneybox() {
                 <span>Пополнение → инвестиции</span>
                 <button
                     className="primary-button"
-                    onClick={() => setOpen(!open)}
+                    disabled={controlsLocked}
+                    onClick={() => setStep(open ? 0 : 1)}
                 >
                     {open ? 'Свернуть механику' : 'Что происходит внутри?'}{' '}
                     <ArrowRight />
@@ -449,8 +506,8 @@ const fundingStages = [
         note: 'Финансовая история, корпоративное управление, раскрытие информации и понятная инвестиционная история.',
     },
 ];
-export function Funding() {
-    const [stage, setStage] = useState(0);
+export function Funding(props: PresentationStepProps = {}) {
+    const [stage, setStage, controlsLocked] = usePresentationStep(props, 5);
     const data = fundingStages[stage];
 
     return (
@@ -458,6 +515,7 @@ export function Funding() {
             <div className="funding-stages">
                 {fundingStages.map((s, i) => (
                     <button
+                        disabled={controlsLocked}
                         key={s.title}
                         onClick={() => setStage(i)}
                         className={stage === i ? 'chosen' : ''}
@@ -490,8 +548,12 @@ export function Funding() {
         </div>
     );
 }
-export function Statements() {
-    const [paid, setPaid] = useState(60);
+export function Statements({ presentationStep }: PresentationStepProps = {}) {
+    const [manualPaid, setPaid] = useState(60);
+    const controlled = presentationStep !== undefined;
+    const paid = controlled
+        ? [100, 60, 80][presentationIndex(presentationStep, 3)]
+        : manualPaid;
 
     return (
         <div className="statements">
@@ -532,6 +594,7 @@ export function Statements() {
                 <input
                     id="paid"
                     type="range"
+                    disabled={controlled}
                     min="0"
                     max="100"
                     step="5"
@@ -551,8 +614,8 @@ export function Statements() {
         </div>
     );
 }
-export function Pitch() {
-    const [selected, select] = useState(0);
+export function Pitch(props: PresentationStepProps = {}) {
+    const [selected, select, controlsLocked] = usePresentationStep(props, 4);
     const items = [
         [
             'Сколько и на что',
@@ -581,6 +644,7 @@ export function Pitch() {
             <div className="pitch-questions">
                 {items.map((item, index) => (
                     <button
+                        disabled={controlsLocked}
                         key={item[0]}
                         className={selected === index ? 'chosen' : ''}
                         onClick={() => select(index)}

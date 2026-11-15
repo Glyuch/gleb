@@ -13,6 +13,8 @@ import './market-map.css';
 
 interface MarketMapProps {
     stage: number;
+    presentationStep?: number;
+    onPresentationStepChange?: (step: number) => void;
     onStageChange?: (stage: number) => void;
 }
 
@@ -65,22 +67,37 @@ function functionLines(node: MarketNode): string[] {
     return lines;
 }
 
-export default function MarketMap({ stage, onStageChange }: MarketMapProps) {
+export default function MarketMap({
+    stage,
+    onStageChange,
+    presentationStep,
+    onPresentationStepChange,
+}: MarketMapProps) {
     const safeStage = Math.max(0, Math.min(7, stage));
     const [selection, setSelection] = useState({ stage: -1, id: 'exchange' });
     const [functionsVisible, setFunctionsVisible] = useState(true);
     const [instrumentsVisible, setInstrumentsVisible] = useState(true);
     const [flowId, setFlowId] = useState('');
     const [flowStep, setFlowStep] = useState(0);
+    const controlled = safeStage === 7 && presentationStep !== undefined;
+    const controlledStep = Number.isFinite(presentationStep)
+        ? Math.max(0, Math.min(15, Math.floor(presentationStep!)))
+        : 0;
+    const effectiveFlowId = controlled
+        ? marketFlows[Math.floor(controlledStep / 4)].id
+        : flowId;
+    const effectiveFlowStep = controlled ? controlledStep % 4 : flowStep;
+    const controlsLocked = controlled && !onPresentationStepChange;
     const markerId = useId().replace(/:/g, '');
     const chapter = marketStages[safeStage];
     const selected =
         nodeById[selection.stage === safeStage ? selection.id : chapter.focus];
     const flow =
         safeStage === 7
-            ? marketFlows.find((item) => item.id === flowId)
+            ? marketFlows.find((item) => item.id === effectiveFlowId)
             : undefined;
-    const step = flow?.steps[Math.min(flowStep, flow.steps.length - 1)];
+    const step =
+        flow?.steps[Math.min(effectiveFlowStep, flow.steps.length - 1)];
     const activeNodes = step?.nodes ?? [];
     const drawnNodes =
         flow?.id === 'secondary'
@@ -93,8 +110,38 @@ export default function MarketMap({ stage, onStageChange }: MarketMapProps) {
     const neighbourIds = new Set(selectedLinks.flat());
 
     function selectFlow(id: string) {
+        if (controlled) {
+            onPresentationStepChange?.(
+                marketFlows.findIndex((item) => item.id === id) * 4,
+            );
+
+            return;
+        }
+
         setFlowId(id === flowId ? '' : id);
         setFlowStep(0);
+    }
+
+    function selectFlowStep(index: number) {
+        if (controlled) {
+            onPresentationStepChange?.(
+                Math.floor(controlledStep / 4) * 4 + index,
+            );
+
+            return;
+        }
+
+        setFlowStep(index);
+    }
+
+    function nextFlowStep() {
+        if (controlled) {
+            onPresentationStepChange?.(Math.min(15, controlledStep + 1));
+
+            return;
+        }
+
+        setFlowStep((flowStep + 1) % (flow?.steps.length ?? 1));
     }
 
     return (
@@ -230,7 +277,7 @@ export default function MarketMap({ stage, onStageChange }: MarketMapProps) {
                         })}
                         {step && (
                             <g
-                                key={`${flowId}-${flowStep}`}
+                                key={`${effectiveFlowId}-${effectiveFlowStep}`}
                                 className={`mm-flow mm-flow-${step.kind}`}
                                 aria-label={step.text}
                             >
@@ -276,7 +323,11 @@ export default function MarketMap({ stage, onStageChange }: MarketMapProps) {
                                         node.id === 'seller' ? 'img' : 'button'
                                     }
                                     tabIndex={
-                                        shown && node.id !== 'seller' ? 0 : -1
+                                        shown &&
+                                        node.id !== 'seller' &&
+                                        !controlled
+                                            ? 0
+                                            : -1
                                     }
                                     aria-hidden={!shown}
                                     aria-label={`${node.label.join(' ')}. ${node.functionLabel}`}
@@ -286,7 +337,10 @@ export default function MarketMap({ stage, onStageChange }: MarketMapProps) {
                                             : isSelected
                                     }
                                     onClick={() => {
-                                        if (node.id === 'seller') {
+                                        if (
+                                            node.id === 'seller' ||
+                                            controlled
+                                        ) {
                                             return;
                                         }
 
@@ -297,6 +351,10 @@ export default function MarketMap({ stage, onStageChange }: MarketMapProps) {
                                         setFlowId('');
                                     }}
                                     onKeyDown={(event) => {
+                                        if (controlled) {
+                                            return;
+                                        }
+
                                         if (
                                             event.key === 'Enter' ||
                                             event.key === ' '
@@ -462,11 +520,12 @@ export default function MarketMap({ stage, onStageChange }: MarketMapProps) {
                                         key={item.title}
                                         aria-label={`Шаг ${index + 1}: ${item.title}`}
                                         aria-current={
-                                            index === flowStep
+                                            index === effectiveFlowStep
                                                 ? 'step'
                                                 : undefined
                                         }
-                                        onClick={() => setFlowStep(index)}
+                                        disabled={controlsLocked}
+                                        onClick={() => selectFlowStep(index)}
                                     >
                                         {index + 1}
                                     </button>
@@ -475,16 +534,20 @@ export default function MarketMap({ stage, onStageChange }: MarketMapProps) {
                             <button
                                 className="mm-next-step"
                                 type="button"
-                                onClick={() =>
-                                    setFlowStep(
-                                        (flowStep + 1) %
-                                            (flow?.steps.length ?? 1),
-                                    )
+                                disabled={
+                                    controlsLocked ||
+                                    (controlled && controlledStep === 15)
                                 }
+                                onClick={nextFlowStep}
                             >
-                                {flowStep === (flow?.steps.length ?? 1) - 1
-                                    ? 'Повторить маршрут'
-                                    : 'Следующий шаг'}{' '}
+                                {controlled
+                                    ? controlledStep === 15
+                                        ? 'Маршрут завершён'
+                                        : 'Следующий шаг'
+                                    : effectiveFlowStep ===
+                                        (flow?.steps.length ?? 1) - 1
+                                      ? 'Повторить маршрут'
+                                      : 'Следующий шаг'}{' '}
                                 <span>→</span>
                             </button>
                             <p className="mm-detail-note">
@@ -542,9 +605,12 @@ export default function MarketMap({ stage, onStageChange }: MarketMapProps) {
                                 type="button"
                                 key={item.id}
                                 className={
-                                    flowId === item.id ? 'is-active' : ''
+                                    effectiveFlowId === item.id
+                                        ? 'is-active'
+                                        : ''
                                 }
-                                aria-pressed={flowId === item.id}
+                                aria-pressed={effectiveFlowId === item.id}
+                                disabled={controlsLocked}
                                 onClick={() => selectFlow(item.id)}
                             >
                                 {item.title}
