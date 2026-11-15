@@ -58,6 +58,20 @@ class LectureController extends Controller
     public function create(Request $request): JsonResponse
     {
         $this->rooms->limit('create:'.$request->user()->id, 10);
+        $request->validate(['reuse' => ['sometimes', 'boolean']]);
+        if ($request->boolean('reuse')) {
+            $code = $request->session()->get('lecture_room');
+            if (is_string($code)) {
+                try {
+                    $room = $this->rooms->get($code);
+                    if (! $room['ended'] && $room['ownerId'] === (int) $request->user()->id) {
+                        return $this->json($this->rooms->state($room, null, $request->user()));
+                    }
+                } catch (NotFoundHttpException) {
+                    $request->session()->forget('lecture_room');
+                }
+            }
+        }
         $room = $this->rooms->create($request->user());
         $request->session()->put('lecture_room', $room['code']);
 
@@ -67,11 +81,15 @@ class LectureController extends Controller
     public function update(Request $request, string $code): JsonResponse
     {
         $data = $request->validate([
-            'action' => ['required', Rule::in(['question', 'open', 'close', 'reveal', 'end'])],
+            'action' => ['required', Rule::in(['question', 'open', 'close', 'reveal', 'end', 'present'])],
+            'commandId' => ['required_if:action,present', 'uuid'],
+            'phase' => ['required_if:action,present', Rule::in(['waiting', 'open', 'closed', 'results'])],
             'questionId' => ['required_if:action,question', 'nullable', Rule::in(array_keys($this->rooms->questions()))],
         ]);
         $this->rooms->limit('manage:'.$request->user()->id, 120);
-        $room = $this->rooms->change($code, $request->user(), $data['action'], $data['questionId'] ?? null);
+        $room = $data['action'] === 'present'
+            ? $this->rooms->present($code, $request->user(), $data['commandId'], $data['questionId'] ?? null, $data['phase'])
+            : $this->rooms->change($code, $request->user(), $data['action'], $data['questionId'] ?? null);
 
         return $this->json($this->rooms->state($room, null, $request->user()));
     }

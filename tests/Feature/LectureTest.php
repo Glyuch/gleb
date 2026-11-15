@@ -4,6 +4,7 @@ use App\Models\User;
 use App\Support\LectureRooms;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\File;
+use Illuminate\Support\Str;
 use Inertia\Testing\AssertableInertia as Assert;
 
 beforeEach(function () {
@@ -275,4 +276,134 @@ it('returns a retry response while another vote owns the room lock', function ()
     }
     $this->getJson('/lecture/rooms/'.$room['code'].'/state')->assertJsonPath('totalVotes', 0);
     $this->postJson('/lecture/rooms/'.$room['code'].'/vote', lectureVote($room))->assertSuccessful();
+});
+
+/** @return array<string, string|null> */
+function lecturePresent(?string $questionId = 'exchange', string $phase = 'open'): array
+{
+    return [
+        'action' => 'present',
+        'commandId' => (string) Str::uuid(),
+        'questionId' => $questionId,
+        'phase' => $phase,
+    ];
+}
+
+it('reuses an active owned session room on repeated start requests', function () {
+    $owner = lectureOwner();
+    $first = $this->actingAs($owner)->postJson('/admin/lecture/rooms', ['reuse' => true])->assertCreated();
+    $code = $first->json('code');
+    $first->assertJsonPath('question', null)->assertJsonPath('revision', 0);
+    $this->postJson('/admin/lecture/rooms', ['reuse' => true])
+        ->assertSuccessful()->assertJsonPath('code', $code)->assertJsonPath('question', null);
+    $route = app('router')->getRoutes()->getByName('lecture.rooms.store');
+    expect($route->locksFor())->toBe(10)->and($route->waitsFor())->toBe(3);
+
+    $this->patchJson('/admin/lecture/rooms/'.$code, ['action' => 'end'])->assertSuccessful();
+    $next = $this->postJson('/admin/lecture/rooms', ['reuse' => true])->assertCreated()->json('code');
+    expect($next)->not->toBe($code);
+
+    $other = lectureOwner();
+    $this->actingAs($other)->postJson('/admin/lecture/rooms', ['reuse' => true])
+        ->assertCreated()->assertJsonPath('canManage', true)->assertJsonMissing(['code' => $next]);
+    $manual = $this->postJson('/admin/lecture/rooms')->assertCreated()->json('code');
+    expect($manual)->not->toBe($next);
+});
+
+it('presents a question and its phase atomically with stable retries and revisions', function () {
+    $owner = lectureOwner();
+    $room = app(LectureRooms::class)->create($owner);
+    $url = '/admin/lecture/rooms/'.$room['code'];
+    $command = lecturePresent();
+
+    $this->actingAs($owner)->patchJson($url, $command)->assertSuccessful()
+        ->assertJsonPath('question.id', 'exchange')->assertJsonPath('open', true)
+        ->assertJsonPath('revision', 1)->assertJsonMissingPath('question.correctIndex');
+    $this->patchJson($url, $command)->assertSuccessful()->assertJsonPath('revision', 1);
+    $this->patchJson($url, lecturePresent())->assertSuccessful()->assertJsonPath('revision', 1);
+
+    $this->patchJson($url, lecturePresent(null, 'waiting'))->assertSuccessful()
+        ->assertJsonPath('question', null)->assertJsonPath('open', false)->assertJsonPath('revision', 2);
+    $this->patchJson($url, $command)->assertSuccessful()
+        ->assertJsonPath('question', null)->assertJsonPath('revision', 2);
+    $this->patchJson($url, [...$command, 'phase' => 'results'])->assertConflict();
+    $this->patchJson($url, lecturePresent('secondary', 'waiting'))->assertSuccessful()
+        ->assertJsonPath('question.id', 'secondary')->assertJsonPath('open', false)->assertJsonPath('revision', 3);
+    $this->patchJson($url, lecturePresent('secondary', 'closed'))->assertSuccessful()->assertJsonPath('revision', 3);
+});
+
+it('preserves votes when leaving a poll and never conceals or reopens revealed results', function (string $phase) {
+    $owner = lectureOwner();
+    $rooms = app(LectureRooms::class);
+    $room = openLectureRoom($owner);
+    $rooms->vote($room['code'], str_repeat('a', 64), 'exchange', $room['revision'], 0);
+    $url = '/admin/lecture/rooms/'.$room['code'];
+
+    $this->actingAs($owner)->patchJson($url, lecturePresent('exchange', 'results'))
+        ->assertSuccessful()->assertJsonPath('totalVotes', 1)->assertJsonPath('revealed', true)
+        ->assertJsonPath('counts', [1, 0, 0, 0])->assertJsonPath('open', false);
+    $this->patchJson($url, lecturePresent(null, 'waiting'))->assertSuccessful()->assertJsonPath('question', null);
+    $returned = $this->patchJson($url, lecturePresent('exchange', $phase))->assertSuccessful()
+        ->assertJsonPath('question.id', 'exchange')->assertJsonPath('open', false)
+        ->assertJsonPath('revealed', true)->assertJsonPath('question.correctIndex', 0)
+        ->assertJsonPath('totalVotes', 1)->assertJsonPath('counts', [1, 0, 0, 0]);
+    $this->patchJson($url, lecturePresent('exchange', 'open'))
+        ->assertSuccessful()->assertJsonPath('open', false)->assertJsonPath('revision', $returned->json('revision'));
+})->with(['waiting', 'open', 'closed', 'results']);
+
+it('preserves unrevealed votes across content steps and rejects stale audience requests', function () {
+    $owner = lectureOwner();
+    $rooms = app(LectureRooms::class);
+    $room = openLectureRoom($owner);
+    $rooms->vote($room['code'], str_repeat('b', 64), 'exchange', $room['revision'], 2);
+    $url = '/admin/lecture/rooms/'.$room['code'];
+    $this->actingAs($owner)->patchJson($url, lecturePresent(null, 'waiting'))->assertSuccessful();
+    auth()->logout();
+    $this->withCookie('lecture_participant', str_repeat('c', 64))
+        ->postJson('/lecture/rooms/'.$room['code'].'/vote', lectureVote($room))->assertConflict();
+
+    $this->actingAs($owner)->patchJson($url, lecturePresent())->assertSuccessful()
+        ->assertJsonPath('totalVotes', 1)->assertJsonPath('open', true)->assertJsonPath('revealed', false);
+    auth()->logout();
+    $this->getJson('/lecture/rooms/'.$room['code'].'/state')->assertJsonPath('counts', null)->assertJsonMissingPath('question.correctIndex');
+    $this->postJson('/lecture/rooms/'.$room['code'].'/vote', lectureVote($room))->assertConflict();
+});
+
+it('returns current ended state for an exact retry and denies new commands after ending', function () {
+    $owner = lectureOwner();
+    $room = app(LectureRooms::class)->create($owner);
+    $url = '/admin/lecture/rooms/'.$room['code'];
+    $command = lecturePresent();
+    $this->actingAs($owner)->patchJson($url, $command)->assertSuccessful();
+    $ended = $this->patchJson($url, ['action' => 'end'])->assertSuccessful();
+    $this->patchJson($url, $command)->assertSuccessful()
+        ->assertJsonPath('ended', true)->assertJsonPath('revision', $ended->json('revision'));
+    $this->patchJson($url, lecturePresent())->assertConflict();
+    $this->actingAs(lectureOwner())->patchJson($url, $command)->assertForbidden();
+    auth()->logout();
+    $this->patchJson($url, $command)->assertUnauthorized();
+});
+
+it('validates complete presentation commands', function (array $changes) {
+    $room = app(LectureRooms::class)->create($owner = lectureOwner());
+    $this->actingAs($owner)->patchJson('/admin/lecture/rooms/'.$room['code'], array_merge(lecturePresent(), $changes))
+        ->assertUnprocessable();
+    expect(app(LectureRooms::class)->get($room['code'])['revision'])->toBe(0);
+})->with([
+    [['commandId' => null]],
+    [['commandId' => 'not-a-uuid']],
+    [['phase' => null]],
+    [['phase' => 'anything']],
+    [['questionId' => 'unknown']],
+    [['questionId' => null, 'phase' => 'open']],
+    [['questionId' => null, 'phase' => 'results']],
+]);
+
+it('only changes revision when manual controls change observable state', function () {
+    $room = openLectureRoom($owner = lectureOwner());
+    $url = '/admin/lecture/rooms/'.$room['code'];
+    $this->actingAs($owner)->patchJson($url, ['action' => 'open'])
+        ->assertSuccessful()->assertJsonPath('revision', $room['revision']);
+    $closed = $this->patchJson($url, ['action' => 'close'])->assertSuccessful()->json('revision');
+    $this->patchJson($url, ['action' => 'close'])->assertSuccessful()->assertJsonPath('revision', $closed);
 });

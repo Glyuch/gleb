@@ -14,7 +14,7 @@ use LogicException;
 
 /**
  * @phpstan-type Poll array{votes: array<string, int>, revealed: bool}
- * @phpstan-type Room array{code: string, ownerId: int, expiresAt: int, questionId: ?string, revision: int, open: bool, ended: bool, polls: array<string, Poll>}
+ * @phpstan-type Room array{code: string, ownerId: int, expiresAt: int, questionId: ?string, revision: int, open: bool, ended: bool, polls: array<string, Poll>, commands?: array<string, string>}
  * @phpstan-type Question array{text: string, options: list<string>, correctIndex: ?int, explanation: string}
  */
 class LectureRooms
@@ -94,6 +94,7 @@ class LectureRooms
             abort_unless($room['ownerId'] === (int) $owner->id, 403, 'Этой комнатой управляет другой ведущий.');
             abort_if($room['ended'], 409, 'Выступление завершено. Создайте новую комнату.');
 
+            $before = $room;
             if ($action === 'question') {
                 abort_unless($questionId !== null && isset($room['polls'][$questionId]), 422, 'Выберите вопрос из списка.');
                 $room['questionId'] = $questionId;
@@ -119,7 +120,53 @@ class LectureRooms
                 }
             }
 
-            $room['revision']++;
+            if ($room !== $before) {
+                $room['revision']++;
+                $this->save($room);
+            }
+
+            return $room;
+        });
+    }
+
+    /** @return Room */
+    public function present(string $code, User $owner, string $commandId, ?string $questionId, string $phase): array
+    {
+        return $this->locked($code, function () use ($code, $owner, $commandId, $questionId, $phase): array {
+            $room = $this->get($code);
+            abort_unless($room['ownerId'] === (int) $owner->id, 403, 'Этой комнатой управляет другой ведущий.');
+            $fingerprint = hash('sha256', json_encode([$questionId, $phase], JSON_THROW_ON_ERROR));
+            $commandId = strtolower($commandId);
+            $commands = $room['commands'] ?? [];
+            if (isset($commands[$commandId])) {
+                abort_unless(hash_equals($commands[$commandId], $fingerprint), 409, 'Идентификатор команды уже использован для другого шага.');
+
+                return $room;
+            }
+
+            abort_if($room['ended'], 409, 'Выступление завершено. Создайте новую комнату.');
+            abort_unless(in_array($phase, ['waiting', 'open', 'closed', 'results'], true), 422, 'Неизвестная фаза вопроса.');
+            abort_unless($questionId !== null || $phase === 'waiting', 422, 'Для этой фазы нужен вопрос.');
+            abort_unless($questionId === null || isset($room['polls'][$questionId]), 422, 'Выберите вопрос из списка.');
+            abort_if(count($commands) >= 4096, 409, 'Достигнут лимит шагов. Создайте новую комнату.');
+
+            $before = $room;
+            $room['questionId'] = $questionId;
+            $room['open'] = false;
+            if ($questionId !== null) {
+                $poll = $room['polls'][$questionId];
+                if ($phase === 'results') {
+                    $poll['revealed'] = true;
+                }
+                $room['open'] = $phase === 'open' && ! $poll['revealed'];
+                $room['polls'][$questionId] = $poll;
+            }
+
+            if ($room !== $before) {
+                $room['revision']++;
+            }
+            $commands[$commandId] = $fingerprint;
+            $room['commands'] = $commands;
             $this->save($room);
 
             return $room;

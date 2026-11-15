@@ -30,7 +30,7 @@ Route::post('/lecture/rooms/{code}/vote', [LectureController::class, 'vote'])->w
 
 Route::middleware(['auth', 'admin'])->group(function () {
     Route::get('/admin/lecture', [LectureController::class, 'presenter'])->name('lecture.presenter');
-    Route::post('/admin/lecture/rooms', [LectureController::class, 'create'])->name('lecture.rooms.store');
+    Route::post('/admin/lecture/rooms', [LectureController::class, 'create'])->name('lecture.rooms.store')->block(10, 3);
     Route::patch('/admin/lecture/rooms/{code}', [LectureController::class, 'update'])->where('code', '[A-Z2-9]{6}')->name('lecture.rooms.update');
 });
 
