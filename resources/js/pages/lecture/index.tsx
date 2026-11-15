@@ -26,7 +26,7 @@ import {
     Statements,
 } from './interactions';
 import MarketMap from './market-map';
-import { useLectureRoom } from './room-client';
+import { formatVoteCount, useLectureRoom } from './room-client';
 import { blocks, scenes, sources } from './scenes';
 import type { LectureProps, Question, Room } from './types';
 import './lecture.css';
@@ -65,7 +65,7 @@ function Poll({
                             : results
                               ? 'Результаты голосования'
                               : 'Ожидаем открытия'}
-                    {active && <b>{room.totalVotes} ответов</b>}
+                    {active && <b>{formatVoteCount(room.totalVotes)}</b>}
                 </div>
                 {question.options.map((option, index) => {
                     const count = results ? (room.counts?.[index] ?? 0) : 0;
@@ -840,7 +840,7 @@ export default function Lecture({
                                                 : room.revealed
                                                   ? 'Результаты раскрыты'
                                                   : 'Голосование закрыто'}{' '}
-                                            · {room.totalVotes} ответов
+                                            · {formatVoteCount(room.totalVotes)}
                                         </p>
                                         {room.counts && room.question && (
                                             <div className="host-counts">

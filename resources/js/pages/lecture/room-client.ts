@@ -157,3 +157,11 @@ export function useLectureRoom(initialRoom: Room | null) {
 
     return { room, error, busy, send };
 }
+
+export function formatVoteCount(count: number): string {
+    const form = new Intl.PluralRules('ru').select(count);
+    const word =
+        form === 'one' ? 'ответ' : form === 'few' ? 'ответа' : 'ответов';
+
+    return count + ' ' + word;
+}

@@ -1,7 +1,7 @@
 import { Head, Link } from '@inertiajs/react';
 import { ArrowRight, Check, Radio, ShieldCheck } from 'lucide-react';
 import { show } from '@/actions/App/Http/Controllers/LectureController';
-import { useLectureRoom } from './room-client';
+import { formatVoteCount, useLectureRoom } from './room-client';
 import type { Room } from './types';
 import './lecture.css';
 
@@ -131,7 +131,7 @@ export default function Join({ room: initialRoom }: { room: Room }) {
                         {busy && <p role="status">Сохраняем ответ…</p>}
                         {room.revealed && (
                             <div className="audience-explanation">
-                                <b>{room.totalVotes} ответов</b>
+                                <b>{formatVoteCount(room.totalVotes)}</b>
                                 <p>
                                     {question.explanation ||
                                         'Так распределились ответы аудитории.'}
