@@ -1,14 +1,15 @@
 .market-map {
-    --mm-bg: #0d1729;
-    --mm-lavender: #b6abff;
-    --mm-coral: #ff7c7c;
-    --mm-mint: #74edc0;
+    --mm-bg: #ffffff;
+    --mm-information: #c52d32;
+    --mm-brand: #ff0000;
+    --mm-money: #168466;
     --mm-yellow: #f5df81;
     width: 100%;
     height: 740px;
     display: flex;
     flex-direction: column;
-    color: #f3f5fc;
+    color: #242426;
+    background: var(--mm-bg);
     font-family: inherit;
 }
 .market-map * {
@@ -19,7 +20,7 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    border-bottom: 1px solid #ffffff12;
+    border-bottom: 1px solid #24242614;
     flex-shrink: 0;
 }
 .mm-stage-caption {
@@ -30,7 +31,7 @@
     font-weight: 600;
 }
 .mm-stage-caption > span {
-    color: var(--mm-coral);
+    color: var(--mm-brand);
     font-size: 18px;
     font-variant-numeric: tabular-nums;
     letter-spacing: 0.08em;
@@ -39,31 +40,31 @@
     display: flex;
     gap: 12px;
     align-items: center;
-    color: #a4adc2;
+    color: #606066;
     font-size: 18px;
 }
 .mm-layer-controls button {
     display: flex;
     align-items: center;
     gap: 8px;
-    border: 1px solid #ffffff20;
-    background: #ffffff04;
-    color: #a4adc2;
+    border: 1px solid #d9d9de;
+    background: #ffffff;
+    color: #606066;
     padding: 8px 13px;
     border-radius: 9px;
     cursor: pointer;
 }
 .mm-layer-controls button[aria-pressed='true'] {
-    color: #f1f3fa;
-    background: #ffffff0b;
-    border-color: #ffffff40;
+    color: #242426;
+    background: #f3f3f5;
+    border-color: #bfbfc6;
 }
 .mm-layer-controls i,
 .mm-participant-key i {
     display: inline-block;
     width: 11px;
     height: 11px;
-    background: var(--mm-lavender);
+    background: #6b6b73;
     border-radius: 50%;
 }
 .mm-participant-key {
@@ -74,7 +75,7 @@
 }
 .mm-layer-controls .mm-function-key {
     background: transparent;
-    border: 1px solid #a4adc2;
+    border: 1px solid #606066;
     width: 15px;
     height: 7px;
     border-radius: 6px;
@@ -107,14 +108,14 @@
     overflow: hidden;
 }
 .mm-core-label {
-    fill: #c59eab;
+    fill: #9b4b50;
     font-size: 13px;
     letter-spacing: 2.2px;
     text-anchor: middle;
 }
 .mm-link {
     fill: none;
-    stroke: #7a89a5;
+    stroke: #92929a;
     stroke-width: 1.25;
     opacity: 0;
     transition:
@@ -122,11 +123,11 @@
         stroke 0.3s;
 }
 .mm-link.is-visible {
-    opacity: 0.25;
+    opacity: 0.45;
 }
 .mm-link.is-connected {
-    stroke: #c8c2ee;
-    opacity: 0.55;
+    stroke: #616169;
+    opacity: 0.75;
     stroke-width: 1.8;
 }
 .mm-node {
@@ -145,27 +146,27 @@
     animation-delay: calc(var(--mm-order) * 60ms);
 }
 .mm-node.is-dimmed {
-    opacity: 0.58;
+    opacity: 0.72;
 }
 .mm-node-shape {
-    fill: #a99ceb;
-    stroke: #d6d0ff;
+    fill: #f0f0f2;
+    stroke: #d5d5db;
     stroke-width: 1.2;
     transition:
         fill 0.25s,
         stroke-width 0.25s;
 }
 .mm-node-core .mm-node-shape {
-    fill: #ec656c;
-    stroke: #ff9c9b;
+    fill: #ff0000;
+    stroke: #e50000;
 }
 .mm-node-investor .mm-node-shape {
-    fill: #88ddbd;
-    stroke: #c1ffe8;
+    fill: #29292d;
+    stroke: #29292d;
 }
 .mm-node-platform .mm-node-shape {
-    fill: #496a82;
-    stroke: #8ab5cc;
+    fill: #fff1f1;
+    stroke: #e8b9bb;
 }
 .mm-node-halo {
     fill: none;
@@ -175,32 +176,36 @@
 }
 .mm-node.is-selected .mm-node-halo,
 .mm-node:focus-visible .mm-node-halo {
-    stroke: #e1dcff;
+    stroke: #ff0000;
 }
 .mm-node:hover .mm-node-shape {
-    stroke: #fff;
+    stroke: #ff0000;
     stroke-width: 3;
 }
 .mm-node-name {
-    fill: #161b37;
+    fill: #242426;
     font-size: 22px;
     font-weight: 650;
     text-anchor: middle;
     pointer-events: none;
 }
 .mm-node-core .mm-node-name {
-    fill: #fff6f3;
+    fill: #ffffff;
+    font-weight: 700;
     font-size: 24px;
 }
+.mm-node-investor .mm-node-name {
+    fill: #ffffff;
+}
 .mm-node-platform .mm-node-name {
-    fill: #eef8ff;
+    fill: #a51c25;
 }
 .mm-node-name-small {
     font-size: 18px;
 }
 .mm-node-function {
     text-anchor: middle;
-    fill: #c2cde0;
+    fill: #606066;
     font-size: 21px;
     font-weight: 450;
     pointer-events: none;
@@ -219,12 +224,12 @@
     font-weight: 600;
 }
 .mm-intro text {
-    fill: #ecedfc;
+    fill: #242426;
     font-size: 45px;
     font-weight: 550;
 }
 .mm-intro .mm-intro-small {
-    fill: #9ba9c1;
+    fill: #606066;
     font-size: 21px;
     font-weight: 400;
 }
@@ -235,50 +240,52 @@
     animation: mm-dash 1.5s linear infinite;
 }
 .mm-flow-money path {
-    stroke: var(--mm-mint);
+    stroke: var(--mm-money);
+    stroke-dasharray: none;
+    animation: none;
 }
 .mm-flow-rights path {
-    stroke: var(--mm-lavender);
+    stroke: var(--mm-information);
 }
 .mm-flow-money circle {
-    fill: var(--mm-mint);
+    fill: var(--mm-money);
 }
 .mm-flow-rights circle {
-    fill: var(--mm-lavender);
+    fill: var(--mm-information);
 }
 .mm-map-footnote {
     position: absolute;
     bottom: -2px;
     left: 16px;
     font-size: 14px;
-    color: #8494af;
+    color: #6d6d74;
 }
 .mm-detail {
     min-height: 0;
     overflow-y: auto;
     scrollbar-width: thin;
-    scrollbar-color: #4c607c transparent;
+    scrollbar-color: #c5c5cb transparent;
     align-self: stretch;
     position: relative;
-    border-left: 1px solid #ffffff17;
+    border-left: 1px solid #2424261a;
     padding: 14px 5px 8px 24px;
     display: flex;
     flex-direction: column;
 }
 .mm-detail-eyebrow {
-    color: var(--mm-lavender);
+    color: var(--mm-information);
     font-size: 15px;
     letter-spacing: 0.05em;
     margin-bottom: 13px;
 }
 .mm-kind-core {
-    color: var(--mm-coral);
+    color: var(--mm-brand);
 }
 .mm-kind-investor {
-    color: var(--mm-mint);
+    color: #29292d;
 }
 .mm-kind-platform {
-    color: #99c9df;
+    color: #a51c25;
 }
 .mm-detail h3 {
     font-size: 32px;
@@ -290,14 +297,14 @@
 .mm-detail-section {
     font-size: 12px;
     letter-spacing: 0.12em;
-    color: #7e8ca7;
+    color: #78787f;
     margin: 0 0 9px;
 }
 .mm-role {
     font-size: 20px;
     line-height: 1.4;
     margin: 0 0 24px;
-    color: #d5dceb;
+    color: #3f3f45;
 }
 .mm-detail-chips {
     display: flex;
@@ -306,26 +313,26 @@
     margin-bottom: 24px;
 }
 .mm-detail-chips span {
-    background: #f5df8112;
-    border: 1px solid #f5df8140;
+    background: #fff6ce;
+    border: 1px solid #e7d590;
     border-radius: 5px;
     padding: 6px 9px;
     font-size: 16px;
-    color: #e9da9b;
+    color: #69551f;
     line-height: 1.2;
 }
 .mm-detail-note {
     margin: auto 0 0;
-    border-top: 1px solid #ffffff12;
+    border-top: 1px solid #24242614;
     padding-top: 17px;
-    color: #9caac2;
+    color: #606066;
     font-size: 17px;
     line-height: 1.45;
 }
 .mm-node-counter {
     margin-top: 12px;
     flex-shrink: 0;
-    color: #687c9b;
+    color: #78787f;
     font-size: 13px;
 }
 .mm-bottom-bar {
@@ -339,7 +346,7 @@
 }
 .mm-bottom-bar > p {
     font-size: 20px;
-    color: #b3c0d4;
+    color: #606066;
     margin: 0;
 }
 .mm-stage-dots {
@@ -351,16 +358,16 @@
     width: 27px;
     height: 27px;
     border-radius: 50%;
-    border: 1px solid #ffffff20;
+    border: 1px solid #d9d9de;
     background: transparent;
-    color: #8b9bb5;
+    color: #606066;
     font-size: 13px;
     cursor: pointer;
 }
 .mm-stage-dots button[aria-current='step'] {
-    background: #ff7c7c;
-    color: #192239;
-    border-color: #ff7c7c;
+    background: #ff0000;
+    color: #ffffff;
+    border-color: #ff0000;
 }
 .mm-routes {
     display: flex;
@@ -368,23 +375,23 @@
     gap: 8px;
 }
 .mm-routes > span {
-    color: #7c8eaa;
+    color: #606066;
     font-size: 16px;
     margin-right: 6px;
 }
 .mm-routes button {
-    color: #c6d0e3;
-    background: #ffffff05;
-    border: 1px solid #ffffff20;
+    color: #3f3f45;
+    background: #ffffff;
+    border: 1px solid #d9d9de;
     border-radius: 8px;
     padding: 10px 16px;
     font-size: 18px;
     cursor: pointer;
 }
 .mm-routes button.is-active {
-    border-color: #74edc088;
-    color: #9cf3d3;
-    background: #74edc00b;
+    border-color: #ff0000;
+    color: #c52d32;
+    background: #fff1f1;
 }
 .mm-flow-key {
     display: flex;
@@ -392,18 +399,22 @@
     align-items: center;
     font-size: 16px;
     margin: 2px 0 25px;
-    color: var(--mm-lavender);
+    color: var(--mm-information);
 }
 .mm-flow-key i {
     width: 32px;
     height: 2px;
-    background: var(--mm-lavender);
+    background: repeating-linear-gradient(
+        90deg,
+        var(--mm-information) 0 6px,
+        transparent 6px 10px
+    );
 }
 .mm-flow-key-money {
-    color: var(--mm-mint);
+    color: var(--mm-money);
 }
 .mm-flow-key-money i {
-    background: var(--mm-mint);
+    background: var(--mm-money);
 }
 .mm-flow-progress {
     display: flex;
@@ -414,24 +425,24 @@
     width: 36px;
     height: 36px;
     border-radius: 50%;
-    border: 1px solid #ffffff25;
-    color: #aab8cf;
+    border: 1px solid #d9d9de;
+    color: #606066;
     background: transparent;
     font-size: 16px;
     cursor: pointer;
 }
 .mm-flow-progress button[aria-current='step'] {
-    color: #0d1729;
-    background: #c4baff;
-    border-color: #c4baff;
+    color: #ffffff;
+    background: #ff0000;
+    border-color: #ff0000;
 }
 .mm-next-step {
     display: flex;
     justify-content: space-between;
     border: none;
     border-radius: 9px;
-    background: #c4baff;
-    color: #172037;
+    background: #ff0000;
+    color: #ffffff;
     padding: 13px 17px;
     margin-bottom: 25px;
     font-size: 18px;
@@ -439,7 +450,7 @@
     cursor: pointer;
 }
 .market-map button:focus-visible {
-    outline: 2px solid #fff;
+    outline: 2px solid #c52d32;
     outline-offset: 4px;
 }
 @keyframes mm-reveal {
@@ -468,12 +479,12 @@
 }
 
 .mm-source {
-    color: #91aacb;
+    color: #606066;
     text-decoration: none;
     font-size: 12px;
     margin-top: 10px;
 }
 .mm-source:hover {
-    color: white;
+    color: #c52d32;
     text-decoration: underline;
 }

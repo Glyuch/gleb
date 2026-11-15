@@ -198,19 +198,19 @@ export default function MarketMap({
                                     cx="1"
                                     cy="1"
                                     r="1"
-                                    fill="#526077"
+                                    fill="#8d8d95"
                                     opacity=".22"
                                 />
                             </pattern>
                             <radialGradient id={`${markerId}-glow`}>
                                 <stop
                                     offset="0"
-                                    stopColor="#ff6e71"
+                                    stopColor="#ff0000"
                                     stopOpacity=".12"
                                 />
                                 <stop
                                     offset="1"
-                                    stopColor="#ff6e71"
+                                    stopColor="#ff0000"
                                     stopOpacity="0"
                                 />
                             </radialGradient>
@@ -223,7 +223,10 @@ export default function MarketMap({
                                 markerHeight="7"
                                 orient="auto-start-reverse"
                             >
-                                <path d="M 0 1 L 9 5 L 0 9 Z" fill="#74edc0" />
+                                <path
+                                    d="M 0 1 L 9 5 L 0 9 Z"
+                                    fill="var(--mm-money)"
+                                />
                             </marker>
                             <marker
                                 id={`${markerId}-rights`}
@@ -234,7 +237,10 @@ export default function MarketMap({
                                 markerHeight="7"
                                 orient="auto-start-reverse"
                             >
-                                <path d="M 0 1 L 9 5 L 0 9 Z" fill="#b6abff" />
+                                <path
+                                    d="M 0 1 L 9 5 L 0 9 Z"
+                                    fill="var(--mm-information)"
+                                />
                             </marker>
                         </defs>
                         <rect
