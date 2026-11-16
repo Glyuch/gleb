@@ -79,10 +79,14 @@ class LectureRooms
     /** @return Room */
     public function get(string $code): array
     {
+        /** @var Room|null $room */
         $room = $this->cache->get('room:'.$code);
         abort_unless(is_array($room) && $room['expiresAt'] > now()->timestamp, 404, 'Комната не найдена или срок ее действия истек.');
 
-        /** @var Room $room */
+        foreach (array_keys($this->questions()) as $id) {
+            $room['polls'][$id] ??= ['votes' => [], 'revealed' => false];
+        }
+
         return $room;
     }
 
@@ -224,7 +228,21 @@ class LectureRooms
             }
         }
 
+        $portrait = [];
+        foreach (['profession', 'savings_rate', 'financial_level'] as $portraitId) {
+            $poll = $room['polls'][$portraitId] ?? null;
+            if ($poll === null || ! $poll['revealed']) {
+                continue;
+            }
+            $portraitCounts = array_fill(0, count($this->questions()[$portraitId]['options']), 0);
+            foreach ($poll['votes'] as $option) {
+                $portraitCounts[$option]++;
+            }
+            $portrait[] = ['questionId' => $portraitId, 'counts' => $portraitCounts, 'totalVotes' => count($poll['votes'])];
+        }
+
         return [
+            'portrait' => $portrait,
             'code' => $room['code'],
             'expiresAt' => Carbon::createFromTimestamp($room['expiresAt'])->toIso8601String(),
             'joinUrl' => route('lecture.join', ['code' => $room['code']]),

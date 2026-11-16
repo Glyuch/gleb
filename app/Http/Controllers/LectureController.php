@@ -133,7 +133,7 @@ class LectureController extends Controller
         $data = $request->validate([
             'questionId' => ['required', 'string', Rule::in(array_keys($this->rooms->questions()))],
             'revision' => ['required', 'integer', 'min:0'],
-            'option' => ['required', 'integer', 'min:0', 'max:3'],
+            'option' => ['required', 'integer', 'min:0'],
         ]);
         $room = $this->rooms->vote($code, $participant, $data['questionId'], (int) $data['revision'], (int) $data['option']);
 

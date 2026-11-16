@@ -78,7 +78,7 @@ it('does not publish answer keys in the public presentation props', function () 
         ->where('isPresenter', false)
         ->where('room', null)
         ->where('createRoomUrl', null)
-        ->has('questions', 6)
+        ->has('questions', 9)
         ->missing('questions.1.correctIndex')
         ->missing('questions.1.explanation'));
 });
@@ -406,4 +406,127 @@ it('only changes revision when manual controls change observable state', functio
         ->assertSuccessful()->assertJsonPath('revision', $room['revision']);
     $closed = $this->patchJson($url, ['action' => 'close'])->assertSuccessful()->json('revision');
     $this->patchJson($url, ['action' => 'close'])->assertSuccessful()->assertJsonPath('revision', $closed);
+});
+
+it('accepts the final option of each audience survey and reveals only anonymous counts', function (string $id, int $option) {
+    $owner = lectureOwner();
+    $room = openLectureRoom($owner, $id);
+    $url = '/lecture/rooms/'.$room['code'];
+    $this->withCookie('lecture_participant', str_repeat('5', 64))
+        ->postJson($url.'/vote', lectureVote($room, $option))
+        ->assertSuccessful()->assertJsonPath('myVote', $option)->assertJsonPath('totalVotes', 1)
+        ->assertJsonPath('counts', null)->assertJsonMissingPath('question.correctIndex');
+    $this->postJson($url.'/vote', lectureVote($room, 0))->assertConflict();
+    $this->getJson($url.'/state')->assertJsonPath('myVote', $option)->assertJsonPath('counts', null);
+
+    $counts = array_fill(0, $option + 1, 0);
+    $counts[$option] = 1;
+    $this->actingAs($owner)->patchJson('/admin/lecture/rooms/'.$room['code'], lecturePresent($id, 'results'))
+        ->assertSuccessful()->assertJsonPath('counts', $counts)
+        ->assertJsonPath('question.correctIndex', null)->assertJsonPath('totalVotes', 1);
+    auth()->logout();
+    $this->getJson($url.'/state')->assertJsonPath('counts', $counts)
+        ->assertJsonPath('question.correctIndex', null)->assertJsonMissingPath('polls')
+        ->assertJsonMissingPath('votes')->assertJsonStructure(['question' => ['explanation']]);
+})->with([
+    ['profession', 11],
+    ['savings_rate', 5],
+    ['financial_level', 3],
+]);
+
+it('validates the option against each question instead of a global maximum', function (string $id, int $option) {
+    $room = openLectureRoom(lectureOwner(), $id);
+    $this->withCookie('lecture_participant', str_repeat('6', 64))
+        ->postJson('/lecture/rooms/'.$room['code'].'/vote', lectureVote($room, $option))
+        ->assertUnprocessable();
+    $this->getJson('/lecture/rooms/'.$room['code'].'/state')->assertJsonPath('totalVotes', 0);
+})->with([
+    ['profession', 12],
+    ['savings_rate', 6],
+    ['financial_level', 4],
+    ['exchange', 4],
+]);
+
+it('adds new audience questions to legacy rooms without resetting votes expiry or revisions', function () {
+    $allQuestions = config('lecture.questions');
+    $newIds = ['profession', 'savings_rate', 'financial_level'];
+    config(['lecture.questions' => array_diff_key($allQuestions, array_flip($newIds))]);
+    $owner = lectureOwner();
+    $rooms = app(LectureRooms::class);
+    $legacy = openLectureRoom($owner, 'experience');
+    $rooms->vote($legacy['code'], str_repeat('7', 64), 'experience', $legacy['revision'], 2);
+    $legacy = $rooms->change($legacy['code'], $owner, 'reveal', null);
+    config(['lecture.questions' => $allQuestions]);
+
+    $upgraded = $rooms->get($legacy['code']);
+    expect($upgraded['revision'])->toBe($legacy['revision'])
+        ->and($upgraded['expiresAt'])->toBe($legacy['expiresAt'])
+        ->and($upgraded['questionId'])->toBe('experience')
+        ->and($upgraded['polls']['experience'])->toBe($legacy['polls']['experience']);
+    foreach ($newIds as $id) {
+        expect($upgraded['polls'][$id])->toBe(['votes' => [], 'revealed' => false]);
+    }
+
+    $selected = $this->actingAs($owner)
+        ->patchJson('/admin/lecture/rooms/'.$legacy['code'], lecturePresent('profession'))
+        ->assertSuccessful()->assertJsonPath('question.id', 'profession')->assertJsonPath('open', true)
+        ->json();
+    auth()->logout();
+    $this->withCookie('lecture_participant', str_repeat('7', 64))
+        ->postJson('/lecture/rooms/'.$legacy['code'].'/vote', [
+            'questionId' => 'profession',
+            'revision' => $selected['revision'],
+            'option' => 11,
+        ])->assertSuccessful()->assertJsonPath('myVote', 11);
+    $saved = $rooms->get($legacy['code']);
+    expect($saved['polls']['experience'])->toBe($legacy['polls']['experience'])
+        ->and($saved['polls']['profession']['votes'][hash('sha256', str_repeat('7', 64))])->toBe(11)
+        ->and($saved['expiresAt'])->toBe($legacy['expiresAt']);
+});
+
+it('publishes only revealed audience portrait totals through content transitions', function () {
+    $owner = lectureOwner();
+    $rooms = app(LectureRooms::class);
+    $room = openLectureRoom($owner, 'profession');
+    $code = $room['code'];
+    $url = '/lecture/rooms/'.$code.'/state';
+    $participant = str_repeat('8', 64);
+    $rooms->vote($code, $participant, 'profession', $room['revision'], 11);
+
+    $this->getJson($url)->assertJsonPath('portrait', []);
+    $this->actingAs($owner)->getJson($url)
+        ->assertJsonPath('totalVotes', 1)->assertJsonPath('portrait', []);
+    auth()->logout();
+
+    $professionCounts = array_fill(0, 12, 0);
+    $professionCounts[11] = 1;
+    $expected = [['questionId' => 'profession', 'counts' => $professionCounts, 'totalVotes' => 1]];
+    $rooms->present($code, $owner, (string) Str::uuid(), 'profession', 'results');
+    $this->getJson($url)->assertJsonPath('portrait', $expected);
+    $rooms->present($code, $owner, (string) Str::uuid(), null, 'waiting');
+    $this->getJson($url)->assertJsonPath('question', null)->assertJsonPath('portrait', $expected);
+
+    $room = $rooms->present($code, $owner, (string) Str::uuid(), 'savings_rate', 'open');
+    $rooms->vote($code, $participant, 'savings_rate', $room['revision'], 1);
+    $rooms->vote($code, str_repeat('9', 64), 'savings_rate', $room['revision'], 5);
+    $this->getJson($url)->assertJsonPath('portrait', $expected)->assertJsonPath('counts', null);
+    $this->actingAs($owner)->getJson($url)->assertJsonPath('portrait', $expected);
+    auth()->logout();
+    $rooms->present($code, $owner, (string) Str::uuid(), 'savings_rate', 'results');
+    $expected[] = ['questionId' => 'savings_rate', 'counts' => [0, 1, 0, 0, 0, 1], 'totalVotes' => 2];
+
+    $room = $rooms->present($code, $owner, (string) Str::uuid(), 'financial_level', 'open');
+    $rooms->vote($code, $participant, 'financial_level', $room['revision'], 3);
+    $rooms->present($code, $owner, (string) Str::uuid(), 'financial_level', 'results');
+    $expected[] = ['questionId' => 'financial_level', 'counts' => [0, 0, 0, 1], 'totalVotes' => 1];
+
+    $rooms->present($code, $owner, (string) Str::uuid(), 'exchange', 'results');
+    $rooms->present($code, $owner, (string) Str::uuid(), null, 'waiting');
+    $this->getJson($url)->assertJsonPath('question', null)->assertJsonPath('portrait', $expected)
+        ->assertJsonMissingPath('polls')->assertJsonMissingPath('votes');
+    $this->actingAs($owner)->getJson($url)->assertJsonPath('portrait', $expected);
+    auth()->logout();
+
+    $other = $rooms->create($owner);
+    $this->getJson('/lecture/rooms/'.$other['code'].'/state')->assertJsonPath('portrait', []);
 });
