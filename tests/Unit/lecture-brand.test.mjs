@@ -8,6 +8,7 @@ import React from 'react';
 import * as icons from 'lucide-react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import ts from 'typescript';
+import { scenes } from '../../resources/js/pages/lecture/scenes.ts';
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const modules = new Map();
 function load(filename) {
@@ -55,7 +56,7 @@ const fromLecture = (name) =>
     load(resolve(root, 'resources/js/pages/lecture/' + name));
 const render = (Component, props) =>
     renderToStaticMarkup(React.createElement(Component, props));
-test('both lecture modes render the supplied Finuslugi logo and all 22 navigation scenes', () => {
+test('both lecture modes render the supplied Finuslugi logo and every navigation scene', () => {
     const Lecture = fromLecture('index.tsx').default;
     for (const isPresenter of [false, true]) {
         const markup = render(Lecture, {
@@ -67,7 +68,10 @@ test('both lecture modes render the supplied Finuslugi logo and all 22 navigatio
         assert.match(markup, /src="\/media\/finuslugi-logo.png"/);
         assert.match(markup, /alt="Финуслуги"/);
         assert.doesNotMatch(markup, /gleb<span>/);
-        assert.equal((markup.match(/aria-label="\d+\. /g) || []).length, 22);
+        assert.equal(
+            (markup.match(/aria-label="\d+\. /g) || []).length,
+            scenes.length,
+        );
         assert.doesNotMatch(
             markup,
             /Прибыль есть\. Денег нет|Три отчёта — три разных вопроса/,

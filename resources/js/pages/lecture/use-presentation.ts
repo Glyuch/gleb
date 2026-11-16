@@ -16,7 +16,7 @@ type Sender = (
     body: object,
 ) => Promise<Room | null>;
 type Pending = { position: Position; body: object };
-const storageKey = 'lecture-clicker-v2';
+const storageKey = 'lecture-clicker-v3';
 function restoredRun(room: Room | null) {
     try {
         const saved = JSON.parse(sessionStorage.getItem(storageKey) || 'null');

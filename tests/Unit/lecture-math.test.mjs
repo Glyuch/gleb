@@ -28,10 +28,15 @@ test('lecture is exactly forty minutes', () => {
     );
 });
 
-test('removed scenes give time to the market routes and entrepreneur discussion', () => {
+test('audience portrait preserves time for market routes and entrepreneur discussion', () => {
     assert.equal(
         scenes.find((s) => s.kind === 'map' && s.stage === 7).minutes,
-        4.5,
+        3.5,
+    );
+    assert.equal(scenes[0].minutes, 0.5);
+    assert.equal(
+        scenes.slice(1, 5).reduce((total, scene) => total + scene.minutes, 0),
+        2.5,
     );
     assert.equal(scenes.find((s) => s.kind === 'funding').minutes, 3);
     assert.equal(scenes.find((s) => s.kind === 'pitch').minutes, 4);
