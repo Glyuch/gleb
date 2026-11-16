@@ -10,11 +10,13 @@ use Illuminate\Contracts\Cache\LockProvider;
 use Illuminate\Contracts\Cache\LockTimeoutException;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\File;
 use LogicException;
 
 /**
  * @phpstan-type Poll array{votes: array<string, int>, revealed: bool}
- * @phpstan-type Room array{code: string, ownerId: int, expiresAt: int, questionId: ?string, revision: int, open: bool, ended: bool, polls: array<string, Poll>, commands?: array<string, string>}
+ * @phpstan-type Room array{code: string, ownerId: int, expiresAt: int, questionId: ?string, revision: int, open: bool, ended: bool, polls: array<string, Poll>, commands?: array<string, string>, questions?: array<string, Question>}
  * @phpstan-type Question array{text: string, options: list<string>, correctIndex: ?int, explanation: string}
  */
 class LectureRooms
@@ -73,7 +75,7 @@ class LectureRooms
                 'ended' => false,
                 'polls' => $polls,
             ];
-        } while (! $this->cache->add('room:'.$code, $room, Carbon::createFromTimestamp($room['expiresAt'])));
+        } while (! $this->insert($room));
 
         return $room;
     }
@@ -81,8 +83,17 @@ class LectureRooms
     /** @return Room */
     public function get(string $code): array
     {
+        $state = DB::table('lecture_rooms')->where('code', $code)->value('state');
+        if ($state === null) {
+            /** @var Room|null $legacy */
+            $legacy = $this->cache->get('room:'.$code);
+            if (is_array($legacy)) {
+                $this->insert($legacy);
+                $state = DB::table('lecture_rooms')->where('code', $code)->value('state');
+            }
+        }
         /** @var Room|null $room */
-        $room = $this->cache->get('room:'.$code);
+        $room = $state !== null ? json_decode($state, true, flags: JSON_THROW_ON_ERROR) : null;
         abort_unless(is_array($room) && $room['expiresAt'] > now()->timestamp, 404, 'Комната не найдена или срок ее действия истек.');
 
         foreach (array_keys($this->questions()) as $id) {
@@ -293,14 +304,79 @@ class LectureRooms
     /** @param Room $room */
     private function save(array $room): void
     {
-        $this->cache->put('room:'.$room['code'], $room, Carbon::createFromTimestamp($room['expiresAt']));
+        $room['questions'] = array_replace($this->questions(), $room['questions'] ?? []);
+        DB::table('lecture_rooms')->where('code', $room['code'])->update([
+            'state' => json_encode($room, JSON_THROW_ON_ERROR),
+            'updated_at' => now(),
+        ]);
+    }
+
+    /** @param Room $room */
+    private function insert(array $room): bool
+    {
+        $room['questions'] ??= $this->questions();
+
+        return DB::table('lecture_rooms')->insertOrIgnore([
+            'code' => $room['code'],
+            'owner_id' => $room['ownerId'],
+            'state' => json_encode($room, JSON_THROW_ON_ERROR),
+            'expires_at' => Carbon::createFromTimestamp($room['expiresAt']),
+            'created_at' => Carbon::createFromTimestamp($room['expiresAt'])->subHours((int) config('lecture.lifetime_hours')),
+            'updated_at' => now(),
+        ]) === 1;
+    }
+
+    public function archiveCachedRooms(): int
+    {
+        $path = config('lecture.cache_path');
+        if (! File::isDirectory($path)) {
+            return 0;
+        }
+        $count = 0;
+        foreach (File::allFiles($path) as $file) {
+            $room = $this->readCachedRoom($file->getPathname());
+            if ($room === null || $file->getFilename() !== sha1('room:'.$room['code'])) {
+                continue;
+            }
+            $inserted = $this->locked($room['code'], function () use ($file): bool {
+                $latest = $this->readCachedRoom($file->getPathname());
+
+                return $latest !== null && $this->insert($latest);
+            });
+            $count += $inserted ? 1 : 0;
+        }
+
+        return $count;
+    }
+
+    /** @return Room|null */
+    private function readCachedRoom(string $path): ?array
+    {
+        if (! File::isFile($path)) {
+            return null;
+        }
+        $room = @unserialize(substr(File::get($path), 10), ['allowed_classes' => false]);
+        if (! is_array($room)
+            || ! isset($room['code'], $room['ownerId'], $room['expiresAt'], $room['revision'], $room['open'], $room['ended'], $room['polls'])
+            || ! is_string($room['code'])
+            || preg_match('/\A[A-HJ-NP-Z2-9]{6}\z/', $room['code']) !== 1
+            || ! is_int($room['ownerId']) || ! is_int($room['expiresAt']) || ! is_int($room['revision'])
+            || ! is_bool($room['open']) || ! is_bool($room['ended']) || ! is_array($room['polls'])
+            || ! array_key_exists('questionId', $room)
+            || ($room['questionId'] !== null && ! is_string($room['questionId']))) {
+            return null;
+        }
+
+        return $room;
     }
 
     /**
-     * @param  Closure(): Room  $callback
-     * @return Room
+     * @template T
+     *
+     * @param  Closure(): T  $callback
+     * @return T
      */
-    private function locked(string $code, Closure $callback): array
+    private function locked(string $code, Closure $callback): mixed
     {
         $store = $this->cache->getStore();
         if (! $store instanceof LockProvider) {
