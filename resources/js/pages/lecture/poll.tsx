@@ -1,10 +1,10 @@
 import { Check, Radio } from 'lucide-react';
+import { ProfessionCloud } from './audience-portrait';
 import {
-    ProfessionCloud,
-    SavingsDistribution,
-    ExperienceDistribution,
-} from './audience-portrait';
-import { isPortraitQuestion, portraitHint } from './portrait-data';
+    isPortraitQuestion,
+    portraitHint,
+    portraitQuestionIds,
+} from './portrait-data';
 import { formatVoteCount } from './room-client';
 import type { Question, Room } from './types';
 
@@ -26,8 +26,8 @@ export default function Poll({
     step?: number;
 }) {
     const active = room?.question?.id === question.id && !room.ended;
-    const results = active && room.revealed;
     const survey = isPortraitQuestion(question.id);
+    const results = active && room.revealed && !survey;
     const hint = portraitHint(question.id);
 
     return (
@@ -39,35 +39,35 @@ export default function Poll({
                             active && room.open ? 'live-dot' : 'idle-dot'
                         }
                     />
+                    {survey && (
+                        <span>
+                            Вопрос{' '}
+                            {portraitQuestionIds.findIndex(
+                                (id) => id === question.id,
+                            ) + 1}{' '}
+                            из 3 ·
+                        </span>
+                    )}
                     {!room
                         ? 'Обсудим с залом'
                         : !active
                           ? 'Вопрос ещё не выбран'
                           : room.open
                             ? 'Голосование открыто'
-                            : results
-                              ? 'Результаты голосования'
-                              : clicker && step === 2
-                                ? 'Голосование закрыто'
-                                : 'Ожидаем открытия'}
+                            : survey && room.revealed
+                              ? 'Итоги — на общем слайде'
+                              : results
+                                ? 'Результаты голосования'
+                                : clicker && step === 2
+                                  ? 'Голосование закрыто'
+                                  : 'Ожидаем открытия'}
                     {active && <b>{formatVoteCount(room.totalVotes)}</b>}
                 </div>
                 {hint && <p className="portrait-question-hint">{hint}</p>}
                 {question.id === 'profession' ? (
                     <ProfessionCloud
                         options={question.options}
-                        counts={room?.counts}
-                        revealed={Boolean(results)}
-                    />
-                ) : results && question.id === 'savings_rate' ? (
-                    <SavingsDistribution
-                        options={question.options}
-                        counts={room.counts ?? []}
-                    />
-                ) : results && question.id === 'financial_level' ? (
-                    <ExperienceDistribution
-                        options={question.options}
-                        counts={room.counts ?? []}
+                        revealed={false}
                     />
                 ) : (
                     <div
@@ -127,7 +127,7 @@ export default function Poll({
                         {room.question.explanation}
                     </p>
                 )}
-                {isPresenter && !clicker && room && !room.ended && (
+                {isPresenter && !clicker && !survey && room && !room.ended && (
                     <div className="poll-control-buttons" hidden={clicker}>
                         {!active ? (
                             <button

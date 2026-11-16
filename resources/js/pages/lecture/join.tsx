@@ -2,9 +2,12 @@ import { Head, Link } from '@inertiajs/react';
 import { ArrowRight, Check, Radio, ShieldCheck } from 'lucide-react';
 import { useEffect } from 'react';
 import { show } from '@/actions/App/Http/Controllers/LectureController';
-import { ProfessionCloud } from './audience-portrait';
 import { FinuslugiLogo } from './brand';
-import { isPortraitQuestion, portraitHint } from './portrait-data';
+import {
+    isPortraitQuestion,
+    portraitHint,
+    portraitQuestionIds,
+} from './portrait-data';
 import { formatVoteCount, useLectureRoom } from './room-client';
 import type { Room } from './types';
 import './lecture.css';
@@ -25,6 +28,10 @@ export default function Join({ room: initialRoom }: { room: Room }) {
     const question = room.question;
     const submitted = room.myVote !== null;
     const survey = question ? isPortraitQuestion(question.id) : false;
+    const results = room.revealed && !survey;
+    const portraitReady = portraitQuestionIds.every((id) =>
+        room.portrait?.some((result) => result.questionId === id),
+    );
 
     return (
         <>
@@ -65,32 +72,40 @@ export default function Join({ room: initialRoom }: { room: Room }) {
                 ) : !question ? (
                     <section className="audience-wait">
                         <Radio size={64} />
-                        <h1>Вы подключились</h1>
+                        <h1>
+                            {portraitReady
+                                ? 'Портрет зала готов'
+                                : 'Вы подключились'}
+                        </h1>
                         <p>
-                            Когда ведущий откроет вопрос, он появится здесь
-                            автоматически. Оставьте страницу открытой.
+                            {portraitReady
+                                ? 'Итоги трёх вопросов собраны. Следующий вопрос появится здесь автоматически.'
+                                : 'Когда ведущий откроет вопрос, он появится здесь автоматически. Оставьте страницу открытой.'}
                         </p>
                     </section>
                 ) : (
                     <section className="audience-question">
+                        {survey && (
+                            <span className="eyebrow">
+                                Вопрос{' '}
+                                {portraitQuestionIds.findIndex(
+                                    (id) => id === question.id,
+                                ) + 1}{' '}
+                                из 3
+                            </span>
+                        )}
                         <h1>{question.text}</h1>
                         {survey && (
                             <p className="audience-question-hint">
                                 {portraitHint(question.id)}
                             </p>
                         )}
-                        {room.revealed && question.id === 'profession' && (
-                            <ProfessionCloud
-                                options={question.options}
-                                counts={room.counts}
-                                revealed
-                                compact
-                            />
-                        )}
-                        {submitted && !room.revealed && (
+                        {submitted && !results && (
                             <div className="answer-saved" role="status">
                                 <Check />
-                                Ответ принят. Ждём результатов.
+                                {survey
+                                    ? 'Ответ принят. Общие итоги — после трёх вопросов.'
+                                    : 'Ответ принят. Ждём результатов.'}
                             </div>
                         )}
                         <div
@@ -104,13 +119,12 @@ export default function Join({ room: initialRoom }: { room: Room }) {
                         >
                             {question.options.map((option, index) => {
                                 const correct =
-                                    room.revealed &&
-                                    question.correctIndex === index;
-                                const count = room.revealed
+                                    results && question.correctIndex === index;
+                                const count = results
                                     ? (room.counts?.[index] ?? 0)
                                     : 0;
                                 const percent =
-                                    room.revealed && room.totalVotes
+                                    results && room.totalVotes
                                         ? Math.round(
                                               (count / room.totalVotes) * 100,
                                           )
@@ -153,7 +167,7 @@ export default function Join({ room: initialRoom }: { room: Room }) {
                                                 <small>Ваш ответ</small>
                                             )}
                                         </span>
-                                        {room.revealed ? (
+                                        {results ? (
                                             <b>{percent}%</b>
                                         ) : room.myVote === index ? (
                                             <Check />
@@ -163,7 +177,7 @@ export default function Join({ room: initialRoom }: { room: Room }) {
                             })}
                         </div>
                         {busy && <p role="status">Сохраняем ответ…</p>}
-                        {room.revealed && (
+                        {results && (
                             <div className="audience-explanation">
                                 <b>{formatVoteCount(room.totalVotes)}</b>
                                 <p>

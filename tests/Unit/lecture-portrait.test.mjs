@@ -274,7 +274,7 @@ test('pending summary never invents percentages or uses unrevealed current count
     }
 });
 
-test('savings poll shows six fixed options before reveal and six result columns after reveal', () => {
+test('savings question retains six options and leaves all results to the combined portrait', () => {
     const savings = question('savings_rate');
     assert.equal(savings.options.length, 6);
     const common = {
@@ -300,10 +300,9 @@ test('savings poll shows six fixed options before reveal and six result columns 
             totalVotes: 4,
         }),
     });
-    assert.equal((results.match(/class="savings-column"/g) || []).length, 6);
-    assert.doesNotMatch(results, /class="poll-option /);
-    assert.match(results, /Около 5%: 1 ответ, 25% аудитории/);
-    assert.match(results, /Больше 30%: 3 ответа, 75% аудитории/);
+    assert.equal((results.match(/class="poll-option /g) || []).length, 6);
+    assert.doesNotMatch(results, /class="savings-column"|25%|75%/);
+    assert.match(results, /Итоги — на общем слайде/);
 });
 
 test('audience can select every creative field and savings option without free text', () => {
@@ -334,4 +333,45 @@ test('audience can select every creative field and savings option without free t
     assert.match(creative, /Кино и видео/);
     assert.match(creative, /Продюсирование и ивенты/);
     assert.match(creative, /Учусь \/ начинаю/);
+});
+
+test('all portrait questions hide individual distributions even when revisited after summary', () => {
+    for (const item of questions) {
+        const state = room({
+            question: item,
+            revealed: true,
+            counts: item.options.map((_, i) => (i === 0 ? 37 : 0)),
+            totalVotes: 37,
+            myVote: 0,
+        });
+        const projected = render(Poll, {
+            question: item,
+            room: state,
+            isPresenter: true,
+            busy: false,
+            onAction: () => {},
+            clicker: true,
+        });
+        assert.doesNotMatch(
+            projected,
+            /class="savings-column"|class="experience-row"|100%|Показать ответы/,
+        );
+        const participant = render(Join, { room: state });
+        assert.doesNotMatch(
+            participant,
+            /100%|profession-cloud|audience-explanation/,
+        );
+        assert.match(participant, /Общие итоги — после трёх вопросов/);
+    }
+});
+test('participant sees a completed portrait message after all three questions close', () => {
+    const portrait = questions.map((item) => ({
+        questionId: item.id,
+        counts: item.options.map(() => 0),
+        totalVotes: 0,
+    }));
+    const markup = render(Join, { room: room({ portrait }) });
+    assert.match(markup, /Портрет зала готов/);
+    assert.match(markup, /Итоги трёх вопросов собраны/);
+    assert.doesNotMatch(markup, /<button|Вы подключились/);
 });
