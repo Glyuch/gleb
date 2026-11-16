@@ -7,6 +7,7 @@ import * as flow from '../../resources/js/pages/lecture/presentation.ts';
 
 const firstMapSlide = scenes.findIndex((scene) => scene.kind === 'map');
 const portraitSlide = scenes.findIndex((scene) => scene.kind === 'portrait');
+const quizSlide = scenes.findIndex((scene) => scene.poll === 'exchange');
 
 test('the revised deck omits the cashflow quiz and financial statements scenes', () => {
     assert.equal(scenes.length, 25);
@@ -41,8 +42,10 @@ test('three audience questions and their combined portrait precede the market ma
         false,
     );
 });
-test('every poll requires separate waiting, open, closed and results steps', () => {
-    for (const scene of scenes.filter((s) => s.poll)) {
+test('ordinary quizzes keep separate waiting, open, closed and results steps', () => {
+    for (const scene of scenes.filter(
+        (s) => s.poll && !flow.isPortraitPoll(s),
+    )) {
         assert.deepEqual(
             Array.from(
                 { length: flow.stepCount(scene) },
@@ -51,6 +54,35 @@ test('every poll requires separate waiting, open, closed and results steps', () 
             ['waiting', 'open', 'closed', 'results'],
         );
     }
+});
+test('portrait questions auto-open in one step and lead directly to combined results', () => {
+    let position = { slide: 0, step: 0 };
+    for (const questionId of [
+        'profession',
+        'savings_rate',
+        'financial_level',
+    ]) {
+        position = flow.movePosition(scenes, position, 1);
+        const scene = scenes[position.slide];
+        assert.equal(flow.stepCount(scene), 1);
+        assert.equal(position.step, 0);
+        assert.deepEqual(flow.presentationTarget(scene, 0), {
+            questionId,
+            phase: 'open',
+        });
+        assert.equal(
+            flow.nextCue(scene, 0),
+            questionId === 'financial_level'
+                ? 'Показать портрет'
+                : 'Следующий вопрос',
+        );
+    }
+    position = flow.movePosition(scenes, position, 1);
+    assert.deepEqual(position, { slide: portraitSlide, step: 0 });
+    assert.deepEqual(flow.presentationTarget(scenes[position.slide], 0), {
+        questionId: null,
+        phase: 'portrait',
+    });
 });
 test('complete forward run includes all scenes, all four money routes, and explicit finish', () => {
     let p = { slide: 0, step: 0 };
@@ -96,14 +128,27 @@ test('backward navigation never reveals an unanswered poll', () => {
         { slide: 0, step: 0 },
     );
 });
-test('revealed answers restore their results step and never reopen', () => {
+test('revealed quiz answers restore results while portrait questions retain their only step', () => {
     assert.deepEqual(
-        flow.confirmedPosition({ slide: 1, step: 0 }, scenes[1], {
-            question: { id: 'profession' },
-            revealed: true,
-        }),
-        { slide: 1, step: 3 },
+        flow.confirmedPosition(
+            { slide: quizSlide, step: 0 },
+            scenes[quizSlide],
+            {
+                question: { id: 'exchange' },
+                revealed: true,
+            },
+        ),
+        { slide: quizSlide, step: 3 },
     );
+    for (let slide = 1; slide < portraitSlide; slide++) {
+        assert.deepEqual(
+            flow.confirmedPosition({ slide, step: 3 }, scenes[slide], {
+                question: { id: scenes[slide].poll },
+                revealed: true,
+            }),
+            { slide, step: 0 },
+        );
+    }
 });
 test('clicker keys, bounded URL steps and content poll clearing', () => {
     for (const key of ['ArrowRight', 'ArrowDown', 'PageDown', ' ', 'Enter'])
@@ -229,16 +274,90 @@ function successful(_url, _method, body, room) {
         revealed: body.phase === 'results',
     };
 }
-test('launch creates a room once and moves poll only after acknowledgement; failed click retries same command', async () => {
-    let failOpen = true;
-    const h = harness(null, async (u, m, b, r) =>
-        b.phase === 'open' && failOpen ? null : successful(u, m, b, r),
-    );
+test('four forward clicks from the cover open three questions then reveal only their combined portrait', async () => {
+    const h = harness(null, successful);
     assert.equal(await h.render().start(), true);
     assert.equal(h.sent.filter((c) => c.url === '/create').length, 1);
+    for (const questionId of [
+        'profession',
+        'savings_rate',
+        'financial_level',
+    ]) {
+        await h.render().move(1);
+        assert.equal(scenes[h.render().slide].poll, questionId);
+        assert.equal(h.render().step, 0);
+        assert.equal(h.sent.at(-1).body.questionId, questionId);
+        assert.equal(h.sent.at(-1).body.phase, 'open');
+    }
     await h.render().move(1);
+    assert.equal(h.render().slide, portraitSlide);
+    assert.equal(h.sent.at(-1).body.questionId, null);
+    assert.equal(h.sent.at(-1).body.phase, 'portrait');
+    assert.deepEqual(
+        h.sent.filter((c) => c.body.questionId).map((c) => c.body.phase),
+        ['open', 'open', 'open'],
+    );
+    await h.render().move(1);
+    assert.equal(h.render().slide, firstMapSlide);
+});
+test('failed auto-open keeps the current scene and retries the identical command', async () => {
+    let failOpen = true;
+    const h = harness(baseRoom, async (u, m, b, r) =>
+        b.phase === 'open' && failOpen ? null : successful(u, m, b, r),
+    );
+    await h.render().start();
+    await h.render().move(1);
+    assert.equal(h.render().slide, 0);
+    assert.equal(h.render().retrying, true);
+    const failed = h.sent.at(-1).body;
+    failOpen = false;
+    await h.render().move(1);
+    assert.deepEqual(h.sent.at(-1).body, failed);
     assert.equal(h.render().slide, 1);
     assert.equal(h.render().step, 0);
+});
+test('combined portrait sends and retries one idempotent command even without an active room question', async () => {
+    let failPortrait = true;
+    const saved = JSON.stringify({
+        code: baseRoom.code,
+        position: { slide: portraitSlide - 1, step: 0 },
+    });
+    const h = harness(
+        baseRoom,
+        async (u, m, b, r) =>
+            b.phase === 'portrait' && failPortrait
+                ? null
+                : successful(u, m, b, r),
+        [['lecture-clicker-v4', saved]],
+    );
+    await h.render().move(1);
+    assert.equal(h.render().slide, portraitSlide - 1);
+    assert.equal(h.render().retrying, true);
+    const failed = h.sent.at(-1).body;
+    assert.equal(failed.questionId, null);
+    assert.equal(failed.phase, 'portrait');
+    assert.equal(typeof failed.commandId, 'string');
+    failPortrait = false;
+    await h.render().move(-1);
+    assert.deepEqual(h.sent.at(-1).body, failed);
+    assert.equal(h.render().slide, portraitSlide);
+    assert.equal(h.render().retrying, false);
+    await h.render().move(1);
+    assert.equal(h.render().slide, firstMapSlide);
+    assert.equal(h.sent.length, 2);
+});
+test('ordinary quiz transitions still wait for acknowledgement and retry without skipping phases', async () => {
+    let failOpen = true;
+    const saved = JSON.stringify({
+        code: baseRoom.code,
+        position: { slide: quizSlide, step: 0 },
+    });
+    const h = harness(
+        { ...baseRoom, question: { id: 'exchange' } },
+        async (u, m, b, r) =>
+            b.phase === 'open' && failOpen ? null : successful(u, m, b, r),
+        [['lecture-clicker-v4', saved]],
+    );
     await h.render().move(1);
     assert.equal(h.render().step, 0);
     assert.equal(h.render().retrying, true);
@@ -249,29 +368,16 @@ test('launch creates a room once and moves poll only after acknowledgement; fail
     assert.equal(h.render().step, 1);
     await h.render().move(1);
     assert.equal(h.render().step, 2);
+    assert.equal(h.sent.at(-1).body.phase, 'closed');
     await h.render().move(1);
     assert.equal(h.render().step, 3);
+    assert.equal(h.sent.at(-1).body.phase, 'results');
     await h.render().move(1);
-    for (const questionId of ['savings_rate', 'financial_level']) {
-        assert.equal(scenes[h.render().slide].poll, questionId);
-        assert.equal(h.render().step, 0);
-        assert.equal(h.sent.at(-1).body.questionId, questionId);
-        assert.equal(h.sent.at(-1).body.phase, 'waiting');
-        await h.render().move(1);
-        assert.equal(h.render().step, 1);
-        await h.render().move(1);
-        assert.equal(h.render().step, 2);
-        await h.render().move(1);
-        assert.equal(h.render().step, 3);
-        await h.render().move(1);
-    }
-    assert.equal(h.render().slide, portraitSlide);
+    assert.equal(h.render().slide, quizSlide + 1);
     assert.equal(h.sent.at(-1).body.questionId, null);
-    await h.render().move(1);
-    assert.equal(h.render().slide, firstMapSlide);
-    assert.equal(h.sent.at(-1).body.questionId, null);
+    assert.equal(h.sent.at(-1).body.phase, 'waiting');
 });
-test('repeated clicks while request is in flight cannot skip a voting phase', async () => {
+test('repeated clicks while request is in flight cannot skip an audience question', async () => {
     let release;
     const h = harness(baseRoom, async (u, m, b, r) =>
         b.phase === 'open'
@@ -281,13 +387,14 @@ test('repeated clicks while request is in flight cannot skip a voting phase', as
             : successful(u, m, b, r),
     );
     await h.render().start();
-    await h.render().move(1);
     const first = h.render().move(1);
     await h.render().move(1);
     assert.equal(h.sent.filter((c) => c.body.phase === 'open').length, 1);
+    assert.equal(h.render().slide, 0);
     release();
     await first;
-    assert.equal(h.render().step, 1);
+    assert.equal(h.render().slide, 1);
+    assert.equal(h.render().step, 0);
 });
 test('the final click ends the room and a new launch creates a fresh session', async () => {
     const h = harness(baseRoom, successful);
@@ -317,12 +424,12 @@ test('new portrait order ignores old stored positions and restores current-versi
         position: { slide: firstMapSlide, step: 0 },
     });
     const legacy = harness(baseRoom, successful, [
-        ['lecture-clicker-v2', saved],
+        ['lecture-clicker-v3', saved],
     ]);
     assert.equal(legacy.render().active, false);
     assert.equal(legacy.render().slide, 0);
     const current = harness(baseRoom, successful, [
-        ['lecture-clicker-v3', saved],
+        ['lecture-clicker-v4', saved],
     ]);
     assert.equal(current.render().active, true);
     assert.equal(current.render().slide, firstMapSlide);

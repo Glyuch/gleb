@@ -3,7 +3,19 @@ import type { Room } from './types';
 
 export type Position = { slide: number; step: number };
 export const pollPhases = ['waiting', 'open', 'closed', 'results'] as const;
+export function isPortraitPoll(scene: Scene): boolean {
+    return (
+        scene.kind === 'poll' &&
+        ['profession', 'savings_rate', 'financial_level'].includes(
+            scene.poll ?? '',
+        )
+    );
+}
 export function stepCount(scene: Scene): number {
+    if (isPortraitPoll(scene)) {
+        return 1;
+    }
+
     if (scene.kind === 'map') {
         return scene.stage === 7 ? 16 : 1;
     }
@@ -78,6 +90,14 @@ export function movePosition(
     };
 }
 export function presentationTarget(scene: Scene, step: number) {
+    if (scene.kind === 'portrait') {
+        return { questionId: null, phase: 'portrait' as const };
+    }
+
+    if (isPortraitPoll(scene)) {
+        return { questionId: scene.poll!, phase: 'open' as const };
+    }
+
     return {
         questionId: scene.poll ?? null,
         phase: scene.poll
@@ -90,6 +110,10 @@ export function confirmedPosition(
     scene: Scene,
     room: Room,
 ): Position {
+    if (isPortraitPoll(scene)) {
+        return { ...position, step: 0 };
+    }
+
     return scene.poll && room.question?.id === scene.poll && room.revealed
         ? { ...position, step: 3 }
         : position;
@@ -103,6 +127,12 @@ export function positionFromHash(hash: string): Position {
     };
 }
 export function nextCue(scene: Scene, step: number): string {
+    if (isPortraitPoll(scene)) {
+        return scene.poll === 'financial_level'
+            ? 'Показать портрет'
+            : 'Следующий вопрос';
+    }
+
     if (scene.kind === 'poll') {
         return [
             'Открыть голосование',
