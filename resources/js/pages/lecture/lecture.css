@@ -2088,3 +2088,368 @@ body:has(.audience-page) {
 .audience-explanation b {
     color: #242426;
 }
+
+/* Audience portrait: creative professions, savings habits and experience. */
+.portrait-question-hint {
+    font-size: 21px;
+    color: #606066;
+    margin: 0 0 20px !important;
+}
+.portrait-poll .poll-option > span:not(.option-letter) {
+    flex: 1;
+}
+.poll-option-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 18px;
+}
+.poll-option-grid .poll-option {
+    min-height: 110px;
+    height: auto;
+    margin: 0;
+    padding: 24px;
+    font-size: 28px;
+}
+.profession-visual {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    min-height: 430px;
+}
+.profession-cloud {
+    min-height: 350px;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: center;
+    align-content: center;
+    gap: 22px 30px;
+    padding: 18px 12px;
+}
+.profession-word {
+    font-size: var(--word-size);
+    display: inline-flex;
+    align-items: baseline;
+    justify-content: center;
+    gap: 0.2em;
+    color: #343438;
+    font-weight: 600;
+    line-height: 1.16;
+    text-align: center;
+    max-width: 100%;
+    transition:
+        font-size 0.6s ease,
+        color 0.6s ease;
+    animation: enter 0.55s ease both;
+}
+.profession-word > span {
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+.profession-word.major {
+    color: #d00000;
+}
+.profession-word small {
+    font-size: 0.38em;
+    font-weight: 500;
+    color: #74747b;
+}
+.profession-cloud.placeholder .profession-word {
+    color: #74747b;
+    font-weight: 400;
+}
+.portrait-chart-note {
+    font-size: 19px;
+    line-height: 1.45;
+    color: #606066;
+    text-align: center;
+    margin: 22px 0 0 !important;
+}
+.savings-distribution {
+    padding: 20px 0 0;
+}
+.savings-columns {
+    display: grid;
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+    align-items: end;
+    gap: 20px;
+    padding-top: 28px;
+}
+.savings-column {
+    min-width: 0;
+    text-align: center;
+}
+.savings-track {
+    height: 290px;
+    position: relative;
+    background: #f4f4f6;
+    border-radius: 10px 10px 0 0;
+}
+.savings-fill {
+    position: absolute;
+    inset: auto 0 0;
+    background: #e00000;
+    border-radius: 10px 10px 0 0;
+    transform-origin: bottom;
+    animation: portrait-column 0.75s cubic-bezier(0.22, 1, 0.36, 1) both;
+    transition: height 0.65s ease;
+}
+.savings-track b {
+    position: absolute;
+    top: -38px;
+    left: 0;
+    right: 0;
+    font-size: 28px;
+    font-weight: 600;
+    color: #242426;
+}
+.savings-column strong {
+    display: block;
+    font-size: 29px;
+    font-weight: 600;
+    margin-top: 18px;
+}
+.savings-column > small {
+    display: block;
+    color: #606066;
+    font-size: 17px;
+    margin-top: 7px;
+}
+.experience-distribution {
+    display: flex;
+    flex-direction: column;
+    gap: 26px;
+    padding-top: 10px;
+}
+.experience-row {
+    display: flex;
+    gap: 18px;
+    align-items: center;
+}
+.experience-level {
+    flex-shrink: 0;
+    width: 52px;
+    height: 52px;
+    border: 1px solid #e2e2e7;
+    border-radius: 14px;
+    display: grid;
+    place-items: center;
+    font-size: 26px;
+    color: #c90000;
+    background: #fff3f3;
+}
+.experience-row > div {
+    flex: 1;
+    min-width: 0;
+}
+.experience-row > div > span {
+    display: block;
+    font-size: 27px;
+    line-height: 1.25;
+    margin-bottom: 12px;
+}
+.experience-track {
+    background: #f0f0f2;
+    height: 13px;
+    border-radius: 5px;
+    overflow: hidden;
+}
+.experience-track i {
+    display: block;
+    height: 100%;
+    background: #e00000;
+    transform-origin: left;
+    animation: portrait-track 0.75s cubic-bezier(0.22, 1, 0.36, 1) both;
+    transition: width 0.65s ease;
+}
+.experience-row > b {
+    min-width: 100px;
+    text-align: right;
+    font-size: 31px;
+    font-weight: 600;
+}
+.experience-row > b small {
+    display: block;
+    font-size: 16px;
+    font-weight: 400;
+    color: #606066;
+    margin-top: 3px;
+}
+.portrait-panels {
+    display: grid;
+    grid-template-columns: 1.12fr 1fr 1fr;
+    gap: 24px;
+}
+.portrait-panel {
+    background: #f8f8f9;
+    border: 1px solid #e3e3e7;
+    border-radius: 18px;
+    padding: 24px;
+    min-width: 0;
+    min-height: 560px;
+}
+.portrait-panel-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+.portrait-panel-head > span {
+    color: #d00000;
+    font-size: 18px;
+    letter-spacing: 0.08em;
+}
+.portrait-panel-head > small {
+    color: #606066;
+    font-size: 17px;
+}
+.portrait-panel h2 {
+    font-size: 38px;
+    margin: 18px 0 6px;
+    font-weight: 600;
+    letter-spacing: -1px;
+}
+.portrait-panel > p {
+    color: #606066;
+    font-size: 21px;
+}
+.portrait-panel .compact {
+    margin-top: 26px;
+}
+.profession-visual.compact {
+    min-height: 330px;
+}
+.compact .profession-cloud {
+    min-height: 260px;
+    gap: 16px 20px;
+    padding: 8px 0;
+}
+.compact .portrait-chart-note {
+    font-size: 16px;
+    margin-top: 18px !important;
+}
+.savings-distribution.compact {
+    padding-top: 20px;
+}
+.compact .savings-columns {
+    gap: 11px;
+    padding-top: 18px;
+}
+.compact .savings-track {
+    height: 205px;
+    border: 1px solid #e6e6e9;
+    background: #ffffff;
+}
+.compact .savings-track b {
+    top: -30px;
+    font-size: 22px;
+}
+.compact .savings-column strong {
+    font-size: 20px;
+    margin-top: 13px;
+}
+.compact .savings-column > small {
+    font-size: 13px;
+}
+.experience-distribution.compact {
+    gap: 18px;
+    padding-top: 0;
+}
+.compact .experience-level {
+    width: 35px;
+    height: 35px;
+    font-size: 20px;
+    border-radius: 9px;
+}
+.compact .experience-row {
+    gap: 10px;
+}
+.compact .experience-row > div > span {
+    font-size: 18px;
+    margin-bottom: 8px;
+}
+.compact .experience-track {
+    height: 9px;
+}
+.compact .experience-row > b {
+    min-width: 65px;
+    font-size: 23px;
+}
+.compact .experience-row > b small {
+    font-size: 13px;
+}
+.portrait-pending {
+    min-height: 310px;
+    display: grid;
+    place-content: center;
+    padding: 30px;
+    text-align: center;
+    color: #74747b;
+    font-size: 24px;
+    line-height: 1.45;
+}
+.portrait-summary-caption {
+    color: #606066;
+    font-size: 20px;
+    margin: 23px 0 0 !important;
+    text-align: center;
+}
+.audience-question .audience-question-hint {
+    font-size: 15px;
+    margin: -8px 0 22px;
+    color: #606066;
+    line-height: 1.5;
+}
+.audience-options.profession-options {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+}
+.audience-options.profession-options button {
+    min-height: 78px;
+    padding: 12px;
+    font-size: 15px;
+}
+.audience-options.profession-options button > span {
+    flex: 1;
+}
+.audience-options.profession-options button b {
+    font-size: 16px;
+}
+.audience-page .profession-visual.compact {
+    margin-bottom: 25px;
+    min-height: 180px;
+}
+.audience-page .compact .profession-cloud {
+    min-height: 140px;
+    gap: 12px;
+}
+@media (max-width: 360px) {
+    .audience-options.profession-options {
+        grid-template-columns: 1fr;
+    }
+}
+
+.audience-options.survey-options button > span {
+    flex: 1;
+    min-width: 0;
+}
+.audience-page .profession-word {
+    font-size: min(var(--word-size), 8vw);
+}
+
+@keyframes portrait-column {
+    from {
+        transform: scaleY(0);
+    }
+    to {
+        transform: scaleY(1);
+    }
+}
+@keyframes portrait-track {
+    from {
+        transform: scaleX(0);
+    }
+    to {
+        transform: scaleX(1);
+    }
+}

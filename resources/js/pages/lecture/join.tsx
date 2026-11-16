@@ -1,7 +1,10 @@
 import { Head, Link } from '@inertiajs/react';
 import { ArrowRight, Check, Radio, ShieldCheck } from 'lucide-react';
+import { useEffect } from 'react';
 import { show } from '@/actions/App/Http/Controllers/LectureController';
+import { ProfessionCloud } from './audience-portrait';
 import { FinuslugiLogo } from './brand';
+import { isPortraitQuestion, portraitHint } from './portrait-data';
 import { formatVoteCount, useLectureRoom } from './room-client';
 import type { Room } from './types';
 import './lecture.css';
@@ -9,12 +12,19 @@ import './lecture.css';
 export default function Join({ room: initialRoom }: { room: Room }) {
     const { room, error, busy, send } = useLectureRoom(initialRoom);
 
+    const questionId = room?.question?.id;
+
+    useEffect(() => {
+        window.scrollTo({ top: 0, behavior: 'instant' });
+    }, [questionId]);
+
     if (!room) {
         return null;
     }
 
     const question = room.question;
     const submitted = room.myVote !== null;
+    const survey = question ? isPortraitQuestion(question.id) : false;
 
     return (
         <>
@@ -64,13 +74,34 @@ export default function Join({ room: initialRoom }: { room: Room }) {
                 ) : (
                     <section className="audience-question">
                         <h1>{question.text}</h1>
+                        {survey && (
+                            <p className="audience-question-hint">
+                                {portraitHint(question.id)}
+                            </p>
+                        )}
+                        {room.revealed && question.id === 'profession' && (
+                            <ProfessionCloud
+                                options={question.options}
+                                counts={room.counts}
+                                revealed
+                                compact
+                            />
+                        )}
                         {submitted && !room.revealed && (
                             <div className="answer-saved" role="status">
                                 <Check />
                                 Ответ принят. Ждём результатов.
                             </div>
                         )}
-                        <div className="audience-options">
+                        <div
+                            className={
+                                'audience-options' +
+                                (survey ? ' survey-options' : '') +
+                                (question.id === 'profession'
+                                    ? ' profession-options'
+                                    : '')
+                            }
+                        >
                             {question.options.map((option, index) => {
                                 const correct =
                                     room.revealed &&
@@ -109,9 +140,13 @@ export default function Join({ room: initialRoom }: { room: Room }) {
                                             className="audience-result-bar"
                                             style={{ width: percent + '%' }}
                                         />
-                                        <span className="option-letter">
-                                            {String.fromCharCode(65 + index)}
-                                        </span>
+                                        {!survey && (
+                                            <span className="option-letter">
+                                                {String.fromCharCode(
+                                                    65 + index,
+                                                )}
+                                            </span>
+                                        )}
                                         <span>
                                             {option}
                                             {room.myVote === index && (

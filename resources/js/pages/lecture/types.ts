@@ -22,6 +22,7 @@ export type Room = {
     totalVotes: number;
     counts: number[] | null;
     myVote: number | null;
+    portrait?: { questionId: string; counts: number[]; totalVotes: number }[];
 };
 export type LectureProps = {
     isPresenter: boolean;

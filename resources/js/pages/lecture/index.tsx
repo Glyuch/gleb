@@ -3,7 +3,6 @@ import {
     ArrowLeft,
     ArrowRight,
     BookOpen,
-    Check,
     ChevronDown,
     CircleHelp,
     Maximize,
@@ -15,6 +14,7 @@ import {
 import { useCallback, useEffect, useState } from 'react';
 import type { CSSProperties } from 'react';
 import { presenter } from '@/actions/App/Http/Controllers/LectureController';
+import AudiencePortrait from './audience-portrait';
 import { FinuslugiLogo } from './brand';
 import {
     Funding,
@@ -26,170 +26,14 @@ import {
     School,
 } from './interactions';
 import MarketMap from './market-map';
+import Poll from './poll';
 import { clickerDirection, nextCue, stepCount } from './presentation';
 import { formatVoteCount, useLectureRoom } from './room-client';
 import { blocks, scenes, sources } from './scenes';
-import type { LectureProps, Question, Room } from './types';
+import type { LectureProps, Room } from './types';
 import { usePresentation } from './use-presentation';
 import './lecture.css';
 
-function Poll({
-    question,
-    room,
-    isPresenter,
-    busy,
-    onAction,
-    clicker = false,
-    step = 0,
-}: {
-    question: Question;
-    room: Room | null;
-    isPresenter: boolean;
-    busy: boolean;
-    onAction: (action: string, questionId?: string) => void;
-    clicker?: boolean;
-    step?: number;
-}) {
-    const active = room?.question?.id === question.id && !room.ended;
-    const results = active && room.revealed;
-
-    return (
-        <div className="poll-layout">
-            <div className="poll-answers">
-                <div className="poll-status">
-                    <span
-                        className={
-                            active && room.open ? 'live-dot' : 'idle-dot'
-                        }
-                    />
-                    {!room
-                        ? 'Обсудим с залом'
-                        : !active
-                          ? 'Вопрос ещё не выбран'
-                          : room.open
-                            ? 'Голосование открыто'
-                            : results
-                              ? 'Результаты голосования'
-                              : clicker && step === 2
-                                ? 'Голосование закрыто'
-                                : 'Ожидаем открытия'}
-                    {active && <b>{formatVoteCount(room.totalVotes)}</b>}
-                </div>
-                {question.options.map((option, index) => {
-                    const count = results ? (room.counts?.[index] ?? 0) : 0;
-                    const percent =
-                        results && room.totalVotes
-                            ? Math.round((count / room.totalVotes) * 100)
-                            : 0;
-
-                    return (
-                        <div
-                            key={option}
-                            className={
-                                'poll-option ' +
-                                (results &&
-                                room.question?.correctIndex === index
-                                    ? 'correct'
-                                    : '')
-                            }
-                        >
-                            <div
-                                className="poll-bar"
-                                style={{ width: percent + '%' }}
-                            />
-                            <span className="option-letter">
-                                {String.fromCharCode(65 + index)}
-                            </span>
-                            <span>{option}</span>
-                            {results && (
-                                <b>
-                                    {percent}% <small>· {count}</small>
-                                </b>
-                            )}
-                            {results &&
-                                room.question?.correctIndex === index && (
-                                    <Check />
-                                )}
-                        </div>
-                    );
-                })}
-                {results && room.question?.explanation && (
-                    <p className="poll-explanation">
-                        {room.question.explanation}
-                    </p>
-                )}
-                {isPresenter && !clicker && room && !room.ended && (
-                    <div className="poll-control-buttons" hidden={clicker}>
-                        {!active ? (
-                            <button
-                                disabled={busy}
-                                onClick={() =>
-                                    onAction('question', question.id)
-                                }
-                            >
-                                Выбрать этот вопрос
-                            </button>
-                        ) : (
-                            <>
-                                <button
-                                    disabled={
-                                        busy || room.open || room.revealed
-                                    }
-                                    onClick={() => onAction('open')}
-                                >
-                                    Открыть голосование
-                                </button>
-                                <button
-                                    disabled={busy || !room.open}
-                                    onClick={() => onAction('close')}
-                                >
-                                    Закрыть
-                                </button>
-                                <button
-                                    disabled={busy || room.revealed}
-                                    onClick={() => onAction('reveal')}
-                                >
-                                    Показать ответы
-                                </button>
-                            </>
-                        )}
-                    </div>
-                )}
-            </div>
-            <div className="join-card">
-                {room && !room.ended ? (
-                    <>
-                        <img
-                            src={room.qrUrl}
-                            alt="QR-код подключения к голосованию"
-                        />
-                        <span>Наведите камеру</span>
-                        <b>{room.code}</b>
-                        <a href={room.joinUrl} target="_blank" rel="noreferrer">
-                            {new URL(room.joinUrl).host}/lecture/join/
-                            {room.code}
-                        </a>
-                        <p>
-                            Без регистрации.
-                            <br />
-                            Один ответ на вопрос.
-                        </p>
-                    </>
-                ) : (
-                    <>
-                        <Radio size={75} strokeWidth={1} />
-                        <h3>Подключаем зал</h3>
-                        <p>
-                            {isPresenter
-                                ? 'Нажмите «Эфир» и создайте голосование. Здесь появится QR-код.'
-                                : 'Ведущий покажет QR-код и откроет вопросы во время выступления.'}
-                        </p>
-                    </>
-                )}
-            </div>
-        </div>
-    );
-}
 function Cover({ room }: { room: Room | null }) {
     return (
         <div className="cover-layout">
@@ -560,6 +404,12 @@ export default function Lecture({
                                             onAction={action}
                                             clicker={clicker}
                                             step={step}
+                                        />
+                                    )}
+                                    {scene.kind === 'portrait' && (
+                                        <AudiencePortrait
+                                            questions={questions}
+                                            room={room}
                                         />
                                     )}
                                     {scene.kind === 'goals' && (
