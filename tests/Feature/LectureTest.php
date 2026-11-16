@@ -397,6 +397,8 @@ it('validates complete presentation commands', function (array $changes) {
     [['questionId' => 'unknown']],
     [['questionId' => null, 'phase' => 'open']],
     [['questionId' => null, 'phase' => 'results']],
+    [['questionId' => 'exchange', 'phase' => 'portrait']],
+    [['questionId' => 'profession', 'phase' => 'portrait']],
 ]);
 
 it('only changes revision when manual controls change observable state', function () {
@@ -529,4 +531,82 @@ it('publishes only revealed audience portrait totals through content transitions
 
     $other = $rooms->create($owner);
     $this->getJson('/lecture/rooms/'.$other['code'].'/state')->assertJsonPath('portrait', []);
+});
+
+it('collects three opening answers before atomically revealing the complete portrait', function () {
+    $owner = lectureOwner();
+    $rooms = app(LectureRooms::class);
+    $room = $rooms->create($owner);
+    $code = $room['code'];
+    $manageUrl = '/admin/lecture/rooms/'.$code;
+    $stateUrl = '/lecture/rooms/'.$code.'/state';
+    $voteUrl = '/lecture/rooms/'.$code.'/vote';
+    $previousVote = null;
+    $expected = [];
+
+    foreach (['profession' => 11, 'savings_rate' => 5, 'financial_level' => 3] as $id => $option) {
+        $selected = $this->actingAs($owner)->patchJson($manageUrl, lecturePresent($id, 'open'))
+            ->assertSuccessful()->assertJsonPath('question.id', $id)
+            ->assertJsonPath('open', true)->assertJsonPath('revealed', false)
+            ->assertJsonPath('portrait', [])->json();
+        auth()->logout();
+
+        if ($previousVote !== null) {
+            $this->withCookie('lecture_participant', str_repeat('d', 64))
+                ->postJson($voteUrl, $previousVote)->assertConflict();
+        }
+        $previousVote = ['questionId' => $id, 'revision' => $selected['revision'], 'option' => $option];
+        $this->withCookie('lecture_participant', str_repeat('e', 64))
+            ->postJson($voteUrl, $previousVote)->assertSuccessful()
+            ->assertJsonPath('myVote', $option)->assertJsonPath('portrait', [])
+            ->assertJsonPath('counts', null)->assertJsonMissingPath('question.correctIndex');
+        $this->getJson($stateUrl)->assertJsonPath('portrait', [])->assertJsonPath('counts', null);
+        $this->actingAs($owner)->getJson($stateUrl)->assertJsonPath('portrait', []);
+        auth()->logout();
+
+        $counts = array_fill(0, count(config('lecture.questions.'.$id.'.options')), 0);
+        $counts[$option] = 1;
+        $expected[] = ['questionId' => $id, 'counts' => $counts, 'totalVotes' => 1];
+    }
+
+    $command = lecturePresent(null, 'portrait');
+    $summary = $this->actingAs($owner)->patchJson($manageUrl, $command)->assertSuccessful()
+        ->assertJsonPath('question', null)->assertJsonPath('open', false)
+        ->assertJsonPath('portrait', $expected)
+        ->assertJsonPath('revision', $selected['revision'] + 1)->json();
+    $this->patchJson($manageUrl, $command)->assertSuccessful()
+        ->assertJsonPath('portrait', $expected)->assertJsonPath('revision', $summary['revision']);
+    $this->patchJson($manageUrl, lecturePresent(null, 'portrait'))->assertSuccessful()
+        ->assertJsonPath('portrait', $expected)->assertJsonPath('revision', $summary['revision']);
+    auth()->logout();
+
+    $this->getJson($stateUrl)->assertJsonPath('question', null)->assertJsonPath('portrait', $expected);
+    $this->withCookie('lecture_participant', str_repeat('f', 64))
+        ->postJson($voteUrl, $previousVote)->assertConflict();
+    $saved = $rooms->get($code);
+    expect($saved['expiresAt'])->toBe($room['expiresAt']);
+    foreach ($saved['polls'] as $id => $poll) {
+        expect($poll['revealed'])->toBe(in_array($id, ['profession', 'savings_rate', 'financial_level'], true));
+    }
+
+    $quiz = $this->actingAs($owner)->patchJson($manageUrl, lecturePresent('exchange', 'open'))
+        ->assertSuccessful()->assertJsonPath('open', true)->assertJsonPath('revealed', false)
+        ->assertJsonMissingPath('question.correctIndex')->json();
+    $this->patchJson($manageUrl, $command)->assertSuccessful()
+        ->assertJsonPath('question.id', 'exchange')->assertJsonPath('open', true)
+        ->assertJsonPath('revision', $quiz['revision'])->assertJsonPath('portrait', $expected);
+});
+
+it('only allows the owning admin to reveal the combined portrait', function () {
+    $room = app(LectureRooms::class)->create($owner = lectureOwner());
+    $url = '/admin/lecture/rooms/'.$room['code'];
+    $command = lecturePresent(null, 'portrait');
+
+    $this->patchJson($url, $command)->assertUnauthorized();
+    $this->actingAs(User::factory()->create())->patchJson($url, $command)->assertForbidden();
+    $this->actingAs(lectureOwner())->patchJson($url, $command)->assertForbidden();
+    expect(app(LectureRooms::class)->get($room['code'])['revision'])->toBe(0);
+
+    $this->actingAs($owner)->patchJson($url, ['action' => 'end'])->assertSuccessful();
+    $this->patchJson($url, $command)->assertConflict();
 });

@@ -19,6 +19,8 @@ use LogicException;
  */
 class LectureRooms
 {
+    private const PORTRAIT_QUESTION_IDS = ['profession', 'savings_rate', 'financial_level'];
+
     private Repository $cache;
 
     public function __construct()
@@ -149,15 +151,22 @@ class LectureRooms
             }
 
             abort_if($room['ended'], 409, 'Выступление завершено. Создайте новую комнату.');
-            abort_unless(in_array($phase, ['waiting', 'open', 'closed', 'results'], true), 422, 'Неизвестная фаза вопроса.');
-            abort_unless($questionId !== null || $phase === 'waiting', 422, 'Для этой фазы нужен вопрос.');
+            abort_unless(in_array($phase, ['waiting', 'open', 'closed', 'results', 'portrait'], true), 422, 'Неизвестная фаза вопроса.');
+            abort_unless($questionId !== null || in_array($phase, ['waiting', 'portrait'], true), 422, 'Для этой фазы нужен вопрос.');
+            abort_if($phase === 'portrait' && $questionId !== null, 422, 'Общий портрет раскрывается без выбора отдельного вопроса.');
             abort_unless($questionId === null || isset($room['polls'][$questionId]), 422, 'Выберите вопрос из списка.');
             abort_if(count($commands) >= 4096, 409, 'Достигнут лимит шагов. Создайте новую комнату.');
 
             $before = $room;
             $room['questionId'] = $questionId;
             $room['open'] = false;
-            if ($questionId !== null) {
+            if ($phase === 'portrait') {
+                foreach (self::PORTRAIT_QUESTION_IDS as $id) {
+                    $poll = $room['polls'][$id];
+                    $poll['revealed'] = true;
+                    $room['polls'][$id] = $poll;
+                }
+            } elseif ($questionId !== null) {
                 $poll = $room['polls'][$questionId];
                 if ($phase === 'results') {
                     $poll['revealed'] = true;
@@ -229,7 +238,7 @@ class LectureRooms
         }
 
         $portrait = [];
-        foreach (['profession', 'savings_rate', 'financial_level'] as $portraitId) {
+        foreach (self::PORTRAIT_QUESTION_IDS as $portraitId) {
             $poll = $room['polls'][$portraitId] ?? null;
             if ($poll === null || ! $poll['revealed']) {
                 continue;

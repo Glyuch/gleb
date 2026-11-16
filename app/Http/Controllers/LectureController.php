@@ -83,7 +83,7 @@ class LectureController extends Controller
         $data = $request->validate([
             'action' => ['required', Rule::in(['question', 'open', 'close', 'reveal', 'end', 'present'])],
             'commandId' => ['required_if:action,present', 'uuid'],
-            'phase' => ['required_if:action,present', Rule::in(['waiting', 'open', 'closed', 'results'])],
+            'phase' => ['required_if:action,present', Rule::in(['waiting', 'open', 'closed', 'results', 'portrait'])],
             'questionId' => ['required_if:action,question', 'nullable', Rule::in(array_keys($this->rooms->questions()))],
         ]);
         $this->rooms->limit('manage:'.$request->user()->id, 120);
